@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR-CRM | 学生管理システム</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">HR-CRM <span>Student Management</span></div>
+            <button id="show-add-modal" class="btn btn-primary">新規学生登録</button>
+        </header>
+
+        <main>
+            <section class="stats-overview">
+                <div class="stat-card">
+                    <span class="stat-label">総学生数</span>
+                    <span id="total-students" class="stat-value">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">選考中</span>
+                    <span id="screening-students" class="stat-value">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">内定者</span>
+                    <span id="offered-students" class="stat-value">0</span>
+                </div>
+            </section>
+
+            <section class="student-list-section">
+                <div class="section-header">
+                    <h2>学生一覧</h2>
+                    <div class="search-box">
+                        <input type="text" id="student-search" placeholder="名前や大学で検索...">
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table id="student-table">
+                        <thead>
+                            <tr>
+                                <th>氏名</th>
+                                <th>大学・専攻</th>
+                                <th>卒業年度</th>
+                                <th>ステータス</th>
+                                <th>登録日</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="student-list-body">
+                            <!-- ータがここに読み込まれます -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- モーダル: 学生登録 -->
+    <div id="add-student-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>新規学生登録</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <form id="add-student-form">
+                <div class="form-group">
+                    <label for="name">氏名</label>
+                    <input type="text" id="name" name="name" required placeholder="田中 太郎">
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="email">メールアドレス</label>
+                        <input type="email" id="email" name="email" required placeholder="example@univ.ac.jp">
+                    </div>
+                    <div class="form-group">
+                        <label for="phone">電話番号</label>
+                        <input type="text" id="phone" name="phone" placeholder="090-1234-5678">
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="university">大学名</label>
+                        <input type="text" id="university" name="university" required placeholder="〇〇大学">
+                    </div>
+                    <div class="form-group">
+                        <label for="major">専攻・学部</label>
+                        <input type="text" id="major" name="major" placeholder="工学部 情報工学科">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="graduation_year">卒業年度 (西暦)</label>
+                    <input type="number" id="graduation_year" name="graduation_year" required placeholder="2026">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary close-modal">キャンセル</button>
+                    <button type="submit" class="btn btn-primary">登録する</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- モーダル: 詳細/メモ -->
+    <div id="student-detail-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>学生詳細 & メモ</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div id="student-detail-info"></div>
+            <hr>
+            <h4>選考メモ</h4>
+            <div id="notes-list" class="notes-container"></div>
+            <form id="add-note-form">
+                <div class="form-group">
+                    <textarea id="note-content" placeholder="面接の感想や評価を入力..." required></textarea>
+                </div>
+                <button type="submit" class="btn btn-secondary">メモを追加</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
