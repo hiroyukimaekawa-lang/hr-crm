@@ -9,9 +9,16 @@ export const getEvents = async (req: Request, res: Response) => {
                 COUNT(se.*) FILTER (WHERE se.status = 'registered') as registered_count,
                 COUNT(se.*) FILTER (WHERE se.status = 'attended') as attended_count,
                 COUNT(se.*) FILTER (WHERE se.status = 'canceled') as canceled_count,
-                COUNT(se.*) as total_count
+                COUNT(se.*) as total_count,
+                COALESCE(
+                    json_agg(
+                        jsonb_build_object('id', s.id, 'name', s.name)
+                    ) FILTER (WHERE se.status = 'registered'),
+                    '[]'::json
+                ) as registered_participants
             FROM events e
             LEFT JOIN student_events se ON e.id = se.event_id
+            LEFT JOIN students s ON s.id = se.student_id
             GROUP BY e.id
             ORDER BY e.event_date DESC
         `);
@@ -22,11 +29,20 @@ export const getEvents = async (req: Request, res: Response) => {
 };
 
 export const createEvent = async (req: Request, res: Response) => {
-    const { title, description, event_date, location, capacity } = req.body;
+    const { title, description, event_date, location, capacity, target_seats, target_sales, current_sales } = req.body;
     try {
         const result = await pool.query(
-            'INSERT INTO events (title, description, event_date, location, capacity) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-            [title, description, event_date, location || null, capacity || null]
+            'INSERT INTO events (title, description, event_date, location, capacity, target_seats, target_sales, current_sales) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+            [
+                title,
+                description,
+                event_date,
+                location || null,
+                capacity || null,
+                target_seats || null,
+                target_sales || null,
+                current_sales || 0
+            ]
         );
         res.json(result.rows[0]);
     } catch (err: any) {

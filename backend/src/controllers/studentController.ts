@@ -65,7 +65,15 @@ export const getStudentDetail = async (req: Request, res: Response) => {
             WHERE se.student_id = $1
             ORDER BY se.created_at DESC
         `, [id]);
-        const logsRes = await pool.query('SELECT * FROM interview_logs WHERE student_id = $1 ORDER BY created_at DESC', [id]);
+        const logsRes = await pool.query(`
+            SELECT 
+                il.*,
+                e.title as event_title
+            FROM interview_logs il
+            LEFT JOIN events e ON e.id = il.event_id
+            WHERE il.student_id = $1
+            ORDER BY il.created_at DESC
+        `, [id]);
 
         res.json({
             student: studentRes.rows[0],
@@ -92,11 +100,11 @@ export const linkEvent = async (req: Request, res: Response) => {
 };
 
 export const addInterviewLog = async (req: Request, res: Response) => {
-    const { student_id, staff_id, content, interview_date } = req.body;
+    const { student_id, staff_id, log_type, event_id, content, interview_date } = req.body;
     try {
         const result = await pool.query(
-            'INSERT INTO interview_logs (student_id, staff_id, content, interview_date) VALUES ($1, $2, $3, $4) RETURNING *',
-            [student_id, staff_id, content, interview_date]
+            'INSERT INTO interview_logs (student_id, staff_id, log_type, event_id, content, interview_date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [student_id, staff_id, log_type || '面談', event_id || null, content, interview_date]
         );
         res.json(result.rows[0]);
     } catch (err: any) {

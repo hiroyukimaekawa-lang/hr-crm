@@ -1,10 +1,24 @@
 import { Request, Response, NextFunction } from 'express';
+import { verifyJwt } from '../utils/jwt';
 
-// Simple Auth Middleware
+// JWT Auth Middleware
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {
-    // For trial, login is bypassed as requested.
-    // In real app, verify JWT here.
-    // const token = req.headers['authorization'];
-    // if (!token) return res.status(401).json({ error: 'Unauthorized' });
-    next();
+    try {
+        const secret = process.env.JWT_SECRET || 'dev_secret_change_me';
+        const authHeader = req.headers['authorization'];
+        if (!authHeader) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
+        const token = authHeader.startsWith('Bearer ')
+            ? authHeader.replace('Bearer ', '')
+            : authHeader;
+
+        const payload = verifyJwt(token, secret);
+        (req as any).user = payload;
+        next();
+    } catch (err: any) {
+        res.status(401).json({ error: 'Unauthorized' });
+    }
 };

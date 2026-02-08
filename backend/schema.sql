@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS events (
     event_date TIMESTAMP,
     location VARCHAR(255),
     capacity INTEGER,
+    target_seats INTEGER,
+    target_sales INTEGER,
+    current_sales INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 -- Student-Event Linking
@@ -48,13 +51,16 @@ CREATE TABLE IF NOT EXISTS interview_logs (
     id SERIAL PRIMARY KEY,
     student_id INTEGER REFERENCES students(id) ON DELETE CASCADE,
     staff_id INTEGER REFERENCES users(id),
+    log_type VARCHAR(50) DEFAULT '面談',
+    event_id INTEGER REFERENCES events(id),
     content TEXT NOT NULL,
     interview_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 -- Seed Data
 INSERT INTO users (username, password, name, role)
-VALUES ('admin', 'password', 'Admin User', 'admin') ON CONFLICT (username) DO NOTHING;
+VALUES ('admin', '$2b$10$K9oIoHcgYoz98Gg.UVQ2AO9Vnk57KPVQ2ekdDPC4392sslwXrUSVy', 'Admin User', 'admin')
+ON CONFLICT (username) DO NOTHING;
 
 -- Sample Data (Students)
 INSERT INTO students (id, name, university, faculty, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id)
@@ -69,12 +75,12 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Sample Data (Events)
-INSERT INTO events (id, title, description, event_date, location, capacity)
+INSERT INTO events (id, title, description, event_date, location, capacity, target_seats, target_sales, current_sales)
 VALUES
-    (1, '春季キャリアフォーラム', '各業界の企業が参加する大規模イベント', '2026-03-20 13:00:00', '東京ビッグサイト', 100),
-    (2, 'エンジニア向け座談会', '現場エンジニアとの座談会', '2026-04-15 18:00:00', 'オンライン', 50),
-    (3, '内定者懇親会', '内定者同士の交流イベント', '2026-06-01 17:00:00', '本社オフィス', 30),
-    (4, '業界研究セミナー', '複数業界の理解を深めるセミナー', '2026-02-20 19:00:00', 'オンライン', 200)
+    (1, '春季キャリアフォーラム', '各業界の企業が参加する大規模イベント', '2026-03-20 13:00:00', '東京ビッグサイト', 100, 80, 2000000, 1200000),
+    (2, 'エンジニア向け座談会', '現場エンジニアとの座談会', '2026-04-15 18:00:00', 'オンライン', 50, 40, 800000, 300000),
+    (3, '内定者懇親会', '内定者同士の交流イベント', '2026-06-01 17:00:00', '本社オフィス', 30, 25, 400000, 150000),
+    (4, '業界研究セミナー', '複数業界の理解を深めるセミナー', '2026-02-20 19:00:00', 'オンライン', 200, 150, 500000, 220000)
 ON CONFLICT (id) DO NOTHING;
 
 -- Sample Data (Student-Event Participation)
@@ -89,11 +95,11 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- Sample Data (Interview Logs)
-INSERT INTO interview_logs (student_id, staff_id, content, interview_date, created_at)
+INSERT INTO interview_logs (student_id, staff_id, log_type, event_id, content, interview_date, created_at)
 VALUES
-    (1, 1, '2026-02-01 面談: 志望職種の確認とスキルヒアリング', '2026-02-01 10:00:00', '2026-02-01 10:00:00'),
-    (1, 1, '2026-02-05 エントリー: エンジニア職でエントリー完了', '2026-02-05 14:00:00', '2026-02-05 14:00:00'),
-    (2, 1, '2026-01-20 面談: 海外経験の詳細を確認', '2026-01-20 15:00:00', '2026-01-20 15:00:00'),
-    (3, 1, '2026-02-03 面談: 業界志望の整理', '2026-02-03 11:00:00', '2026-02-03 11:00:00'),
-    (4, 1, '2026-02-02 エントリー: デザイナー職でエントリー', '2026-02-02 16:00:00', '2026-02-02 16:00:00')
+    (1, 1, '面談', NULL, '志望職種の確認とスキルヒアリング', '2026-02-01 10:00:00', '2026-02-01 10:00:00'),
+    (1, 1, 'エントリー', 2, 'エンジニア向け座談会にエントリー', '2026-02-05 14:00:00', '2026-02-05 14:00:00'),
+    (2, 1, '面談', NULL, '海外経験の詳細を確認', '2026-01-20 15:00:00', '2026-01-20 15:00:00'),
+    (3, 1, '面談', NULL, '業界志望の整理', '2026-02-03 11:00:00', '2026-02-03 11:00:00'),
+    (4, 1, 'エントリー', 1, '春季キャリアフォーラムにエントリー', '2026-02-02 16:00:00', '2026-02-02 16:00:00')
 ON CONFLICT DO NOTHING;

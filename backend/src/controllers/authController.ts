@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 import bcrypt from 'bcryptjs';
+import { signJwt } from '../utils/jwt';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
     const { username, password, name, role } = req.body;
@@ -24,6 +25,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 export const login = async (req: Request, res: Response): Promise<void> => {
     const { username, password } = req.body;
     try {
+        const secret = process.env.JWT_SECRET || 'dev_secret_change_me';
         const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
         const user = result.rows[0];
 
@@ -39,8 +41,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
+        const token = signJwt(
+            { sub: String(user.id), name: user.name, role: user.role },
+            secret,
+            60 * 60 * 24 * 7
+        );
+
         res.json({
-            token: 'fake-jwt-token-' + user.id,
+            token,
             user: { id: user.id, name: user.name, role: user.role }
         });
     } catch (err: any) {
