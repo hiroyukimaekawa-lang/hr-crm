@@ -1,0 +1,37 @@
+import { createRouter, createWebHistory } from 'vue-router';
+import Dashboard from '../views/Dashboard.vue';
+import StudentList from '../views/StudentList.vue';
+import StudentDetail from '../views/StudentDetail.vue';
+import EventList from '../views/EventList.vue';
+import EventDetail from '../views/EventDetail.vue';
+import Login from '../views/Login.vue';
+
+const routes = [
+  { path: '/', redirect: '/students' },
+  { path: '/login', component: Login },
+  { path: '/dashboard', component: Dashboard },
+  { path: '/students', component: StudentList },
+  { path: '/students/:id', component: StudentDetail },
+  { path: '/events', component: EventList },
+  { path: '/events/:id', component: EventDetail }
+];
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+});
+
+router.beforeEach((to, _from, next) => {
+  const token = localStorage.getItem('token');
+  if (to.path === '/login') {
+    next();
+    return;
+  }
+  if (!token) {
+    next('/login');
+    return;
+  }
+  next();
+});
+
+export default router;

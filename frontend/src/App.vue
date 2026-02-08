@@ -2,13 +2,9 @@
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-100 flex items-center justify-center">
-    <div class="bg-white p-8 rounded shadow-md">
-      <h1 class="text-2xl font-bold mb-4">Hello HR-CRM</h1>
-      <p>Frontend is running successfully.</p>
-    </div>
-  </div>
+  <router-view></router-view>
 </template>
 
-<style scoped>
+<style>
+/* Global styles are imported in main.ts */
 </style>

@@ -1,0 +1,298 @@
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import axios from 'axios';
+import Layout from '../components/Layout.vue';
+import {
+  ArrowLeft,
+  Mail,
+  Phone,
+  GraduationCap,
+  Calendar,
+  MessageSquare,
+  Plus,
+  Edit
+} from 'lucide-vue-next';
+
+const route = useRoute();
+const router = useRouter();
+const studentId = route.params.id;
+const student = ref<any>({});
+const studentEvents = ref<any[]>([]);
+const interviewLogs = ref<any[]>([]);
+const availableEvents = ref<any[]>([]);
+
+const newLog = ref('');
+const newLogType = ref<'面談' | 'エントリー' | 'その他'>('面談');
+const newLogEventId = ref('');
+const selectedEventId = ref('');
+const editingStatus = ref(false);
+const statusDraft = ref('');
+
+const fetchDetail = async () => {
+  const token = localStorage.getItem('token');
+  const res = await axios.get(`http://localhost:3000/api/students/${studentId}`, { headers: { Authorization: token } });
+  student.value = res.data.student;
+  studentEvents.value = res.data.events;
+  interviewLogs.value = res.data.logs;
+  statusDraft.value = student.value?.status || 'active';
+};
+
+const fetchAllEvents = async () => {
+  const token = localStorage.getItem('token');
+  const res = await axios.get('http://localhost:3000/api/events', { headers: { Authorization: token } });
+  availableEvents.value = res.data;
+};
+
+const addLog = async () => {
+  if (!newLog.value) return;
+  const token = localStorage.getItem('token');
+  const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)"}');
+  await axios.post('http://localhost:3000/api/interview-logs', {
+    student_id: studentId,
+    staff_id: user.id,
+    log_type: newLogType.value,
+    event_id: newLogType.value === 'エントリー' ? newLogEventId.value : null,
+    content: newLog.value,
+    interview_date: new Date()
+  }, { headers: { Authorization: token } });
+  newLog.value = '';
+  newLogEventId.value = '';
+  newLogType.value = '面談';
+  fetchDetail();
+};
+
+const linkEvent = async () => {
+  if (!selectedEventId.value) return;
+  const token = localStorage.getItem('token');
+  await axios.post(`http://localhost:3000/api/students/${studentId}/events`, {
+    event_id: selectedEventId.value
+  }, { headers: { Authorization: token } });
+  selectedEventId.value = '';
+  fetchDetail();
+};
+
+const updateStatus = async () => {
+  const token = localStorage.getItem('token');
+  await axios.put(`http://localhost:3000/api/students/${studentId}/status`, {
+    status: statusDraft.value
+  }, { headers: { Authorization: token } });
+  editingStatus.value = false;
+  fetchDetail();
+};
+
+const statusClass = (status?: string) => {
+  switch (status) {
+    case '内定':
+      return 'bg-green-100 text-green-700';
+    case '選考中':
+      return 'bg-blue-100 text-blue-700';
+    case '辞退':
+      return 'bg-gray-100 text-gray-600';
+    case '不合格':
+      return 'bg-red-100 text-red-700';
+    case '未着手':
+      return 'bg-amber-100 text-amber-700';
+    case '面談':
+      return 'bg-indigo-100 text-indigo-700';
+    default:
+      return 'bg-slate-100 text-slate-700';
+  }
+};
+
+const tags = computed(() => Array.isArray(student.value?.tags) ? student.value.tags : []);
+
+onMounted(() => {
+  fetchDetail();
+  fetchAllEvents();
+});
+</script>
+
+<template>
+  <Layout>
+    <div class="p-8">
+      <div class="mb-8 flex items-center gap-4">
+        <button @click="router.push('/students')" class="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-600">
+          <ArrowLeft class="w-6 h-6" />
+        </button>
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900">{{ student.name }}</h1>
+          <p class="text-gray-500">学生詳細情報・面談履歴</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-1 space-y-8">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div class="flex items-start justify-between mb-4">
+              <div>
+                <h2 class="text-lg font-bold text-gray-900 mb-1">基本情報</h2>
+                <p class="text-sm text-gray-500">{{ student.university }} / {{ student.graduation_year || '-' }}年卒</p>
+              </div>
+              <button class="text-gray-400 hover:text-gray-600" @click="editingStatus = !editingStatus">
+                <Edit class="w-4 h-4" />
+              </button>
+            </div>
+
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="statusClass(student.status)">
+                {{ student.status || '未設定' }}
+              </span>
+              <div v-if="editingStatus" class="flex items-center gap-2">
+                <select v-model="statusDraft" class="px-2 py-1 border border-gray-300 rounded-md text-xs">
+                  <option value="active">active</option>
+                  <option value="面談">面談</option>
+                  <option value="選考中">選考中</option>
+                  <option value="内定">内定</option>
+                  <option value="辞退">辞退</option>
+                  <option value="不合格">不合格</option>
+                  <option value="未着手">未着手</option>
+                </select>
+                <button class="text-xs px-2 py-1 bg-blue-600 text-white rounded-md" @click="updateStatus">保存</button>
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <div class="flex items-center gap-3 text-gray-600">
+                <GraduationCap class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">大学</p>
+                  <p class="text-sm font-medium">{{ student.university }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600">
+                <GraduationCap class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">学部</p>
+                  <p class="text-sm font-medium">{{ student.faculty || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600">
+                <GraduationCap class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">志望業界</p>
+                  <p class="text-sm font-medium">{{ student.desired_industry || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600">
+                <GraduationCap class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">志望職種</p>
+                  <p class="text-sm font-medium">{{ student.desired_role || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600">
+                <Mail class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">メールアドレス</p>
+                  <p class="text-sm font-medium">{{ student.email }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600">
+                <Phone class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">電話番号</p>
+                  <p class="text-sm font-medium">{{ student.phone }}</p>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="tags.length" class="mt-4 flex flex-wrap gap-2">
+              <span v-for="tag in tags" :key="tag" class="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">{{ tag }}</span>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <Calendar class="w-5 h-5 text-blue-600" />
+              参加・エントリーイベント
+            </h2>
+            <div class="space-y-3 mb-6">
+              <div v-for="e in studentEvents" :key="e.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <span class="text-sm font-medium text-gray-800">{{ e.title }}</span>
+                  <p class="text-xs text-gray-500">{{ new Date(e.event_date).toLocaleDateString('ja-JP') }}</p>
+                </div>
+                <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="e.participation_status === 'attended' ? 'bg-green-100 text-green-700' : e.participation_status === 'registered' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'">
+                  {{ e.participation_status === 'attended' ? '出席' : e.participation_status === 'registered' ? '申込' : 'キャンセル' }}
+                </span>
+              </div>
+              <div v-if="studentEvents.length === 0" class="text-sm text-gray-400 text-center py-4">
+                イベントへの参加はありません
+              </div>
+            </div>
+
+            <div class="pt-4 border-t border-gray-100">
+              <label class="block text-xs font-medium text-gray-500 mb-2">イベントに紐付ける</label>
+              <div class="flex gap-2">
+                <select v-model="selectedEventId" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                  <option disabled value="">選択してください</option>
+                  <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
+                </select>
+                <button @click="linkEvent" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">追加</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-2">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full">
+            <div class="p-6 border-b border-gray-200">
+              <h2 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <MessageSquare class="w-5 h-5 text-blue-600" />
+                面談ログ・メモ
+              </h2>
+            </div>
+
+            <div class="flex-1 p-6 space-y-6 overflow-y-auto max-h-[500px]">
+              <div v-for="log in interviewLogs" :key="log.id" class="bg-gray-50 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-xs font-semibold text-blue-600">
+                    {{ log.log_type || '面談' }}
+                    <span v-if="log.log_type === 'エントリー' && log.event_title" class="text-xs text-gray-500 ml-2">
+                      ({{ log.event_title }})
+                    </span>
+                  </span>
+                  <span class="text-xs text-gray-500">{{ new Date(log.interview_date).toLocaleString() }}</span>
+                </div>
+                <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ log.content }}</p>
+              </div>
+              <div v-if="interviewLogs.length === 0" class="text-center text-gray-400 py-10">
+                記録がまだありません
+              </div>
+            </div>
+
+            <div class="p-6 border-t border-gray-200 bg-gray-50">
+              <div class="flex flex-col sm:flex-row gap-2 mb-3">
+                <select v-model="newLogType" class="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                  <option value="面談">面談</option>
+                  <option value="エントリー">エントリー</option>
+                  <option value="その他">その他</option>
+                </select>
+                <select
+                  v-if="newLogType === 'エントリー'"
+                  v-model="newLogEventId"
+                  class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option disabled value="">エントリーしたイベントを選択</option>
+                  <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
+                </select>
+              </div>
+              <textarea
+                v-model="newLog"
+                :placeholder="newLogType === '面談' ? '面談内容を入力...' : newLogType === 'エントリー' ? 'エントリー内容を入力...' : 'メモを入力...'"
+                class="w-full p-4 border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 h-32 mb-3 bg-white"
+              ></textarea>
+              <div class="flex justify-end">
+                <button @click="addLog" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2">
+                  <Plus class="w-4 h-4" />
+                  <span>ログを追加</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Layout>
+</template>
