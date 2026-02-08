@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
 import Layout from '../components/Layout.vue';
-import { Users, Calendar, UserPlus, FileCheck } from 'lucide-vue-next';
+import { Users, Calendar, UserPlus, FileCheck, Link as LinkIcon } from 'lucide-vue-next';
 
 interface Student {
   id: number;
@@ -21,6 +21,9 @@ interface EventItem {
 
 const students = ref<Student[]>([]);
 const events = ref<EventItem[]>([]);
+const inviteUrl = ref('');
+const inviteMessage = ref('');
+const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
 
 const fetchData = async () => {
   try {
@@ -34,6 +37,23 @@ const fetchData = async () => {
   } catch (err) {
     console.error(err);
   }
+};
+
+const createInvite = async () => {
+  try {
+    inviteMessage.value = '';
+    const token = localStorage.getItem('token');
+    const res = await axios.post('http://localhost:3000/api/auth/invite', {}, { headers: { Authorization: token } });
+    inviteUrl.value = res.data.invite_url;
+  } catch (err) {
+    inviteMessage.value = '招待URLの発行に失敗しました。';
+  }
+};
+
+const copyInvite = async () => {
+  if (!inviteUrl.value) return;
+  await navigator.clipboard.writeText(inviteUrl.value);
+  inviteMessage.value = 'コピーしました。';
 };
 
 const totalParticipants = computed(() =>
@@ -80,6 +100,21 @@ onMounted(fetchData);
       <div class="mb-8">
         <h1 class="text-3xl font-bold text-gray-900">ダッシュボード</h1>
         <p class="text-gray-500 mt-2">最新の統計と活動状況を確認できます。</p>
+      </div>
+
+      <div v-if="user.role === 'admin'" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-bold text-gray-900">担当者招待URL</h2>
+          <button @click="createInvite" class="px-4 py-2 bg-blue-600 text-white rounded-lg">発行</button>
+        </div>
+        <div v-if="inviteUrl" class="flex items-center gap-2">
+          <input :value="inviteUrl" readonly class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+          <button @click="copyInvite" class="px-3 py-2 border border-gray-200 rounded-lg text-sm flex items-center gap-2">
+            <LinkIcon class="w-4 h-4" />
+            コピー
+          </button>
+        </div>
+        <p v-if="inviteMessage" class="text-xs text-gray-500 mt-2">{{ inviteMessage }}</p>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

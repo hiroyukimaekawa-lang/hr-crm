@@ -23,10 +23,17 @@ interface Student {
   phone?: string;
   status?: string;
   tags?: string[] | null;
+  staff_id?: number | null;
   staff_name?: string;
 }
 
+interface StaffUser {
+  id: number;
+  name: string;
+}
+
 const students = ref<Student[]>([]);
+const staffUsers = ref<StaffUser[]>([]);
 const router = useRouter();
 const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
 const showAll = ref(false);
@@ -58,6 +65,28 @@ const fetchStudents = async () => {
     }
     const res = await axios.get(url, { headers: { Authorization: token } });
     students.value = res.data;
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+const fetchStaffUsers = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    const res = await axios.get('http://localhost:3000/api/auth/users', { headers: { Authorization: token } });
+    staffUsers.value = res.data;
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+const updateStaff = async (studentId: number, staffId: number | null) => {
+  try {
+    const token = localStorage.getItem('token');
+    await axios.put(`http://localhost:3000/api/students/${studentId}/staff`, {
+      staff_id: staffId
+    }, { headers: { Authorization: token } });
+    fetchStudents();
   } catch (err) {
     console.error(err);
   }
@@ -173,7 +202,12 @@ const downloadCsv = () => {
   URL.revokeObjectURL(link.href);
 };
 
-onMounted(fetchStudents);
+onMounted(() => {
+  fetchStudents();
+  if (user.role === 'admin') {
+    fetchStaffUsers();
+  }
+});
 </script>
 
 <template>
@@ -249,6 +283,7 @@ onMounted(fetchStudents);
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">卒業年</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">メール</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担当</th>
               <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
             </tr>
           </thead>
@@ -271,6 +306,19 @@ onMounted(fetchStudents);
                   {{ s.status || '未設定' }}
                 </span>
               </td>
+              <td class="px-6 py-4 text-sm text-gray-600">
+                <div v-if="user.role === 'admin'" class="max-w-[180px]">
+                  <select
+                    :value="s.staff_id || ''"
+                    @change="updateStaff(s.id, ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
+                    class="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+                  >
+                    <option value="">未割当</option>
+                    <option v-for="u in staffUsers" :key="u.id" :value="u.id">{{ u.name }}</option>
+                  </select>
+                </div>
+                <span v-else>{{ s.staff_name || '-' }}</span>
+              </td>
               <td class="px-6 py-4 text-right">
                 <button
                   class="text-blue-600 hover:text-blue-800 text-sm font-semibold inline-flex items-center gap-1"
@@ -282,7 +330,7 @@ onMounted(fetchStudents);
               </td>
             </tr>
             <tr v-if="filteredStudents.length === 0">
-              <td colSpan="7" class="px-6 py-10 text-center text-sm text-gray-400">
+              <td colSpan="8" class="px-6 py-10 text-center text-sm text-gray-400">
                 該当する学生が見つかりませんでした。
               </td>
             </tr>

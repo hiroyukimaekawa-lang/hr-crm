@@ -125,3 +125,17 @@ export const updateStudentStatus = async (req: Request, res: Response) => {
         res.status(500).json({ error: err.message });
     }
 };
+
+export const updateStudentStaff = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { staff_id } = req.body;
+    try {
+        const result = await pool.query(
+            'UPDATE students SET staff_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+            [staff_id || null, id]
+        );
+        res.json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};

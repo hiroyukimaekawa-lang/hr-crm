@@ -5,10 +5,12 @@ import StudentDetail from '../views/StudentDetail.vue';
 import EventList from '../views/EventList.vue';
 import EventDetail from '../views/EventDetail.vue';
 import Login from '../views/Login.vue';
+import RegisterInvite from '../views/RegisterInvite.vue';
 
 const routes = [
   { path: '/', redirect: '/students' },
   { path: '/login', component: Login },
+  { path: '/register', component: RegisterInvite },
   { path: '/dashboard', component: Dashboard },
   { path: '/students', component: StudentList },
   { path: '/students/:id', component: StudentDetail },
@@ -23,7 +25,7 @@ const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token');
-  if (to.path === '/login') {
+  if (to.path === '/login' || to.path === '/register') {
     next();
     return;
   }
