@@ -8,7 +8,8 @@ import {
   Filter,
   ChevronRight,
   UserPlus,
-  Download
+  Download,
+  Upload
 } from 'lucide-vue-next';
 
 interface Student {
@@ -16,6 +17,8 @@ interface Student {
   name: string;
   university?: string;
   faculty?: string;
+  source_company?: string;
+  interview_reason?: string;
   desired_industry?: string;
   desired_role?: string;
   graduation_year?: number | null;
@@ -40,7 +43,10 @@ const showAll = ref(false);
 
 const searchTerm = ref('');
 const statusFilter = ref('ALL');
-const universityFilter = ref('ALL');
+const staffFilter = ref('ALL');
+
+const universityFilter = ref<string[]>([]);
+const universitySearch = ref('');
 
 const showCreate = ref(false);
 const newStudent = ref({
@@ -138,6 +144,13 @@ const universities = computed(() => {
   return ['ALL', ...Array.from(set)];
 });
 
+const filteredUniversities = computed(() => {
+  const term = universitySearch.value.trim().toLowerCase();
+  return universities.value
+    .filter(u => u !== 'ALL')
+    .filter(u => !term || u.toLowerCase().includes(term));
+});
+
 const statusOptions = computed(() => {
   const set = new Set<string>();
   students.value.forEach(s => s.status && set.add(s.status));
@@ -155,8 +168,13 @@ const filteredStudents = computed(() => {
       (s.desired_industry || '').toLowerCase().includes(term) ||
       (s.desired_role || '').toLowerCase().includes(term);
     const matchesStatus = statusFilter.value === 'ALL' || s.status === statusFilter.value;
-    const matchesUniversity = universityFilter.value === 'ALL' || s.university === universityFilter.value;
-    return matchesSearch && matchesStatus && matchesUniversity;
+    const matchesUniversity =
+      universityFilter.value.length === 0 ||
+      (s.university && universityFilter.value.includes(s.university));
+    const matchesStaff =
+      staffFilter.value === 'ALL' ||
+      String(s.staff_id || '') === staffFilter.value;
+    return matchesSearch && matchesStatus && matchesUniversity && matchesStaff;
   });
 });
 
@@ -181,25 +199,130 @@ const statusClass = (status?: string) => {
 
 const downloadCsv = () => {
   const rows = filteredStudents.value.map(s => ({
+    source_company: s.source_company || '',
     name: s.name,
     university: s.university || '',
     faculty: s.faculty || '',
-    desired_industry: s.desired_industry || '',
-    desired_role: s.desired_role || '',
     graduation_year: s.graduation_year || '',
     email: s.email || '',
-    phone: s.phone || '',
     status: s.status || '',
-    tags: Array.isArray(s.tags) ? s.tags.join('|') : ''
+    staff_name: s.staff_name || '',
+    interview_reason: s.interview_reason || ''
   }));
-  const header = ['name', 'university', 'faculty', 'desired_industry', 'desired_role', 'graduation_year', 'email', 'phone', 'status', 'tags'];
-  const csv = [header.join(','), ...rows.map(r => header.map(h => `"${String((r as any)[h]).replace(/\"/g, '""')}"`).join(','))].join('\n');
+  const header = ['流入経路', '氏名', '大学', '学部', '卒業年', 'メール', 'ステータス', '担当', '面談理由'];
+  const csv = [
+    header.join(','),
+    ...rows.map(r => [
+      r.source_company,
+      r.name,
+      r.university,
+      r.faculty,
+      r.graduation_year,
+      r.email,
+      r.status,
+      r.staff_name,
+      r.interview_reason
+    ].map(v => `"${String(v).replace(/\"/g, '""')}"`).join(','))
+  ].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = 'students.csv';
   link.click();
   URL.revokeObjectURL(link.href);
+};
+
+const parseCsv = (text: string) => {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const next = text[i + 1];
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      row.push(current);
+      current = '';
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (current !== '' || row.length > 0) {
+        row.push(current);
+        rows.push(row);
+        row = [];
+        current = '';
+      }
+    } else {
+      current += char;
+    }
+  }
+  if (current !== '' || row.length > 0) {
+    row.push(current);
+    rows.push(row);
+  }
+  return rows;
+};
+
+const mapHeaderIndex = (header: string[]) => {
+  const map: Record<string, number> = {};
+  header.forEach((h, idx) => {
+    map[h.trim()] = idx;
+  });
+  return map;
+};
+
+const importCsv = async (file: File) => {
+  const text = await file.text();
+  const rows = parseCsv(text);
+  if (rows.length < 2) return;
+  const header = rows[0];
+  const map = mapHeaderIndex(header);
+
+  const items = rows.slice(1).map(r => ({
+    source_company: r[map['流入経路']] || '',
+    name: r[map['氏名']] || '',
+    university: r[map['大学']] || '',
+    faculty: r[map['学部']] || '',
+    graduation_year: r[map['卒業年']] || '',
+    email: r[map['メール']] || '',
+    status: r[map['ステータス']] || '面談',
+    staff_name: r[map['担当']] || '',
+    interview_reason: r[map['面談理由']] || ''
+  })).filter(i => i.name || i.university);
+
+  const staffMap = new Map(staffUsers.value.map(s => [s.name, s.id]));
+  const payload = items.map(i => ({
+    name: i.name,
+    university: i.university,
+    faculty: i.faculty,
+    graduation_year: i.graduation_year ? Number(i.graduation_year) : null,
+    email: i.email,
+    status: i.status,
+    staff_id: staffMap.get(i.staff_name) || null,
+    source_company: i.source_company,
+    interview_reason: i.interview_reason
+  }));
+
+  const token = localStorage.getItem('token');
+  await axios.post('http://localhost:3000/api/students/import', {
+    students: payload
+  }, { headers: { Authorization: token } });
+
+  fetchStudents();
+};
+
+const onCsvFileChange = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+  await importCsv(file);
+  target.value = '';
 };
 
 onMounted(() => {
@@ -226,6 +349,11 @@ onMounted(() => {
             <Download class="w-4 h-4" />
             CSV出力
           </button>
+          <label class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer">
+            <Upload class="w-4 h-4" />
+            CSV入力
+            <input type="file" accept=".csv" class="hidden" @change="onCsvFileChange" />
+          </label>
           <button
             @click="showCreate = true"
             class="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
@@ -247,24 +375,55 @@ onMounted(() => {
               class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div class="flex items-center gap-2">
-            <Filter class="w-4 h-4 text-gray-400" />
-            <select
-              v-model="statusFilter"
-              class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option v-for="s in statusOptions" :key="s" :value="s">
-                {{ s === 'ALL' ? 'ステータス: すべて' : s }}
-              </option>
-            </select>
-            <select
-              v-model="universityFilter"
-              class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option v-for="u in universities" :key="u" :value="u">
-                {{ u === 'ALL' ? '大学: すべて' : u }}
-              </option>
-            </select>
+          <div class="flex flex-col md:flex-row md:items-center gap-2">
+            <div class="flex items-center gap-2">
+              <Filter class="w-4 h-4 text-gray-400" />
+              <select
+                v-model="statusFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option v-for="s in statusOptions" :key="s" :value="s">
+                  {{ s === 'ALL' ? 'ステータス: すべて' : s }}
+                </option>
+              </select>
+              <select
+                v-if="user.role === 'admin'"
+                v-model="staffFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">担当者: すべて</option>
+                <option v-for="u in staffUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
+              </select>
+            </div>
+            <div class="min-w-[240px]">
+              <input
+                v-model="universitySearch"
+                type="text"
+                placeholder="大学名で検索..."
+                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div
+                v-if="universitySearch.trim().length > 0"
+                class="mt-2 max-h-40 overflow-auto border border-gray-200 rounded-lg bg-white"
+              >
+                <label
+                  v-for="u in filteredUniversities"
+                  :key="u"
+                  class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <input
+                    type="checkbox"
+                    :value="u"
+                    v-model="universityFilter"
+                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>{{ u }}</span>
+                </label>
+                <div v-if="filteredUniversities.length === 0" class="px-3 py-2 text-xs text-gray-400">
+                  該当する大学がありません
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <label class="flex items-center gap-2 text-sm text-gray-600">
@@ -275,38 +434,40 @@ onMounted(() => {
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table class="w-full">
-          <thead class="bg-gray-50 border-b border-gray-200">
+          <thead class="bg-gray-50 border-b border-gray-200 text-xs">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">氏名</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">大学</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学部</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">卒業年</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">メール</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">担当</th>
-              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">流入経路</th>
+              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">氏名</th>
+              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">大学</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">学部</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">卒業年</th>
+              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">メール</th>
+              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
+              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">担当</th>
+              <th class="px-6 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">操作</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 bg-white">
             <tr v-for="s in filteredStudents" :key="s.id" class="hover:bg-gray-50 transition-colors">
+              <td class="px-6 py-4 text-xs text-gray-600">{{ s.source_company || '-' }}</td>
               <td class="px-6 py-4">
-                <div class="text-sm font-medium text-gray-900">{{ s.name }}</div>
+                <div class="text-xs font-medium text-gray-900">{{ s.name }}</div>
                 <div v-if="Array.isArray(s.tags) && s.tags.length" class="mt-1 flex flex-wrap gap-1">
                   <span v-for="tag in s.tags.slice(0, 2)" :key="tag" class="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
                     {{ tag }}
                   </span>
                 </div>
               </td>
-              <td class="px-6 py-4 text-sm text-gray-500">{{ s.university }}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">{{ s.faculty || '-' }}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">{{ s.graduation_year || '-' }}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">{{ s.email }}</td>
+              <td class="px-6 py-4 text-xs text-gray-500">{{ s.university }}</td>
+              <td class="px-3 py-4 text-xs text-gray-500">{{ s.faculty || '-' }}</td>
+              <td class="px-3 py-4 text-xs text-gray-500">{{ s.graduation_year || '-' }}</td>
+              <td class="px-6 py-4 text-xs text-gray-500">{{ s.email }}</td>
               <td class="px-6 py-4">
                 <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="statusClass(s.status)">
                   {{ s.status || '未設定' }}
                 </span>
               </td>
-              <td class="px-6 py-4 text-sm text-gray-600">
+              <td class="px-6 py-4 text-xs text-gray-600">
                 <div v-if="user.role === 'admin'" class="max-w-[180px]">
                   <select
                     :value="s.staff_id || ''"
@@ -319,7 +480,7 @@ onMounted(() => {
                 </div>
                 <span v-else>{{ s.staff_name || '-' }}</span>
               </td>
-              <td class="px-6 py-4 text-right">
+              <td class="px-6 py-4 text-right text-xs">
                 <button
                   class="text-blue-600 hover:text-blue-800 text-sm font-semibold inline-flex items-center gap-1"
                   @click="router.push(`/students/${s.id}`)"
@@ -330,7 +491,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="filteredStudents.length === 0">
-              <td colSpan="8" class="px-6 py-10 text-center text-sm text-gray-400">
+              <td colSpan="9" class="px-6 py-10 text-center text-sm text-gray-400">
                 該当する学生が見つかりませんでした。
               </td>
             </tr>
