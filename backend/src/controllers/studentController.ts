@@ -1,11 +1,40 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 
+const normalizeGraduationYear = (value: any) => {
+    if (value === null || value === undefined) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    const direct = Number(raw);
+    if (Number.isFinite(direct) && direct >= 1900 && direct <= 2100) {
+        return direct;
+    }
+
+    const twoDigitMatch = raw.match(/(\d{2})\s*卒/);
+    if (twoDigitMatch) {
+        const yy = Number(twoDigitMatch[1]);
+        if (!Number.isNaN(yy)) {
+            return 2000 + yy;
+        }
+    }
+
+    const fourDigitMatch = raw.match(/(\d{4})\s*卒/);
+    if (fourDigitMatch) {
+        const yyyy = Number(fourDigitMatch[1]);
+        if (!Number.isNaN(yyyy)) {
+            return yyyy;
+        }
+    }
+
+    return null;
+};
+
 export const getStudents = async (req: Request, res: Response) => {
     const staffId = req.query.staffId;
     try {
         let query = 'SELECT students.*, users.name as staff_name FROM students LEFT JOIN users ON students.staff_id = users.id';
-        const params = [];
+        const params: any[] = [];
         if (staffId) {
             query += ' WHERE staff_id = $1';
             params.push(staffId);
@@ -29,11 +58,13 @@ export const createStudent = async (req: Request, res: Response) => {
         phone,
         status,
         tags,
-        staff_id
+        staff_id,
+        source_company,
+        interview_reason
     } = req.body;
     try {
         const result = await pool.query(
-            'INSERT INTO students (name, university, faculty, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
+            'INSERT INTO students (name, university, faculty, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *',
             [
                 name,
                 university,
@@ -41,11 +72,13 @@ export const createStudent = async (req: Request, res: Response) => {
                 desired_industry || null,
                 desired_role || null,
                 graduation_year || null,
-                email,
-                phone,
+                email || null,
+                phone || null,
                 status || 'active',
                 tags || null,
-                staff_id
+                staff_id || null,
+                source_company || null,
+                interview_reason || null
             ]
         );
         res.json(result.rows[0]);
@@ -135,6 +168,68 @@ export const updateStudentStaff = async (req: Request, res: Response) => {
             [staff_id || null, id]
         );
         res.json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const importStudents = async (req: Request, res: Response) => {
+    const { students } = req.body as { students: any[] };
+    if (!Array.isArray(students)) {
+        res.status(400).json({ error: 'Invalid payload' });
+        return;
+    }
+
+    let inserted = 0;
+    let updated = 0;
+
+    try {
+        for (const s of students) {
+            const name = s.name || '';
+            const university = s.university || '';
+            const faculty = s.faculty || '';
+
+            const existsRes = await pool.query(
+                'SELECT id FROM students WHERE name = $1 AND university = $2 AND faculty = $3',
+                [name, university, faculty]
+            );
+
+            if (existsRes.rows.length > 0) {
+                const id = existsRes.rows[0].id;
+                await pool.query(
+                    'UPDATE students SET source_company = $1, graduation_year = $2, email = $3, status = $4, staff_id = $5, interview_reason = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7',
+                    [
+                        s.source_company || null,
+                        normalizeGraduationYear(s.graduation_year),
+                        s.email || null,
+                        s.status || '面談',
+                        s.staff_id || null,
+                        s.interview_reason || null,
+                        id
+                    ]
+                );
+                updated++;
+                continue;
+            }
+
+            await pool.query(
+                'INSERT INTO students (name, university, faculty, graduation_year, email, status, staff_id, source_company, interview_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                [
+                    name,
+                    university || null,
+                    faculty || null,
+                    normalizeGraduationYear(s.graduation_year),
+                    s.email || null,
+                    s.status || '面談',
+                    s.staff_id || null,
+                    s.source_company || null,
+                    s.interview_reason || null
+                ]
+            );
+            inserted++;
+        }
+
+        res.json({ inserted, updated });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

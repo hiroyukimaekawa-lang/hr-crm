@@ -6,7 +6,8 @@ import {
     linkEvent,
     addInterviewLog,
     updateStudentStatus,
-    updateStudentStaff
+    updateStudentStaff,
+    importStudents
 } from '../controllers/studentController';
 import { authenticate } from '../middlewares/auth';
 
@@ -14,6 +15,7 @@ const router = express.Router();
 
 router.get('/', authenticate, getStudents);
 router.post('/', authenticate, createStudent);
+router.post('/import', authenticate, importStudents);
 router.get('/:id', authenticate, getStudentDetail);
 router.post('/:id/events', authenticate, linkEvent);
 router.post('/interview-logs', authenticate, addInterviewLog);
