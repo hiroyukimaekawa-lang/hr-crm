@@ -11,7 +11,8 @@ import {
   Calendar,
   MessageSquare,
   Plus,
-  Edit
+  Edit,
+  Trash2
 } from 'lucide-vue-next';
 
 const route = useRoute();
@@ -59,6 +60,13 @@ const addLog = async () => {
   newLog.value = '';
   newLogEventId.value = '';
   newLogType.value = '面談';
+  fetchDetail();
+};
+
+const deleteLog = async (logId: number) => {
+  if (!confirm('このログを削除しますか？')) return;
+  const token = localStorage.getItem('token');
+  await axios.delete(`http://localhost:3000/api/interview-logs/${logId}`, { headers: { Authorization: token } });
   fetchDetail();
 };
 
@@ -253,7 +261,16 @@ onMounted(() => {
                       ({{ log.event_title }})
                     </span>
                   </span>
-                  <span class="text-xs text-gray-500">{{ new Date(log.interview_date).toLocaleString() }}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-500">{{ new Date(log.interview_date).toLocaleString() }}</span>
+                    <button
+                      class="text-gray-400 hover:text-red-600"
+                      @click="deleteLog(log.id)"
+                      title="削除"
+                    >
+                      <Trash2 class="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ log.content }}</p>
               </div>

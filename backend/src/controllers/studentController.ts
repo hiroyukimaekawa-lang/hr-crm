@@ -145,6 +145,20 @@ export const addInterviewLog = async (req: Request, res: Response) => {
     }
 };
 
+export const deleteInterviewLog = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query('DELETE FROM interview_logs WHERE id = $1 RETURNING id', [id]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Log not found' });
+            return;
+        }
+        res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
 export const updateStudentStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;

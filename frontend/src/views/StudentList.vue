@@ -50,16 +50,15 @@ const universitySearch = ref('');
 
 const showCreate = ref(false);
 const newStudent = ref({
+  source_company: '',
   name: '',
   university: '',
   faculty: '',
-  desired_industry: '',
-  desired_role: '',
+  interview_reason: '',
   graduation_year: '',
   email: '',
-  phone: '',
-  status: 'active',
-  tags: ''
+  status: '面談',
+  staff_id: ''
 });
 
 const fetchStudents = async () => {
@@ -101,36 +100,32 @@ const updateStaff = async (studentId: number, staffId: number | null) => {
 const createStudent = async () => {
   try {
     const token = localStorage.getItem('token');
-    const tags = newStudent.value.tags
-      ? newStudent.value.tags.split(',').map(t => t.trim()).filter(Boolean)
-      : null;
 
     await axios.post('http://localhost:3000/api/students', {
+      source_company: newStudent.value.source_company,
       name: newStudent.value.name,
       university: newStudent.value.university,
       faculty: newStudent.value.faculty,
-      desired_industry: newStudent.value.desired_industry,
-      desired_role: newStudent.value.desired_role,
+      interview_reason: newStudent.value.interview_reason || null,
       graduation_year: newStudent.value.graduation_year ? Number(newStudent.value.graduation_year) : null,
       email: newStudent.value.email,
-      phone: newStudent.value.phone,
-      status: newStudent.value.status || 'active',
-      tags,
-      staff_id: user.id
+      status: newStudent.value.status || '面談',
+      staff_id: user.role === 'admin'
+        ? (newStudent.value.staff_id ? Number(newStudent.value.staff_id) : null)
+        : user.id
     }, { headers: { Authorization: token } });
 
     showCreate.value = false;
     newStudent.value = {
+      source_company: '',
       name: '',
       university: '',
       faculty: '',
-      desired_industry: '',
-      desired_role: '',
+      interview_reason: '',
       graduation_year: '',
       email: '',
-      phone: '',
-      status: 'active',
-      tags: ''
+      status: '面談',
+      staff_id: ''
     };
     fetchStudents();
   } catch (err) {
@@ -500,46 +495,46 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-if="showCreate" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-        <h2 class="text-xl font-bold mb-4 text-gray-900">新規学生登録</h2>
-        <div class="space-y-4">
+    <teleport to="body">
+      <div v-if="showCreate" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+          <h2 class="text-xl font-bold mb-4 text-gray-900">新規学生登録</h2>
+          <div class="space-y-4">
+            <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">流入経路</label>
+            <input v-model="newStudent.source_company" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">氏名</label>
             <input v-model="newStudent.name" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">大学</label>
-            <input v-model="newStudent.university" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">大学</label>
+              <input v-model="newStudent.university" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">学部</label>
+              <input v-model="newStudent.faculty" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">面談理由</label>
+            <select v-model="newStudent.interview_reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">未設定</option>
+              <option value="就活相談">就活相談</option>
+              <option value="企業分析">企業分析</option>
+            </select>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">学部</label>
-            <input v-model="newStudent.faculty" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">志望業界</label>
-            <input v-model="newStudent.desired_industry" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">志望職種</label>
-            <input v-model="newStudent.desired_role" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">卒業年</label>
-            <input v-model="newStudent.graduation_year" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
-            <input v-model="newStudent.email" type="email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">電話番号</label>
-            <input v-model="newStudent.phone" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">卒業年</label>
+              <input v-model="newStudent.graduation_year" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
+              <input v-model="newStudent.email" type="email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">ステータス</label>
             <select v-model="newStudent.status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-              <option value="active">active</option>
               <option value="面談">面談</option>
               <option value="選考中">選考中</option>
               <option value="内定">内定</option>
@@ -548,16 +543,20 @@ onMounted(() => {
               <option value="未着手">未着手</option>
             </select>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">タグ（カンマ区切り）</label>
-            <input v-model="newStudent.tags" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例: エンジニア志望, 海外経験">
+          <div v-if="user.role === 'admin'">
+            <label class="block text-sm font-medium text-gray-700 mb-1">担当</label>
+            <select v-model="newStudent.staff_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">未割当</option>
+              <option v-for="u in staffUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
+            </select>
           </div>
         </div>
-        <div class="mt-6 flex justify-end gap-3">
-          <button @click="showCreate = false" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">キャンセル</button>
-          <button @click="createStudent" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">保存</button>
+          <div class="mt-6 flex justify-end gap-3">
+            <button @click="showCreate = false" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">キャンセル</button>
+            <button @click="createStudent" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">保存</button>
+          </div>
         </div>
       </div>
-    </div>
+    </teleport>
   </Layout>
 </template>

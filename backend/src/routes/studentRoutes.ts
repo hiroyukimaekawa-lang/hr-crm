@@ -5,6 +5,7 @@ import {
     getStudentDetail,
     linkEvent,
     addInterviewLog,
+    deleteInterviewLog,
     updateStudentStatus,
     updateStudentStaff,
     importStudents
@@ -19,6 +20,7 @@ router.post('/import', authenticate, importStudents);
 router.get('/:id', authenticate, getStudentDetail);
 router.post('/:id/events', authenticate, linkEvent);
 router.post('/interview-logs', authenticate, addInterviewLog);
+router.delete('/interview-logs/:id', authenticate, deleteInterviewLog);
 router.put('/:id/status', authenticate, updateStudentStatus);
 router.put('/:id/staff', authenticate, updateStudentStaff);
 
