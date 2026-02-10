@@ -8,7 +8,8 @@ import {
   MapPin,
   Users as UsersIcon,
   Plus,
-  ChevronRight
+  ChevronRight,
+  Trash2
 } from 'lucide-vue-next';
 
 interface EventItem {
@@ -59,6 +60,13 @@ const createEvent = async () => {
   fetchEvents();
 };
 
+const deleteEvent = async (eventId: number) => {
+  if (!confirm('このイベントを削除しますか？')) return;
+  const token = localStorage.getItem('token');
+  await axios.delete(`http://localhost:3000/api/events/${eventId}`, { headers: { Authorization: token } });
+  fetchEvents();
+};
+
 const eventStatus = (eventDate?: string) => {
   if (!eventDate) return '未定';
   return new Date(eventDate) > new Date() ? '開催予定' : '終了';
@@ -98,9 +106,18 @@ onMounted(fetchEvents);
                 <Calendar class="w-3.5 h-3.5" />
                 {{ e.event_date ? new Date(e.event_date).toLocaleDateString('ja-JP') : '日程未定' }}
               </span>
-              <span class="px-2 py-1 text-xs font-semibold rounded-full" :class="eventStatus(e.event_date) === '開催予定' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'">
-                {{ eventStatus(e.event_date) }}
-              </span>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-1 text-xs font-semibold rounded-full" :class="eventStatus(e.event_date) === '開催予定' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'">
+                  {{ eventStatus(e.event_date) }}
+                </span>
+                <button
+                  class="text-gray-400 hover:text-red-600"
+                  @click="deleteEvent(e.id)"
+                  title="削除"
+                >
+                  <Trash2 class="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <h3 class="text-lg font-bold text-gray-900 mb-2">{{ e.title }}</h3>
             <p class="text-sm text-gray-500 mb-4 line-clamp-2">{{ e.description || '説明は未登録です' }}</p>

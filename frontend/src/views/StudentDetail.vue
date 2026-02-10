@@ -12,7 +12,9 @@ import {
   MessageSquare,
   Plus,
   Edit,
-  Trash2
+  Trash2,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-vue-next';
 
 const route = useRoute();
@@ -21,6 +23,7 @@ const studentId = route.params.id;
 const student = ref<any>({});
 const studentEvents = ref<any[]>([]);
 const interviewLogs = ref<any[]>([]);
+const expandedLogId = ref<number | null>(null);
 const availableEvents = ref<any[]>([]);
 
 const newLog = ref('');
@@ -66,8 +69,12 @@ const addLog = async () => {
 const deleteLog = async (logId: number) => {
   if (!confirm('このログを削除しますか？')) return;
   const token = localStorage.getItem('token');
-  await axios.delete(`http://localhost:3000/api/interview-logs/${logId}`, { headers: { Authorization: token } });
+  await axios.delete(`http://localhost:3000/api/students/interview-logs/${logId}`, { headers: { Authorization: token } });
   fetchDetail();
+};
+
+const toggleLog = (logId: number) => {
+  expandedLogId.value = expandedLogId.value === logId ? null : logId;
 };
 
 const linkEvent = async () => {
@@ -171,6 +178,13 @@ onMounted(() => {
               <div class="flex items-center gap-3 text-gray-600">
                 <GraduationCap class="w-5 h-5" />
                 <div>
+                  <p class="text-xs text-gray-500">文理</p>
+                  <p class="text-sm font-medium">{{ student.academic_track || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600">
+                <GraduationCap class="w-5 h-5" />
+                <div>
                   <p class="text-xs text-gray-500">学部</p>
                   <p class="text-sm font-medium">{{ student.faculty || '-' }}</p>
                 </div>
@@ -252,27 +266,43 @@ onMounted(() => {
               </h2>
             </div>
 
-            <div class="flex-1 p-6 space-y-6 overflow-y-auto max-h-[500px]">
+            <div class="flex-1 p-6 space-y-4 overflow-y-auto max-h-[500px]">
               <div v-for="log in interviewLogs" :key="log.id" class="bg-gray-50 rounded-lg p-4">
-                <div class="flex justify-between items-center mb-2">
-                  <span class="text-xs font-semibold text-blue-600">
-                    {{ log.log_type || '面談' }}
-                    <span v-if="log.log_type === 'エントリー' && log.event_title" class="text-xs text-gray-500 ml-2">
-                      ({{ log.event_title }})
-                    </span>
-                  </span>
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs text-gray-500">{{ new Date(log.interview_date).toLocaleString() }}</span>
-                    <button
-                      class="text-gray-400 hover:text-red-600"
-                      @click="deleteLog(log.id)"
-                      title="削除"
-                    >
-                      <Trash2 class="w-4 h-4" />
-                    </button>
+                <div class="flex flex-col gap-2">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                      <span class="font-semibold text-blue-600">
+                        {{ log.log_type || '面談' }}
+                        <span v-if="log.log_type === 'エントリー' && log.event_title" class="text-xs text-gray-500 ml-2">
+                          ({{ log.event_title }})
+                        </span>
+                      </span>
+                      <span class="text-gray-400">・</span>
+                      <span>{{ new Date(log.interview_date).toLocaleDateString('ja-JP') }}</span>
+                      <span v-if="log.staff_name" class="text-gray-400">・</span>
+                      <span v-if="log.staff_name">{{ log.staff_name }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <button
+                        class="text-gray-400 hover:text-gray-600"
+                        @click="toggleLog(log.id)"
+                        title="詳細"
+                      >
+                        <component :is="expandedLogId === log.id ? ChevronUp : ChevronDown" class="w-4 h-4" />
+                      </button>
+                      <button
+                        class="text-gray-400 hover:text-red-600"
+                        @click="deleteLog(log.id)"
+                        title="削除"
+                      >
+                        <Trash2 class="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div v-if="expandedLogId === log.id" class="text-sm text-gray-800 whitespace-pre-wrap">
+                    {{ log.content }}
                   </div>
                 </div>
-                <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ log.content }}</p>
               </div>
               <div v-if="interviewLogs.length === 0" class="text-center text-gray-400 py-10">
                 記録がまだありません

@@ -9,13 +9,15 @@ import {
   ChevronRight,
   UserPlus,
   Download,
-  Upload
+  Upload,
+  Trash2
 } from 'lucide-vue-next';
 
 interface Student {
   id: number;
   name: string;
   university?: string;
+  academic_track?: string;
   faculty?: string;
   source_company?: string;
   interview_reason?: string;
@@ -53,6 +55,7 @@ const newStudent = ref({
   source_company: '',
   name: '',
   university: '',
+  academic_track: '',
   faculty: '',
   interview_reason: '',
   graduation_year: '',
@@ -97,6 +100,17 @@ const updateStaff = async (studentId: number, staffId: number | null) => {
   }
 };
 
+const deleteStudent = async (studentId: number) => {
+  if (!confirm('この学生を削除しますか？')) return;
+  try {
+    const token = localStorage.getItem('token');
+    await axios.delete(`http://localhost:3000/api/students/${studentId}`, { headers: { Authorization: token } });
+    fetchStudents();
+  } catch (err) {
+    console.error(err);
+  }
+};
+
 const createStudent = async () => {
   try {
     const token = localStorage.getItem('token');
@@ -105,6 +119,7 @@ const createStudent = async () => {
       source_company: newStudent.value.source_company,
       name: newStudent.value.name,
       university: newStudent.value.university,
+      academic_track: newStudent.value.academic_track || null,
       faculty: newStudent.value.faculty,
       interview_reason: newStudent.value.interview_reason || null,
       graduation_year: newStudent.value.graduation_year ? Number(newStudent.value.graduation_year) : null,
@@ -120,6 +135,7 @@ const createStudent = async () => {
       source_company: '',
       name: '',
       university: '',
+      academic_track: '',
       faculty: '',
       interview_reason: '',
       graduation_year: '',
@@ -431,38 +447,25 @@ onMounted(() => {
         <table class="w-full">
           <thead class="bg-gray-50 border-b border-gray-200 text-xs">
             <tr>
-              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">流入経路</th>
-              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">氏名</th>
-              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">大学</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">流入経路</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">氏名</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">大学</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">文理</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">学部</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">卒業年</th>
-              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">メール</th>
-              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
-              <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">担当</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">卒業年度</th>
+              <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">担当</th>
               <th class="px-6 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">操作</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 bg-white">
             <tr v-for="s in filteredStudents" :key="s.id" class="hover:bg-gray-50 transition-colors">
-              <td class="px-6 py-4 text-xs text-gray-600">{{ s.source_company || '-' }}</td>
-              <td class="px-6 py-4">
-                <div class="text-xs font-medium text-gray-900">{{ s.name }}</div>
-                <div v-if="Array.isArray(s.tags) && s.tags.length" class="mt-1 flex flex-wrap gap-1">
-                  <span v-for="tag in s.tags.slice(0, 2)" :key="tag" class="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
-                    {{ tag }}
-                  </span>
-                </div>
-              </td>
-              <td class="px-6 py-4 text-xs text-gray-500">{{ s.university }}</td>
-              <td class="px-3 py-4 text-xs text-gray-500">{{ s.faculty || '-' }}</td>
-              <td class="px-3 py-4 text-xs text-gray-500">{{ s.graduation_year || '-' }}</td>
-              <td class="px-6 py-4 text-xs text-gray-500">{{ s.email }}</td>
-              <td class="px-6 py-4">
-                <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="statusClass(s.status)">
-                  {{ s.status || '未設定' }}
-                </span>
-              </td>
-              <td class="px-6 py-4 text-xs text-gray-600">
+              <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{{ s.source_company || '-' }}</td>
+              <td class="px-4 py-3 text-xs font-medium text-gray-900 whitespace-nowrap">{{ s.name }}</td>
+              <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.university }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.academic_track || '-' }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.faculty || '-' }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.graduation_year || '-' }}</td>
+              <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
                 <div v-if="user.role === 'admin'" class="max-w-[180px]">
                   <select
                     :value="s.staff_id || ''"
@@ -475,7 +478,7 @@ onMounted(() => {
                 </div>
                 <span v-else>{{ s.staff_name || '-' }}</span>
               </td>
-              <td class="px-6 py-4 text-right text-xs">
+              <td class="px-6 py-3 text-right text-xs whitespace-nowrap">
                 <button
                   class="text-blue-600 hover:text-blue-800 text-sm font-semibold inline-flex items-center gap-1"
                   @click="router.push(`/students/${s.id}`)"
@@ -483,10 +486,18 @@ onMounted(() => {
                   詳細
                   <ChevronRight class="w-4 h-4" />
                 </button>
+                <button
+                  v-if="user.role === 'admin'"
+                  class="ml-3 text-gray-400 hover:text-red-600 inline-flex items-center"
+                  @click="deleteStudent(s.id)"
+                  title="削除"
+                >
+                  <Trash2 class="w-4 h-4" />
+                </button>
               </td>
             </tr>
             <tr v-if="filteredStudents.length === 0">
-              <td colSpan="9" class="px-6 py-10 text-center text-sm text-gray-400">
+              <td colSpan="8" class="px-6 py-10 text-center text-sm text-gray-400">
                 該当する学生が見つかりませんでした。
               </td>
             </tr>
@@ -508,14 +519,22 @@ onMounted(() => {
             <label class="block text-sm font-medium text-gray-700 mb-1">氏名</label>
             <input v-model="newStudent.name" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">大学</label>
-              <input v-model="newStudent.university" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">学部</label>
-              <input v-model="newStudent.faculty" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-            </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">大学</label>
+            <input v-model="newStudent.university" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">文理</label>
+            <select v-model="newStudent.academic_track" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">未設定</option>
+              <option value="文系">文系</option>
+              <option value="理系">理系</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">学部</label>
+            <input v-model="newStudent.faculty" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
             <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">面談理由</label>
             <select v-model="newStudent.interview_reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">

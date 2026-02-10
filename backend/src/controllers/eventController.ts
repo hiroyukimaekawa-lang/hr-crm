@@ -92,3 +92,18 @@ export const updateParticipantStatus = async (req: Request, res: Response) => {
         res.status(500).json({ error: err.message });
     }
 };
+
+export const deleteEvent = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        await pool.query('UPDATE interview_logs SET event_id = NULL WHERE event_id = $1', [id]);
+        const result = await pool.query('DELETE FROM events WHERE id = $1 RETURNING id', [id]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Event not found' });
+            return;
+        }
+        res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};

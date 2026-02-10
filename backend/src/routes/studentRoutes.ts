@@ -8,6 +8,7 @@ import {
     deleteInterviewLog,
     updateStudentStatus,
     updateStudentStaff,
+    deleteStudent,
     importStudents
 } from '../controllers/studentController';
 import { authenticate } from '../middlewares/auth';
@@ -23,5 +24,6 @@ router.post('/interview-logs', authenticate, addInterviewLog);
 router.delete('/interview-logs/:id', authenticate, deleteInterviewLog);
 router.put('/:id/status', authenticate, updateStudentStatus);
 router.put('/:id/staff', authenticate, updateStudentStaff);
+router.delete('/:id', authenticate, deleteStudent);
 
 export default router;

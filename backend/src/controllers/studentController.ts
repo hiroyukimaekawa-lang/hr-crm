@@ -50,6 +50,7 @@ export const createStudent = async (req: Request, res: Response) => {
     const {
         name,
         university,
+        academic_track,
         faculty,
         desired_industry,
         desired_role,
@@ -64,10 +65,11 @@ export const createStudent = async (req: Request, res: Response) => {
     } = req.body;
     try {
         const result = await pool.query(
-            'INSERT INTO students (name, university, faculty, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *',
+            'INSERT INTO students (name, university, academic_track, faculty, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *',
             [
                 name,
                 university,
+                academic_track || null,
                 faculty || null,
                 desired_industry || null,
                 desired_role || null,
@@ -101,9 +103,11 @@ export const getStudentDetail = async (req: Request, res: Response) => {
         const logsRes = await pool.query(`
             SELECT 
                 il.*,
-                e.title as event_title
+                e.title as event_title,
+                u.name as staff_name
             FROM interview_logs il
             LEFT JOIN events e ON e.id = il.event_id
+            LEFT JOIN users u ON u.id = il.staff_id
             WHERE il.student_id = $1
             ORDER BY il.created_at DESC
         `, [id]);
@@ -182,6 +186,20 @@ export const updateStudentStaff = async (req: Request, res: Response) => {
             [staff_id || null, id]
         );
         res.json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const deleteStudent = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query('DELETE FROM students WHERE id = $1 RETURNING id', [id]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json({ success: true });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

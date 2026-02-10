@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS students (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     university VARCHAR(255),
+    academic_track VARCHAR(20),
     faculty VARCHAR(255),
     desired_industry VARCHAR(255),
     desired_role VARCHAR(255),
