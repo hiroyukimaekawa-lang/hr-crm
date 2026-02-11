@@ -46,7 +46,7 @@ export const getStudents = async (req: Request, res: Response) => {
                 SELECT content, due_date
                 FROM student_tasks
                 WHERE student_id = students.id
-                ORDER BY due_date NULLS LAST, created_at DESC
+                ORDER BY created_at DESC
                 LIMIT 1
             ) st ON true
         `;

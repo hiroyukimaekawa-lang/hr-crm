@@ -22,7 +22,6 @@ interface Student {
   progress_stage?: string;
   next_meeting_date?: string | null;
   next_action?: string | null;
-  latest_task_content?: string | null;
   latest_task_due_date?: string | null;
   source_company?: string;
   interview_reason?: string;
@@ -56,12 +55,13 @@ const staffFilter = ref('ALL');
 const sourceCompanyFilter = ref('ALL');
 const academicTrackFilter = ref('ALL');
 const referralStatusFilter = ref('ALL');
-const progressStageFilter = ref('ALL');
-const nextActionFilter = ref('ALL');
 const nextMeetingFilter = ref('ALL');
+const nextMeetingFrom = ref('');
+const nextMeetingTo = ref('');
 const graduationYearFilter = ref('ALL');
-const taskFilter = ref<'ALL' | 'HAS' | 'NO'>('ALL');
 const taskDueFilter = ref<'ALL' | 'HAS' | 'NO'>('ALL');
+const taskDueFrom = ref('');
+const taskDueTo = ref('');
 
 const showCreate = ref(false);
 const newStudent = ref({
@@ -220,13 +220,15 @@ const graduationYearOptions = computed(() => {
   return ['ALL', ...Array.from(set).sort()];
 });
 
-const nextActionOptions = computed(() => {
-  const set = new Set<string>();
-  students.value.forEach(s => s.next_action && set.add(s.next_action));
-  return ['ALL', ...Array.from(set)];
-});
-
 const filteredStudents = computed(() => {
+  const normalizeDateKey = (value?: string | null) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    const raw = String(value);
+    return raw.length >= 10 ? raw.slice(0, 10) : raw;
+  };
+
   return students.value.filter(s => {
     const matchesName =
       selectedNames.value.length === 0 ||
@@ -246,27 +248,25 @@ const filteredStudents = computed(() => {
     const matchesReferral =
       referralStatusFilter.value === 'ALL' ||
       (s.referral_status || '不明') === referralStatusFilter.value;
-    const matchesProgress =
-      progressStageFilter.value === 'ALL' ||
-      (s.progress_stage || '初回面談') === progressStageFilter.value;
-    const matchesNextAction =
-      nextActionFilter.value === 'ALL' ||
-      (s.next_action || '') === nextActionFilter.value;
     const hasNextMeeting = !!s.next_meeting_date;
     const matchesNextMeeting =
       nextMeetingFilter.value === 'ALL' ||
       (nextMeetingFilter.value === 'SET' ? hasNextMeeting : !hasNextMeeting);
+    const nextMeetingKey = normalizeDateKey(s.next_meeting_date);
+    const matchesNextMeetingDate =
+      (!nextMeetingFrom.value || (nextMeetingKey && nextMeetingKey >= nextMeetingFrom.value)) &&
+      (!nextMeetingTo.value || (nextMeetingKey && nextMeetingKey <= nextMeetingTo.value));
     const matchesGraduationYear =
       graduationYearFilter.value === 'ALL' ||
       String(s.graduation_year || '') === graduationYearFilter.value;
-    const hasTask = !!(s.latest_task_content && s.latest_task_content.trim());
-    const matchesTask =
-      taskFilter.value === 'ALL' ||
-      (taskFilter.value === 'HAS' ? hasTask : !hasTask);
     const hasTaskDue = !!s.latest_task_due_date;
     const matchesTaskDue =
       taskDueFilter.value === 'ALL' ||
       (taskDueFilter.value === 'HAS' ? hasTaskDue : !hasTaskDue);
+    const taskDueKey = normalizeDateKey(s.latest_task_due_date);
+    const matchesTaskDueDate =
+      (!taskDueFrom.value || (taskDueKey && taskDueKey >= taskDueFrom.value)) &&
+      (!taskDueTo.value || (taskDueKey && taskDueKey <= taskDueTo.value));
     return matchesName
       && matchesUniversity
       && matchesStaff
@@ -274,10 +274,9 @@ const filteredStudents = computed(() => {
       && matchesAcademicTrack
       && matchesGraduationYear
       && matchesReferral
-      && matchesProgress
-      && matchesNextAction
       && matchesNextMeeting
-      && matchesTask
+      && matchesNextMeetingDate
+      && matchesTaskDueDate
       && matchesTaskDue;
   });
 });
@@ -297,31 +296,20 @@ const clearFilters = () => {
   sourceCompanyFilter.value = 'ALL';
   academicTrackFilter.value = 'ALL';
   referralStatusFilter.value = 'ALL';
-  progressStageFilter.value = 'ALL';
-  nextActionFilter.value = 'ALL';
   nextMeetingFilter.value = 'ALL';
+  nextMeetingFrom.value = '';
+  nextMeetingTo.value = '';
   graduationYearFilter.value = 'ALL';
-  taskFilter.value = 'ALL';
   taskDueFilter.value = 'ALL';
+  taskDueFrom.value = '';
+  taskDueTo.value = '';
 };
 
-const statusClass = (status?: string) => {
-  switch (status) {
-    case '内定':
-      return 'bg-green-100 text-green-700';
-    case '選考中':
-      return 'bg-blue-100 text-blue-700';
-    case '辞退':
-      return 'bg-gray-100 text-gray-600';
-    case '不合格':
-      return 'bg-red-100 text-red-700';
-    case '未着手':
-      return 'bg-amber-100 text-amber-700';
-    case '面談':
-      return 'bg-indigo-100 text-indigo-700';
-    default:
-      return 'bg-slate-100 text-slate-700';
-  }
+const formatDate = (value?: string | null) => {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString('ja-JP');
 };
 
 const downloadCsv = () => {
@@ -593,13 +581,6 @@ onMounted(() => {
                 </option>
               </select>
               <select
-                v-model="progressStageFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="ALL">進捗: すべて</option>
-                <option v-for="s in progressStageOptions" :key="s" :value="s">{{ s }}</option>
-              </select>
-              <select
                 v-model="nextMeetingFilter"
                 class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
               >
@@ -607,22 +588,20 @@ onMounted(() => {
                 <option value="SET">設定あり</option>
                 <option value="UNSET">未設定</option>
               </select>
-              <select
-                v-model="nextActionFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option v-for="a in nextActionOptions" :key="a" :value="a">
-                  {{ a === 'ALL' ? 'ネクストアクション: すべて' : a }}
-                </option>
-              </select>
-              <select
-                v-model="taskFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="ALL">タスク: すべて</option>
-                <option value="HAS">タスクあり</option>
-                <option value="NO">タスクなし</option>
-              </select>
+              <div class="flex items-center gap-1 px-2 py-1 border border-gray-200 rounded-lg bg-white">
+                <span class="text-xs text-gray-500 whitespace-nowrap">次回面談日</span>
+                <input
+                  v-model="nextMeetingFrom"
+                  type="date"
+                  class="px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span class="text-xs text-gray-400">〜</span>
+                <input
+                  v-model="nextMeetingTo"
+                  type="date"
+                  class="px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
               <select
                 v-model="taskDueFilter"
                 class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
@@ -631,6 +610,20 @@ onMounted(() => {
                 <option value="HAS">履行日あり</option>
                 <option value="NO">履行日なし</option>
               </select>
+              <div class="flex items-center gap-1 px-2 py-1 border border-gray-200 rounded-lg bg-white">
+                <span class="text-xs text-gray-500 whitespace-nowrap">履行日</span>
+                <input
+                  v-model="taskDueFrom"
+                  type="date"
+                  class="px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span class="text-xs text-gray-400">〜</span>
+                <input
+                  v-model="taskDueTo"
+                  type="date"
+                  class="px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
         </div>
         <label v-if="user.role === 'admin'" class="flex items-center gap-2 text-sm text-gray-600">
@@ -667,11 +660,11 @@ onMounted(() => {
             </div>
             <div>
               <p class="text-gray-400">次回面談日</p>
-              <p class="text-gray-700">{{ s.next_meeting_date || '-' }}</p>
+              <p class="text-gray-700">{{ formatDate(s.next_meeting_date) }}</p>
             </div>
             <div>
-              <p class="text-gray-400">ネクストアクション</p>
-              <p class="text-gray-700 truncate">{{ s.next_action || '-' }}</p>
+              <p class="text-gray-400">タスク履行日</p>
+              <p class="text-gray-700">{{ formatDate(s.latest_task_due_date) }}</p>
             </div>
           </div>
           <div class="space-y-2 mb-3">
@@ -753,8 +746,7 @@ onMounted(() => {
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">担当</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">次回面談日</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">タスク</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">履行日</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">タスク履行日</th>
               <th class="px-6 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">操作</th>
             </tr>
           </thead>
@@ -787,9 +779,8 @@ onMounted(() => {
                   <option v-for="v in referralStatusOptions" :key="v" :value="v">{{ v }}</option>
                 </select>
               </td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.next_meeting_date || '-' }}</td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap truncate max-w-[200px]">{{ s.latest_task_content || '-' }}</td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.latest_task_due_date || '-' }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.next_meeting_date) }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.latest_task_due_date) }}</td>
               <td class="px-6 py-3 text-right text-xs whitespace-nowrap">
                 <button
                   class="text-blue-600 hover:text-blue-800 text-sm font-semibold inline-flex items-center gap-1"
@@ -809,7 +800,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="filteredStudents.length === 0">
-              <td colSpan="11" class="px-6 py-10 text-center text-sm text-gray-400">
+              <td colSpan="10" class="px-6 py-10 text-center text-sm text-gray-400">
                 該当する学生が見つかりませんでした。
               </td>
             </tr>
