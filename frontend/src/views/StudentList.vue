@@ -292,19 +292,25 @@ const importCsv = async (file: File) => {
   const text = await file.text();
   const rows = parseCsv(text);
   if (rows.length < 2) return;
-  const header = rows[0];
+  const header = rows[0] || [];
   const map = mapHeaderIndex(header);
 
+  const getVal = (row: string[], key: string) => {
+    const idx = map[key];
+    if (idx === undefined) return '';
+    return row[idx] || '';
+  };
+
   const items = rows.slice(1).map(r => ({
-    source_company: r[map['流入経路']] || '',
-    name: r[map['氏名']] || '',
-    university: r[map['大学']] || '',
-    faculty: r[map['学部']] || '',
-    graduation_year: r[map['卒業年']] || '',
-    email: r[map['メール']] || '',
-    status: r[map['ステータス']] || '面談',
-    staff_name: r[map['担当']] || '',
-    interview_reason: r[map['面談理由']] || ''
+    source_company: getVal(r, '流入経路'),
+    name: getVal(r, '氏名'),
+    university: getVal(r, '大学'),
+    faculty: getVal(r, '学部'),
+    graduation_year: getVal(r, '卒業年'),
+    email: getVal(r, 'メール'),
+    status: getVal(r, 'ステータス') || '面談',
+    staff_name: getVal(r, '担当'),
+    interview_reason: getVal(r, '面談理由')
   })).filter(i => i.name || i.university);
 
   const staffMap = new Map(staffUsers.value.map(s => [s.name, s.id]));
