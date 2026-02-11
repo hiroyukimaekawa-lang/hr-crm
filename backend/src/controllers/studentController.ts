@@ -32,10 +32,16 @@ const normalizeGraduationYear = (value: any) => {
 
 export const getStudents = async (req: Request, res: Response) => {
     const staffId = req.query.staffId;
+    const authUser = (req as any).user as { sub?: string; role?: string } | undefined;
     try {
         let query = 'SELECT students.*, users.name as staff_name FROM students LEFT JOIN users ON students.staff_id = users.id';
         const params: any[] = [];
-        if (staffId) {
+
+        // staff users can only see their own students regardless of query param
+        if (authUser?.role !== 'admin' && authUser?.sub) {
+            query += ' WHERE students.staff_id = $1';
+            params.push(Number(authUser.sub));
+        } else if (staffId) {
             query += ' WHERE staff_id = $1';
             params.push(staffId);
         }

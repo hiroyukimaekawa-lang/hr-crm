@@ -443,7 +443,7 @@ onMounted(() => {
             </div>
           </div>
         </div>
-        <label class="flex items-center gap-2 text-sm text-gray-600">
+        <label v-if="user.role === 'admin'" class="flex items-center gap-2 text-sm text-gray-600">
           <input type="checkbox" v-model="showAll" @change="fetchStudents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
           全学生を表示
         </label>
