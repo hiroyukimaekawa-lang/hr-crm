@@ -83,7 +83,9 @@ export const createInvite = async (req: Request, res: Response) => {
             [token, 'staff', expiresAt]
         );
 
-        const appUrl = process.env.APP_URL || 'http://localhost:5173';
+        // Prefer explicit APP_URL, otherwise derive from browser Origin header.
+        const origin = req.get('origin');
+        const appUrl = (process.env.APP_URL || origin || 'http://localhost:5173').replace(/\/$/, '');
         const inviteUrl = `${appUrl}/register?token=${result.rows[0].token}`;
 
         res.json({
