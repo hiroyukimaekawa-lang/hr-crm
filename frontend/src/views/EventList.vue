@@ -26,7 +26,6 @@ interface EventItem {
   registered_count?: number;
   attended_count?: number;
   total_count?: number;
-  registered_participants?: { id: number; name: string }[];
 }
 
 const events = ref<EventItem[]>([]);
@@ -81,13 +80,22 @@ const progressRate = (event: EventItem) => {
   return Math.min(Math.round(((event.registered_count || 0) / target) * 100), 100);
 };
 
+const expectedSales = (event: EventItem) => {
+  return Number(event.unit_price || 0) * Number(event.registered_count || 0);
+};
+
+const remainingEntries = (event: EventItem) => {
+  const remain = Number(event.target_seats || 0) - Number(event.registered_count || 0);
+  return remain > 0 ? remain : 0;
+};
+
 onMounted(fetchEvents);
 </script>
 
 <template>
   <Layout>
-    <div class="p-8">
-      <div class="flex justify-between items-center mb-8">
+    <div class="p-4 md:p-8">
+      <div class="flex flex-col gap-4 md:flex-row md:justify-between md:items-center mb-8">
         <div>
           <h1 class="text-3xl font-bold text-gray-900">イベント一覧</h1>
           <p class="text-gray-500 mt-2">開催予定および過去のイベントを一覧で確認できます。</p>
@@ -101,7 +109,7 @@ onMounted(fetchEvents);
         </button>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         <div v-for="e in events" :key="e.id" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
           <div class="p-6">
             <div class="flex justify-between items-start mb-4">
@@ -145,8 +153,8 @@ onMounted(fetchEvents);
               <span>出席: {{ e.attended_count || 0 }}名</span>
             </div>
             <div class="flex items-center justify-between text-xs text-gray-500 mb-3">
-              <span>目標売上: {{ (e.target_sales || 0).toLocaleString() }}円</span>
-              <span>実績売上: {{ (e.current_sales || 0).toLocaleString() }}円</span>
+              <span>見込み売上: {{ expectedSales(e).toLocaleString() }}円</span>
+              <span>不足エントリー: {{ remainingEntries(e) }}名</span>
             </div>
             <div class="mb-4">
               <div class="flex justify-between text-xs text-gray-500 mb-1">
@@ -156,15 +164,6 @@ onMounted(fetchEvents);
               <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div class="h-full bg-blue-600" :style="{ width: `${progressRate(e)}%` }" />
               </div>
-            </div>
-            <div class="mb-4">
-              <p class="text-xs font-semibold text-gray-600 mb-2">参加者一覧（エントリー）</p>
-              <div v-if="e.registered_participants && e.registered_participants.length" class="flex flex-wrap gap-2">
-                <span v-for="p in e.registered_participants" :key="p.id" class="text-xs px-2 py-1 bg-white border border-gray-200 rounded-full">
-                  {{ p.name }}
-                </span>
-              </div>
-              <p v-else class="text-xs text-gray-400">エントリーはまだありません</p>
             </div>
             <button
               class="w-full text-blue-600 hover:text-blue-800 text-sm font-semibold flex items-center justify-center gap-2 py-2 border border-blue-100 rounded-lg bg-white"

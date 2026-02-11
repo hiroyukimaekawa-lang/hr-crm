@@ -4,7 +4,6 @@ import { api } from '../lib/api';
 import { useRouter } from 'vue-router';
 import Layout from '../components/Layout.vue';
 import {
-  Search,
   Filter,
   ChevronRight,
   UserPlus,
@@ -19,6 +18,8 @@ interface Student {
   university?: string;
   academic_track?: string;
   faculty?: string;
+  referral_status?: string;
+  progress_stage?: string;
   source_company?: string;
   interview_reason?: string;
   desired_industry?: string;
@@ -41,14 +42,18 @@ const students = ref<Student[]>([]);
 const staffUsers = ref<StaffUser[]>([]);
 const router = useRouter();
 const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
-const showAll = ref(false);
+const showAll = ref(user.role === 'admin');
 
-const searchTerm = ref('');
+const selectedNames = ref<string[]>([]);
+const selectedUniversities = ref<string[]>([]);
+const nameSearch = ref('');
+const universitySearch = ref('');
 const statusFilter = ref('ALL');
 const staffFilter = ref('ALL');
-
-const universityFilter = ref<string[]>([]);
-const universitySearch = ref('');
+const sourceCompanyFilter = ref('ALL');
+const academicTrackFilter = ref('ALL');
+const referralStatusFilter = ref('ALL');
+const progressStageFilter = ref('ALL');
 
 const showCreate = ref(false);
 const newStudent = ref({
@@ -58,6 +63,8 @@ const newStudent = ref({
   academic_track: '',
   faculty: '',
   interview_reason: '',
+  referral_status: '不明',
+  progress_stage: '初回面談',
   graduation_year: '',
   email: '',
   status: '面談',
@@ -100,6 +107,19 @@ const updateStaff = async (studentId: number, staffId: number | null) => {
   }
 };
 
+const referralStatusOptions = ['キーマン', '出そう', 'ほぼ無理ワンチャン', '無理', '不明'];
+const progressStageOptions = ['初回面談', '2回目面談', '顧客化', 'トビ'];
+
+const updateStudentMeta = async (studentId: number, payload: { referral_status?: string; progress_stage?: string; source_company?: string }) => {
+  try {
+    const token = localStorage.getItem('token');
+    await api.put(`/api/students/${studentId}/meta`, payload, { headers: { Authorization: token } });
+    fetchStudents();
+  } catch (err) {
+    console.error(err);
+  }
+};
+
 const deleteStudent = async (studentId: number) => {
   if (!confirm('この学生を削除しますか？')) return;
   try {
@@ -121,6 +141,8 @@ const createStudent = async () => {
       university: newStudent.value.university,
       academic_track: newStudent.value.academic_track || null,
       faculty: newStudent.value.faculty,
+      referral_status: newStudent.value.referral_status,
+      progress_stage: newStudent.value.progress_stage,
       interview_reason: newStudent.value.interview_reason || null,
       graduation_year: newStudent.value.graduation_year ? Number(newStudent.value.graduation_year) : null,
       email: newStudent.value.email,
@@ -138,6 +160,8 @@ const createStudent = async () => {
       academic_track: '',
       faculty: '',
       interview_reason: '',
+      referral_status: '不明',
+      progress_stage: '初回面談',
       graduation_year: '',
       email: '',
       status: '面談',
@@ -155,11 +179,23 @@ const universities = computed(() => {
   return ['ALL', ...Array.from(set)];
 });
 
-const filteredUniversities = computed(() => {
+const names = computed(() => {
+  const set = new Set<string>();
+  students.value.forEach(s => s.name && set.add(s.name));
+  return Array.from(set);
+});
+
+const filteredNames = computed(() => {
+  const term = nameSearch.value.trim().toLowerCase();
+  if (!term) return names.value;
+  return names.value.filter(n => n.toLowerCase().includes(term));
+});
+
+const filteredUniversityOptions = computed(() => {
   const term = universitySearch.value.trim().toLowerCase();
-  return universities.value
-    .filter(u => u !== 'ALL')
-    .filter(u => !term || u.toLowerCase().includes(term));
+  const list = universities.value.slice(1);
+  if (!term) return list;
+  return list.filter(u => u.toLowerCase().includes(term));
 });
 
 const statusOptions = computed(() => {
@@ -169,25 +205,51 @@ const statusOptions = computed(() => {
 });
 
 const filteredStudents = computed(() => {
-  const term = searchTerm.value.toLowerCase();
   return students.value.filter(s => {
-    const matchesSearch = !term ||
-      (s.name || '').toLowerCase().includes(term) ||
-      (s.email || '').toLowerCase().includes(term) ||
-      (s.university || '').toLowerCase().includes(term) ||
-      (s.faculty || '').toLowerCase().includes(term) ||
-      (s.desired_industry || '').toLowerCase().includes(term) ||
-      (s.desired_role || '').toLowerCase().includes(term);
-    const matchesStatus = statusFilter.value === 'ALL' || s.status === statusFilter.value;
+    const matchesName =
+      selectedNames.value.length === 0 ||
+      selectedNames.value.includes(s.name || '');
     const matchesUniversity =
-      universityFilter.value.length === 0 ||
-      (s.university && universityFilter.value.includes(s.university));
+      selectedUniversities.value.length === 0 ||
+      selectedUniversities.value.includes(s.university || '');
+    const matchesStatus = statusFilter.value === 'ALL' || s.status === statusFilter.value;
     const matchesStaff =
       staffFilter.value === 'ALL' ||
       String(s.staff_id || '') === staffFilter.value;
-    return matchesSearch && matchesStatus && matchesUniversity && matchesStaff;
+    const matchesSourceCompany =
+      sourceCompanyFilter.value === 'ALL' ||
+      (s.source_company || '') === sourceCompanyFilter.value;
+    const matchesAcademicTrack =
+      academicTrackFilter.value === 'ALL' ||
+      (s.academic_track || '') === academicTrackFilter.value;
+    const matchesReferral =
+      referralStatusFilter.value === 'ALL' ||
+      (s.referral_status || '不明') === referralStatusFilter.value;
+    const matchesProgress =
+      progressStageFilter.value === 'ALL' ||
+      (s.progress_stage || '初回面談') === progressStageFilter.value;
+    return matchesName && matchesUniversity && matchesStatus && matchesStaff && matchesSourceCompany && matchesAcademicTrack && matchesReferral && matchesProgress;
   });
 });
+
+const sourceCompanyOptions = computed(() => {
+  const set = new Set<string>();
+  students.value.forEach(s => s.source_company && set.add(s.source_company));
+  return Array.from(set);
+});
+
+const clearFilters = () => {
+  selectedNames.value = [];
+  selectedUniversities.value = [];
+  nameSearch.value = '';
+  universitySearch.value = '';
+  statusFilter.value = 'ALL';
+  staffFilter.value = 'ALL';
+  sourceCompanyFilter.value = 'ALL';
+  academicTrackFilter.value = 'ALL';
+  referralStatusFilter.value = 'ALL';
+  progressStageFilter.value = 'ALL';
+};
 
 const statusClass = (status?: string) => {
   switch (status) {
@@ -214,13 +276,15 @@ const downloadCsv = () => {
     name: s.name,
     university: s.university || '',
     faculty: s.faculty || '',
+    referral_status: s.referral_status || '不明',
+    progress_stage: s.progress_stage || '初回面談',
     graduation_year: s.graduation_year || '',
     email: s.email || '',
     status: s.status || '',
     staff_name: s.staff_name || '',
     interview_reason: s.interview_reason || ''
   }));
-  const header = ['流入経路', '氏名', '大学', '学部', '卒業年', 'メール', 'ステータス', '担当', '面談理由'];
+  const header = ['流入経路', '氏名', '大学', '学部', '紹介打診', '進捗', '卒業年', 'メール', 'ステータス', '担当', '面談理由'];
   const csv = [
     header.join(','),
     ...rows.map(r => [
@@ -228,6 +292,8 @@ const downloadCsv = () => {
       r.name,
       r.university,
       r.faculty,
+      r.referral_status,
+      r.progress_stage,
       r.graduation_year,
       r.email,
       r.status,
@@ -306,6 +372,8 @@ const importCsv = async (file: File) => {
     name: getVal(r, '氏名'),
     university: getVal(r, '大学'),
     faculty: getVal(r, '学部'),
+    referral_status: getVal(r, '紹介打診') || '不明',
+    progress_stage: getVal(r, '進捗') || '初回面談',
     graduation_year: getVal(r, '卒業年'),
     email: getVal(r, 'メール'),
     status: getVal(r, 'ステータス') || '面談',
@@ -323,7 +391,9 @@ const importCsv = async (file: File) => {
     status: i.status,
     staff_id: staffMap.get(i.staff_name) || null,
     source_company: i.source_company,
-    interview_reason: i.interview_reason
+    interview_reason: i.interview_reason,
+    referral_status: i.referral_status,
+    progress_stage: i.progress_stage
   }));
 
   const token = localStorage.getItem('token');
@@ -352,13 +422,13 @@ onMounted(() => {
 
 <template>
   <Layout>
-    <div class="p-8">
+    <div class="p-4 md:p-8">
       <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
         <div>
           <h1 class="text-3xl font-bold text-gray-900">学生一覧</h1>
           <p class="text-gray-500 mt-2">登録されている学生の情報を管理・確認できます。</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <button
             @click="downloadCsv"
             class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -382,19 +452,53 @@ onMounted(() => {
       </div>
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6 flex flex-col gap-4">
-        <div class="flex flex-col md:flex-row md:items-center gap-3">
-          <div class="flex-1 relative">
-            <Search class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              v-model="searchTerm"
-              type="text"
-              placeholder="名前・メール・大学・学部・志望で検索..."
-              class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div class="flex flex-col md:flex-row md:items-center gap-2">
-            <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <Filter class="w-4 h-4 text-gray-400" />
+              <details class="relative">
+                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-sm cursor-pointer bg-white">
+                  氏名: {{ selectedNames.length ? `${selectedNames.length}件` : 'すべて' }}
+                </summary>
+                <div class="absolute z-20 mt-1 w-64 max-h-60 overflow-auto bg-white border border-gray-200 rounded-lg shadow">
+                  <div class="p-2 border-b border-gray-100">
+                    <input
+                      v-model="nameSearch"
+                      type="text"
+                      placeholder="氏名で検索..."
+                      class="w-full px-2 py-1.5 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <label v-for="n in filteredNames" :key="n" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50">
+                    <input type="checkbox" :value="n" v-model="selectedNames" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    <span>{{ n }}</span>
+                  </label>
+                  <div v-if="filteredNames.length === 0" class="px-3 py-2 text-xs text-gray-400">
+                    該当する氏名がありません
+                  </div>
+                </div>
+              </details>
+              <details class="relative">
+                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-sm cursor-pointer bg-white">
+                  大学: {{ selectedUniversities.length ? `${selectedUniversities.length}件` : 'すべて' }}
+                </summary>
+                <div class="absolute z-20 mt-1 w-72 max-h-60 overflow-auto bg-white border border-gray-200 rounded-lg shadow">
+                  <div class="p-2 border-b border-gray-100">
+                    <input
+                      v-model="universitySearch"
+                      type="text"
+                      placeholder="大学名で検索..."
+                      class="w-full px-2 py-1.5 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <label v-for="u in filteredUniversityOptions" :key="u" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50">
+                    <input type="checkbox" :value="u" v-model="selectedUniversities" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    <span>{{ u }}</span>
+                  </label>
+                  <div v-if="filteredUniversityOptions.length === 0" class="px-3 py-2 text-xs text-gray-400">
+                    該当する大学がありません
+                  </div>
+                </div>
+              </details>
               <select
                 v-model="statusFilter"
                 class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
@@ -411,37 +515,43 @@ onMounted(() => {
                 <option value="ALL">担当者: すべて</option>
                 <option v-for="u in staffUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
               </select>
-            </div>
-            <div class="min-w-[240px]">
-              <input
-                v-model="universitySearch"
-                type="text"
-                placeholder="大学名で検索..."
-                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <div
-                v-if="universitySearch.trim().length > 0"
-                class="mt-2 max-h-40 overflow-auto border border-gray-200 rounded-lg bg-white"
+              <select
+                v-model="sourceCompanyFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <label
-                  v-for="u in filteredUniversities"
-                  :key="u"
-                  class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  <input
-                    type="checkbox"
-                    :value="u"
-                    v-model="universityFilter"
-                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span>{{ u }}</span>
-                </label>
-                <div v-if="filteredUniversities.length === 0" class="px-3 py-2 text-xs text-gray-400">
-                  該当する大学がありません
-                </div>
-              </div>
+                <option value="ALL">流入経路: すべて</option>
+                <option v-for="v in sourceCompanyOptions" :key="v" :value="v">{{ v }}</option>
+              </select>
+              <select
+                v-model="academicTrackFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">文理: すべて</option>
+                <option value="文系">文系</option>
+                <option value="理系">理系</option>
+                <option value="">未設定</option>
+              </select>
+              <select
+                v-model="referralStatusFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">紹介打診: すべて</option>
+                <option v-for="s in referralStatusOptions" :key="s" :value="s">{{ s }}</option>
+              </select>
+              <select
+                v-model="progressStageFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">進捗: すべて</option>
+                <option v-for="s in progressStageOptions" :key="s" :value="s">{{ s }}</option>
+              </select>
+              <button
+                @click="clearFilters"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+              >
+                フィルタクリア
+              </button>
             </div>
-          </div>
         </div>
         <label v-if="user.role === 'admin'" class="flex items-center gap-2 text-sm text-gray-600">
           <input type="checkbox" v-model="showAll" @change="fetchStudents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
@@ -449,8 +559,79 @@ onMounted(() => {
         </label>
       </div>
 
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <table class="w-full">
+      <div class="md:hidden space-y-3">
+        <div v-for="s in filteredStudents" :key="`mobile-${s.id}`" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div class="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <p class="text-sm font-semibold text-gray-900">{{ s.name }}</p>
+              <p class="text-xs text-gray-500">{{ s.university || '-' }} / {{ s.faculty || '-' }}</p>
+            </div>
+            <span class="text-xs text-gray-500">{{ s.graduation_year || '-' }}卒</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs mb-3">
+            <div>
+              <p class="text-gray-400">流入経路</p>
+              <p class="text-gray-700">{{ s.source_company || '-' }}</p>
+            </div>
+            <div>
+              <p class="text-gray-400">文理</p>
+              <p class="text-gray-700">{{ s.academic_track || '-' }}</p>
+            </div>
+          </div>
+          <div class="space-y-2 mb-3">
+            <label class="block text-xs text-gray-500">紹介打診</label>
+            <select
+              class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs"
+              :value="s.referral_status || '不明'"
+              @change="updateStudentMeta(s.id, { referral_status: ($event.target as HTMLSelectElement).value })"
+            >
+              <option v-for="v in referralStatusOptions" :key="`mobile-ref-${s.id}-${v}`" :value="v">{{ v }}</option>
+            </select>
+            <label class="block text-xs text-gray-500">進捗</label>
+            <select
+              class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs"
+              :value="s.progress_stage || '初回面談'"
+              @change="updateStudentMeta(s.id, { progress_stage: ($event.target as HTMLSelectElement).value })"
+            >
+              <option v-for="v in progressStageOptions" :key="`mobile-prog-${s.id}-${v}`" :value="v">{{ v }}</option>
+            </select>
+            <div v-if="user.role === 'admin'">
+              <label class="block text-xs text-gray-500 mb-1">担当</label>
+              <select
+                :value="s.staff_id || ''"
+                @change="updateStaff(s.id, ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
+                class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs"
+              >
+                <option value="">未割当</option>
+                <option v-for="u in staffUsers" :key="`mobile-staff-${s.id}-${u.id}`" :value="u.id">{{ u.name }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <button
+              class="text-blue-600 hover:text-blue-800 text-sm font-semibold inline-flex items-center gap-1"
+              @click="router.push(`/students/${s.id}`)"
+            >
+              詳細
+              <ChevronRight class="w-4 h-4" />
+            </button>
+            <button
+              v-if="user.role === 'admin'"
+              class="text-gray-400 hover:text-red-600 inline-flex items-center"
+              @click="deleteStudent(s.id)"
+              title="削除"
+            >
+              <Trash2 class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <div v-if="filteredStudents.length === 0" class="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-10 text-center text-sm text-gray-400">
+          該当する学生が見つかりませんでした。
+        </div>
+      </div>
+
+      <div class="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+        <table class="w-full min-w-[1200px]">
           <thead class="bg-gray-50 border-b border-gray-200 text-xs">
             <tr>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">流入経路</th>
@@ -458,6 +639,8 @@ onMounted(() => {
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">大学</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">文理</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">学部</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">紹介打診</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">進捗</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">卒業年度</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">担当</th>
               <th class="px-6 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">操作</th>
@@ -470,6 +653,24 @@ onMounted(() => {
               <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.university }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.academic_track || '-' }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.faculty || '-' }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                <select
+                  class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs"
+                  :value="s.referral_status || '不明'"
+                  @change="updateStudentMeta(s.id, { referral_status: ($event.target as HTMLSelectElement).value })"
+                >
+                  <option v-for="v in referralStatusOptions" :key="v" :value="v">{{ v }}</option>
+                </select>
+              </td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                <select
+                  class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs"
+                  :value="s.progress_stage || '初回面談'"
+                  @change="updateStudentMeta(s.id, { progress_stage: ($event.target as HTMLSelectElement).value })"
+                >
+                  <option v-for="v in progressStageOptions" :key="v" :value="v">{{ v }}</option>
+                </select>
+              </td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.graduation_year || '-' }}</td>
               <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
                 <div v-if="user.role === 'admin'" class="max-w-[180px]">
@@ -503,7 +704,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="filteredStudents.length === 0">
-              <td colSpan="8" class="px-6 py-10 text-center text-sm text-gray-400">
+              <td colSpan="10" class="px-6 py-10 text-center text-sm text-gray-400">
                 該当する学生が見つかりませんでした。
               </td>
             </tr>
@@ -540,6 +741,18 @@ onMounted(() => {
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">学部</label>
             <input v-model="newStudent.faculty" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">紹介打診</label>
+            <select v-model="newStudent.referral_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+              <option v-for="v in referralStatusOptions" :key="v" :value="v">{{ v }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">進捗</label>
+            <select v-model="newStudent.progress_stage" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+              <option v-for="v in progressStageOptions" :key="v" :value="v">{{ v }}</option>
+            </select>
           </div>
             <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">面談理由</label>
