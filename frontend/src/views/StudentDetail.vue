@@ -23,15 +23,52 @@ const studentId = route.params.id;
 const student = ref<any>({});
 const studentEvents = ref<any[]>([]);
 const interviewLogs = ref<any[]>([]);
+const tasks = ref<any[]>([]);
 const expandedLogId = ref<number | null>(null);
 const availableEvents = ref<any[]>([]);
+const newTaskDate = ref('');
+const newTaskContent = ref('');
 
 const newLog = ref('');
 const newLogType = ref<'面談' | 'エントリー' | 'その他'>('面談');
 const newLogEventId = ref('');
 const selectedEventId = ref('');
 const editingStatus = ref(false);
-const statusDraft = ref('');
+const referralStatusDraft = ref('不明');
+const editingBasic = ref(false);
+const basicDraft = ref({
+  name: '',
+  university: '',
+  academic_track: '',
+  faculty: '',
+  desired_industry: '',
+  desired_role: '',
+  graduation_year: '',
+  email: '',
+  phone: '',
+  source_company: '',
+  interview_reason: '',
+  next_meeting_date: '',
+  next_action: ''
+});
+
+const resetBasicDraft = () => {
+  basicDraft.value = {
+    name: student.value?.name || '',
+    university: student.value?.university || '',
+    academic_track: student.value?.academic_track || '',
+    faculty: student.value?.faculty || '',
+    desired_industry: student.value?.desired_industry || '',
+    desired_role: student.value?.desired_role || '',
+    graduation_year: student.value?.graduation_year ? String(student.value.graduation_year) : '',
+    email: student.value?.email || '',
+    phone: student.value?.phone || '',
+    source_company: student.value?.source_company || '',
+    interview_reason: student.value?.interview_reason || '',
+    next_meeting_date: student.value?.next_meeting_date || '',
+    next_action: student.value?.next_action || ''
+  };
+};
 
 const fetchDetail = async () => {
   const token = localStorage.getItem('token');
@@ -39,7 +76,9 @@ const fetchDetail = async () => {
   student.value = res.data.student;
   studentEvents.value = res.data.events;
   interviewLogs.value = res.data.logs;
-  statusDraft.value = student.value?.status || 'active';
+  tasks.value = res.data.tasks || [];
+  referralStatusDraft.value = student.value?.referral_status || '不明';
+  resetBasicDraft();
 };
 
 const fetchAllEvents = async () => {
@@ -77,6 +116,25 @@ const toggleLog = (logId: number) => {
   expandedLogId.value = expandedLogId.value === logId ? null : logId;
 };
 
+const addTask = async () => {
+  if (!newTaskContent.value.trim()) return;
+  const token = localStorage.getItem('token');
+  await api.post(`/api/students/${studentId}/tasks`, {
+    due_date: newTaskDate.value || null,
+    content: newTaskContent.value
+  }, { headers: { Authorization: token } });
+  newTaskDate.value = '';
+  newTaskContent.value = '';
+  fetchDetail();
+};
+
+const deleteTask = async (taskId: number) => {
+  if (!confirm('このタスクを削除しますか？')) return;
+  const token = localStorage.getItem('token');
+  await api.delete(`/api/students/tasks/${taskId}`, { headers: { Authorization: token } });
+  fetchDetail();
+};
+
 const linkEvent = async () => {
   if (!selectedEventId.value) return;
   const token = localStorage.getItem('token');
@@ -89,27 +147,45 @@ const linkEvent = async () => {
 
 const updateStatus = async () => {
   const token = localStorage.getItem('token');
-  await api.put(`/api/students/${studentId}/status`, {
-    status: statusDraft.value
+  await api.put(`/api/students/${studentId}/meta`, {
+    referral_status: referralStatusDraft.value
   }, { headers: { Authorization: token } });
   editingStatus.value = false;
   fetchDetail();
 };
 
+const saveBasic = async () => {
+  const token = localStorage.getItem('token');
+  await api.put(`/api/students/${studentId}`, {
+    ...basicDraft.value,
+    graduation_year: basicDraft.value.graduation_year ? Number(basicDraft.value.graduation_year) : null,
+    next_meeting_date: basicDraft.value.next_meeting_date || null,
+    next_action: basicDraft.value.next_action || null
+  }, { headers: { Authorization: token } });
+  editingBasic.value = false;
+  fetchDetail();
+};
+
+const startEditBasic = () => {
+  resetBasicDraft();
+  editingBasic.value = true;
+};
+
+const cancelEditBasic = () => {
+  resetBasicDraft();
+  editingBasic.value = false;
+};
+
 const statusClass = (status?: string) => {
   switch (status) {
-    case '内定':
+    case 'キーマン':
       return 'bg-green-100 text-green-700';
-    case '選考中':
+    case '出そう':
       return 'bg-blue-100 text-blue-700';
-    case '辞退':
-      return 'bg-gray-100 text-gray-600';
-    case '不合格':
-      return 'bg-red-100 text-red-700';
-    case '未着手':
+    case 'ほぼ無理ワンチャン':
       return 'bg-amber-100 text-amber-700';
-    case '面談':
-      return 'bg-indigo-100 text-indigo-700';
+    case '無理':
+      return 'bg-red-100 text-red-700';
     default:
       return 'bg-slate-100 text-slate-700';
   }
@@ -148,79 +224,122 @@ onMounted(() => {
                 <Edit class="w-4 h-4" />
               </button>
             </div>
+            <div class="mb-4">
+              <button
+                class="text-xs px-2 py-1 border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50"
+                @click="startEditBasic"
+              >
+                基本情報を編集
+              </button>
+            </div>
 
             <div class="flex items-center gap-2 mb-4">
-              <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="statusClass(student.status)">
-                {{ student.status || '未設定' }}
+              <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="statusClass(student.referral_status)">
+                {{ student.referral_status || '不明' }}
               </span>
               <div v-if="editingStatus" class="flex items-center gap-2">
-                <select v-model="statusDraft" class="px-2 py-1 border border-gray-300 rounded-md text-xs">
-                  <option value="active">active</option>
-                  <option value="面談">面談</option>
-                  <option value="選考中">選考中</option>
-                  <option value="内定">内定</option>
-                  <option value="辞退">辞退</option>
-                  <option value="不合格">不合格</option>
-                  <option value="未着手">未着手</option>
+                <select v-model="referralStatusDraft" class="px-2 py-1 border border-gray-300 rounded-md text-xs">
+                  <option value="キーマン">キーマン</option>
+                  <option value="出そう">出そう</option>
+                  <option value="ほぼ無理ワンチャン">ほぼ無理ワンチャン</option>
+                  <option value="無理">無理</option>
+                  <option value="不明">不明</option>
                 </select>
                 <button class="text-xs px-2 py-1 bg-blue-600 text-white rounded-md" @click="updateStatus">保存</button>
               </div>
             </div>
 
-            <div class="space-y-4">
-              <div class="flex items-center gap-3 text-gray-600">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
                   <p class="text-xs text-gray-500">大学</p>
                   <p class="text-sm font-medium">{{ student.university }}</p>
                 </div>
               </div>
-              <div class="flex items-center gap-3 text-gray-600">
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
                   <p class="text-xs text-gray-500">文理</p>
                   <p class="text-sm font-medium">{{ student.academic_track || '-' }}</p>
                 </div>
               </div>
-              <div class="flex items-center gap-3 text-gray-600">
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
                   <p class="text-xs text-gray-500">学部</p>
                   <p class="text-sm font-medium">{{ student.faculty || '-' }}</p>
                 </div>
               </div>
-              <div class="flex items-center gap-3 text-gray-600">
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
                   <p class="text-xs text-gray-500">志望業界</p>
                   <p class="text-sm font-medium">{{ student.desired_industry || '-' }}</p>
                 </div>
               </div>
-              <div class="flex items-center gap-3 text-gray-600">
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
                   <p class="text-xs text-gray-500">志望職種</p>
                   <p class="text-sm font-medium">{{ student.desired_role || '-' }}</p>
                 </div>
               </div>
-              <div class="flex items-center gap-3 text-gray-600">
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Mail class="w-5 h-5" />
                 <div>
                   <p class="text-xs text-gray-500">メールアドレス</p>
                   <p class="text-sm font-medium">{{ student.email }}</p>
                 </div>
               </div>
-              <div class="flex items-center gap-3 text-gray-600">
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Phone class="w-5 h-5" />
                 <div>
                   <p class="text-xs text-gray-500">電話番号</p>
                   <p class="text-sm font-medium">{{ student.phone }}</p>
                 </div>
               </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <Calendar class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">次回面談日</p>
+                  <p class="text-sm font-medium">{{ student.next_meeting_date || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0 sm:col-span-2">
+                <MessageSquare class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">ネクストアクション</p>
+                  <p class="text-sm font-medium">{{ student.next_action || '-' }}</p>
+                </div>
+              </div>
             </div>
 
             <div v-if="tags.length" class="mt-4 flex flex-wrap gap-2">
               <span v-for="tag in tags" :key="tag" class="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">{{ tag }}</span>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4">タスク</h2>
+            <div class="space-y-2 mb-4">
+              <div v-for="t in tasks" :key="t.id" class="flex items-start justify-between gap-3 bg-gray-50 rounded-lg p-3">
+                <div>
+                  <p class="text-xs text-gray-500">{{ t.due_date || '期限未設定' }}</p>
+                  <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ t.content }}</p>
+                </div>
+                <button class="text-gray-400 hover:text-red-600" @click="deleteTask(t.id)">
+                  <Trash2 class="w-4 h-4" />
+                </button>
+              </div>
+              <p v-if="tasks.length === 0" class="text-sm text-gray-400">タスクはまだありません</p>
+            </div>
+            <div class="space-y-2">
+              <input v-model="newTaskDate" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              <textarea v-model="newTaskContent" placeholder="やることを入力..." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm h-24"></textarea>
+              <button class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700" @click="addTask">
+                タスクを追加
+              </button>
             </div>
           </div>
 
@@ -258,7 +377,7 @@ onMounted(() => {
         </div>
 
         <div class="lg:col-span-2">
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-[560px] lg:h-[600px] overflow-hidden">
             <div class="p-6 border-b border-gray-200">
               <h2 class="text-lg font-bold text-gray-900 flex items-center gap-2">
                 <MessageSquare class="w-5 h-5 text-blue-600" />
@@ -266,7 +385,7 @@ onMounted(() => {
               </h2>
             </div>
 
-            <div class="flex-1 p-6 space-y-4 overflow-y-auto max-h-[500px]">
+            <div class="flex-1 min-h-0 p-6 space-y-4 overflow-y-auto">
               <div v-for="log in interviewLogs" :key="log.id" class="bg-gray-50 rounded-lg p-4">
                 <div class="flex flex-col gap-2">
                   <div class="flex items-start justify-between gap-3">
@@ -328,7 +447,7 @@ onMounted(() => {
               <textarea
                 v-model="newLog"
                 :placeholder="newLogType === '面談' ? '面談内容を入力...' : newLogType === 'エントリー' ? 'エントリー内容を入力...' : 'メモを入力...'"
-                class="w-full p-4 border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 h-32 mb-3 bg-white"
+                class="w-full p-4 border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 h-24 mb-3 bg-white"
               ></textarea>
               <div class="flex justify-end">
                 <button @click="addLog" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2">
@@ -341,5 +460,44 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <teleport to="body">
+      <div v-if="editingBasic" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[90]">
+        <div class="bg-white rounded-xl shadow-xl w-[90vw] max-w-2xl max-h-[85vh] overflow-y-auto p-6">
+          <h3 class="text-lg font-bold text-gray-900 mb-4">基本情報を編集</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input v-model="basicDraft.name" type="text" placeholder="氏名" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <input v-model="basicDraft.university" type="text" placeholder="大学" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <select v-model="basicDraft.academic_track" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="">文理（未設定）</option>
+              <option value="文系">文系</option>
+              <option value="理系">理系</option>
+            </select>
+            <input v-model="basicDraft.faculty" type="text" placeholder="学部" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <input v-model="basicDraft.graduation_year" type="number" placeholder="卒業年" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <input v-model="basicDraft.email" type="email" placeholder="メールアドレス" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <input v-model="basicDraft.phone" type="text" placeholder="電話番号" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <input v-model="basicDraft.source_company" type="text" placeholder="流入経路" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <select v-model="basicDraft.interview_reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="">面談理由（未設定）</option>
+              <option value="就活相談">就活相談</option>
+              <option value="企業分析">企業分析</option>
+            </select>
+            <input v-model="basicDraft.desired_industry" type="text" placeholder="志望業界" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <input v-model="basicDraft.desired_role" type="text" placeholder="志望職種" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <input v-model="basicDraft.next_meeting_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <input v-model="basicDraft.next_action" type="text" placeholder="ネクストアクション" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm md:col-span-2" />
+          </div>
+          <div class="mt-6 flex justify-end gap-3">
+            <button class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50" @click="cancelEditBasic">
+              やめる
+            </button>
+            <button class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700" @click="saveBasic">
+              保存
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
   </Layout>
 </template>

@@ -20,6 +20,10 @@ interface Student {
   faculty?: string;
   referral_status?: string;
   progress_stage?: string;
+  next_meeting_date?: string | null;
+  next_action?: string | null;
+  latest_task_content?: string | null;
+  latest_task_due_date?: string | null;
   source_company?: string;
   interview_reason?: string;
   desired_industry?: string;
@@ -48,12 +52,16 @@ const selectedNames = ref<string[]>([]);
 const selectedUniversities = ref<string[]>([]);
 const nameSearch = ref('');
 const universitySearch = ref('');
-const statusFilter = ref('ALL');
 const staffFilter = ref('ALL');
 const sourceCompanyFilter = ref('ALL');
 const academicTrackFilter = ref('ALL');
 const referralStatusFilter = ref('ALL');
 const progressStageFilter = ref('ALL');
+const nextActionFilter = ref('ALL');
+const nextMeetingFilter = ref('ALL');
+const graduationYearFilter = ref('ALL');
+const taskFilter = ref<'ALL' | 'HAS' | 'NO'>('ALL');
+const taskDueFilter = ref<'ALL' | 'HAS' | 'NO'>('ALL');
 
 const showCreate = ref(false);
 const newStudent = ref({
@@ -65,9 +73,11 @@ const newStudent = ref({
   interview_reason: '',
   referral_status: '不明',
   progress_stage: '初回面談',
+  next_meeting_date: '',
+  next_action: '',
   graduation_year: '',
   email: '',
-  status: '面談',
+  status: '不明',
   staff_id: ''
 });
 
@@ -110,7 +120,7 @@ const updateStaff = async (studentId: number, staffId: number | null) => {
 const referralStatusOptions = ['キーマン', '出そう', 'ほぼ無理ワンチャン', '無理', '不明'];
 const progressStageOptions = ['初回面談', '2回目面談', '顧客化', 'トビ'];
 
-const updateStudentMeta = async (studentId: number, payload: { referral_status?: string; progress_stage?: string; source_company?: string }) => {
+const updateStudentMeta = async (studentId: number, payload: { referral_status?: string; progress_stage?: string; source_company?: string; next_meeting_date?: string | null; next_action?: string | null }) => {
   try {
     const token = localStorage.getItem('token');
     await api.put(`/api/students/${studentId}/meta`, payload, { headers: { Authorization: token } });
@@ -143,6 +153,8 @@ const createStudent = async () => {
       faculty: newStudent.value.faculty,
       referral_status: newStudent.value.referral_status,
       progress_stage: newStudent.value.progress_stage,
+      next_meeting_date: newStudent.value.next_meeting_date || null,
+      next_action: newStudent.value.next_action || null,
       interview_reason: newStudent.value.interview_reason || null,
       graduation_year: newStudent.value.graduation_year ? Number(newStudent.value.graduation_year) : null,
       email: newStudent.value.email,
@@ -162,9 +174,11 @@ const createStudent = async () => {
       interview_reason: '',
       referral_status: '不明',
       progress_stage: '初回面談',
+      next_meeting_date: '',
+      next_action: '',
       graduation_year: '',
       email: '',
-      status: '面談',
+      status: '不明',
       staff_id: ''
     };
     fetchStudents();
@@ -198,9 +212,17 @@ const filteredUniversityOptions = computed(() => {
   return list.filter(u => u.toLowerCase().includes(term));
 });
 
-const statusOptions = computed(() => {
+const graduationYearOptions = computed(() => {
   const set = new Set<string>();
-  students.value.forEach(s => s.status && set.add(s.status));
+  students.value.forEach(s => {
+    if (s.graduation_year) set.add(String(s.graduation_year));
+  });
+  return ['ALL', ...Array.from(set).sort()];
+});
+
+const nextActionOptions = computed(() => {
+  const set = new Set<string>();
+  students.value.forEach(s => s.next_action && set.add(s.next_action));
   return ['ALL', ...Array.from(set)];
 });
 
@@ -212,7 +234,6 @@ const filteredStudents = computed(() => {
     const matchesUniversity =
       selectedUniversities.value.length === 0 ||
       selectedUniversities.value.includes(s.university || '');
-    const matchesStatus = statusFilter.value === 'ALL' || s.status === statusFilter.value;
     const matchesStaff =
       staffFilter.value === 'ALL' ||
       String(s.staff_id || '') === staffFilter.value;
@@ -228,7 +249,36 @@ const filteredStudents = computed(() => {
     const matchesProgress =
       progressStageFilter.value === 'ALL' ||
       (s.progress_stage || '初回面談') === progressStageFilter.value;
-    return matchesName && matchesUniversity && matchesStatus && matchesStaff && matchesSourceCompany && matchesAcademicTrack && matchesReferral && matchesProgress;
+    const matchesNextAction =
+      nextActionFilter.value === 'ALL' ||
+      (s.next_action || '') === nextActionFilter.value;
+    const hasNextMeeting = !!s.next_meeting_date;
+    const matchesNextMeeting =
+      nextMeetingFilter.value === 'ALL' ||
+      (nextMeetingFilter.value === 'SET' ? hasNextMeeting : !hasNextMeeting);
+    const matchesGraduationYear =
+      graduationYearFilter.value === 'ALL' ||
+      String(s.graduation_year || '') === graduationYearFilter.value;
+    const hasTask = !!(s.latest_task_content && s.latest_task_content.trim());
+    const matchesTask =
+      taskFilter.value === 'ALL' ||
+      (taskFilter.value === 'HAS' ? hasTask : !hasTask);
+    const hasTaskDue = !!s.latest_task_due_date;
+    const matchesTaskDue =
+      taskDueFilter.value === 'ALL' ||
+      (taskDueFilter.value === 'HAS' ? hasTaskDue : !hasTaskDue);
+    return matchesName
+      && matchesUniversity
+      && matchesStaff
+      && matchesSourceCompany
+      && matchesAcademicTrack
+      && matchesGraduationYear
+      && matchesReferral
+      && matchesProgress
+      && matchesNextAction
+      && matchesNextMeeting
+      && matchesTask
+      && matchesTaskDue;
   });
 });
 
@@ -243,12 +293,16 @@ const clearFilters = () => {
   selectedUniversities.value = [];
   nameSearch.value = '';
   universitySearch.value = '';
-  statusFilter.value = 'ALL';
   staffFilter.value = 'ALL';
   sourceCompanyFilter.value = 'ALL';
   academicTrackFilter.value = 'ALL';
   referralStatusFilter.value = 'ALL';
   progressStageFilter.value = 'ALL';
+  nextActionFilter.value = 'ALL';
+  nextMeetingFilter.value = 'ALL';
+  graduationYearFilter.value = 'ALL';
+  taskFilter.value = 'ALL';
+  taskDueFilter.value = 'ALL';
 };
 
 const statusClass = (status?: string) => {
@@ -500,14 +554,6 @@ onMounted(() => {
                 </div>
               </details>
               <select
-                v-model="statusFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option v-for="s in statusOptions" :key="s" :value="s">
-                  {{ s === 'ALL' ? 'ステータス: すべて' : s }}
-                </option>
-              </select>
-              <select
                 v-if="user.role === 'admin'"
                 v-model="staffFilter"
                 class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
@@ -535,8 +581,16 @@ onMounted(() => {
                 v-model="referralStatusFilter"
                 class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="ALL">紹介打診: すべて</option>
+                <option value="ALL">ステータス: すべて</option>
                 <option v-for="s in referralStatusOptions" :key="s" :value="s">{{ s }}</option>
+              </select>
+              <select
+                v-model="graduationYearFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option v-for="g in graduationYearOptions" :key="g" :value="g">
+                  {{ g === 'ALL' ? '卒業年度: すべて' : `${g}年` }}
+                </option>
               </select>
               <select
                 v-model="progressStageFilter"
@@ -545,18 +599,52 @@ onMounted(() => {
                 <option value="ALL">進捗: すべて</option>
                 <option v-for="s in progressStageOptions" :key="s" :value="s">{{ s }}</option>
               </select>
-              <button
-                @click="clearFilters"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+              <select
+                v-model="nextMeetingFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
               >
-                フィルタクリア
-              </button>
+                <option value="ALL">次回面談: すべて</option>
+                <option value="SET">設定あり</option>
+                <option value="UNSET">未設定</option>
+              </select>
+              <select
+                v-model="nextActionFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option v-for="a in nextActionOptions" :key="a" :value="a">
+                  {{ a === 'ALL' ? 'ネクストアクション: すべて' : a }}
+                </option>
+              </select>
+              <select
+                v-model="taskFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">タスク: すべて</option>
+                <option value="HAS">タスクあり</option>
+                <option value="NO">タスクなし</option>
+              </select>
+              <select
+                v-model="taskDueFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">履行日: すべて</option>
+                <option value="HAS">履行日あり</option>
+                <option value="NO">履行日なし</option>
+              </select>
             </div>
         </div>
         <label v-if="user.role === 'admin'" class="flex items-center gap-2 text-sm text-gray-600">
           <input type="checkbox" v-model="showAll" @change="fetchStudents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
           全学生を表示
         </label>
+        <div class="flex justify-end">
+          <button
+            @click="clearFilters"
+            class="px-3 py-2 rounded-lg text-sm text-red-600 border border-red-200 hover:bg-red-50"
+          >
+            フィルタクリア
+          </button>
+        </div>
       </div>
 
       <div class="md:hidden space-y-3">
@@ -564,7 +652,7 @@ onMounted(() => {
           <div class="flex items-start justify-between gap-3 mb-3">
             <div>
               <p class="text-sm font-semibold text-gray-900">{{ s.name }}</p>
-              <p class="text-xs text-gray-500">{{ s.university || '-' }} / {{ s.faculty || '-' }}</p>
+              <p class="text-xs text-gray-500">{{ s.university || '-' }}</p>
             </div>
             <span class="text-xs text-gray-500">{{ s.graduation_year || '-' }}卒</span>
           </div>
@@ -577,9 +665,17 @@ onMounted(() => {
               <p class="text-gray-400">文理</p>
               <p class="text-gray-700">{{ s.academic_track || '-' }}</p>
             </div>
+            <div>
+              <p class="text-gray-400">次回面談日</p>
+              <p class="text-gray-700">{{ s.next_meeting_date || '-' }}</p>
+            </div>
+            <div>
+              <p class="text-gray-400">ネクストアクション</p>
+              <p class="text-gray-700 truncate">{{ s.next_action || '-' }}</p>
+            </div>
           </div>
           <div class="space-y-2 mb-3">
-            <label class="block text-xs text-gray-500">紹介打診</label>
+            <label class="block text-xs text-gray-500">ステータス(打診)</label>
             <select
               class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs"
               :value="s.referral_status || '不明'"
@@ -595,6 +691,21 @@ onMounted(() => {
             >
               <option v-for="v in progressStageOptions" :key="`mobile-prog-${s.id}-${v}`" :value="v">{{ v }}</option>
             </select>
+            <label class="block text-xs text-gray-500">次回面談日</label>
+            <input
+              type="date"
+              class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs"
+              :value="s.next_meeting_date || ''"
+              @change="updateStudentMeta(s.id, { next_meeting_date: ($event.target as HTMLInputElement).value || null })"
+            />
+            <label class="block text-xs text-gray-500">ネクストアクション</label>
+            <input
+              type="text"
+              class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs"
+              :value="s.next_action || ''"
+              @blur="updateStudentMeta(s.id, { next_action: ($event.target as HTMLInputElement).value || null })"
+              placeholder="次にやること"
+            />
             <div v-if="user.role === 'admin'">
               <label class="block text-xs text-gray-500 mb-1">担当</label>
               <select
@@ -631,18 +742,19 @@ onMounted(() => {
       </div>
 
       <div class="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
-        <table class="w-full min-w-[1200px]">
+        <table class="w-full min-w-[1100px]">
           <thead class="bg-gray-50 border-b border-gray-200 text-xs">
             <tr>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">流入経路</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">氏名</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">大学</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">文理</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">学部</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">紹介打診</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">進捗</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">卒業年度</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">担当</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">次回面談日</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">タスク</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">履行日</th>
               <th class="px-6 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">操作</th>
             </tr>
           </thead>
@@ -652,25 +764,6 @@ onMounted(() => {
               <td class="px-4 py-3 text-xs font-medium text-gray-900 whitespace-nowrap">{{ s.name }}</td>
               <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.university }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.academic_track || '-' }}</td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.faculty || '-' }}</td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
-                <select
-                  class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs"
-                  :value="s.referral_status || '不明'"
-                  @change="updateStudentMeta(s.id, { referral_status: ($event.target as HTMLSelectElement).value })"
-                >
-                  <option v-for="v in referralStatusOptions" :key="v" :value="v">{{ v }}</option>
-                </select>
-              </td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
-                <select
-                  class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs"
-                  :value="s.progress_stage || '初回面談'"
-                  @change="updateStudentMeta(s.id, { progress_stage: ($event.target as HTMLSelectElement).value })"
-                >
-                  <option v-for="v in progressStageOptions" :key="v" :value="v">{{ v }}</option>
-                </select>
-              </td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.graduation_year || '-' }}</td>
               <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
                 <div v-if="user.role === 'admin'" class="max-w-[180px]">
@@ -685,6 +778,18 @@ onMounted(() => {
                 </div>
                 <span v-else>{{ s.staff_name || '-' }}</span>
               </td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                <select
+                  class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs"
+                  :value="s.referral_status || '不明'"
+                  @change="updateStudentMeta(s.id, { referral_status: ($event.target as HTMLSelectElement).value })"
+                >
+                  <option v-for="v in referralStatusOptions" :key="v" :value="v">{{ v }}</option>
+                </select>
+              </td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.next_meeting_date || '-' }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap truncate max-w-[200px]">{{ s.latest_task_content || '-' }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.latest_task_due_date || '-' }}</td>
               <td class="px-6 py-3 text-right text-xs whitespace-nowrap">
                 <button
                   class="text-blue-600 hover:text-blue-800 text-sm font-semibold inline-flex items-center gap-1"
@@ -704,7 +809,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="filteredStudents.length === 0">
-              <td colSpan="10" class="px-6 py-10 text-center text-sm text-gray-400">
+              <td colSpan="11" class="px-6 py-10 text-center text-sm text-gray-400">
                 該当する学生が見つかりませんでした。
               </td>
             </tr>
@@ -714,8 +819,8 @@ onMounted(() => {
     </div>
 
     <teleport to="body">
-      <div v-if="showCreate" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+      <div v-if="showCreate" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[80]">
+        <div class="bg-white rounded-xl shadow-xl w-[80vw] max-w-4xl h-[80vh] overflow-y-auto p-6">
           <h2 class="text-xl font-bold mb-4 text-gray-900">新規学生登録</h2>
           <div class="space-y-4">
             <div>
@@ -743,7 +848,7 @@ onMounted(() => {
             <input v-model="newStudent.faculty" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">紹介打診</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">ステータス</label>
             <select v-model="newStudent.referral_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
               <option v-for="v in referralStatusOptions" :key="v" :value="v">{{ v }}</option>
             </select>
@@ -753,6 +858,14 @@ onMounted(() => {
             <select v-model="newStudent.progress_stage" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
               <option v-for="v in progressStageOptions" :key="v" :value="v">{{ v }}</option>
             </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">次回面談日</label>
+            <input v-model="newStudent.next_meeting_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">ネクストアクション</label>
+            <input v-model="newStudent.next_action" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="次にやること">
           </div>
             <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">面談理由</label>
@@ -771,14 +884,13 @@ onMounted(() => {
               <input v-model="newStudent.email" type="email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
             </div>
             <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">ステータス</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">選考ステータス</label>
             <select v-model="newStudent.status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-              <option value="面談">面談</option>
-              <option value="選考中">選考中</option>
-              <option value="内定">内定</option>
-              <option value="辞退">辞退</option>
-              <option value="不合格">不合格</option>
-              <option value="未着手">未着手</option>
+              <option value="キーマン">キーマン</option>
+              <option value="出そう">出そう</option>
+              <option value="ほぼ無理ワンチャン">ほぼ無理ワンチャン</option>
+              <option value="無理">無理</option>
+              <option value="不明">不明</option>
             </select>
           </div>
           <div v-if="user.role === 'admin'">
