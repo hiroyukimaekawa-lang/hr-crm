@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import { api } from '../lib/api';
 import { useRouter } from 'vue-router';
 import Layout from '../components/Layout.vue';
 import {
@@ -43,13 +43,13 @@ const router = useRouter();
 
 const fetchEvents = async () => {
   const token = localStorage.getItem('token');
-  const res = await axios.get('http://localhost:3000/api/events', { headers: { Authorization: token } });
+  const res = await api.get('/api/events', { headers: { Authorization: token } });
   events.value = res.data;
 };
 
 const createEvent = async () => {
   const token = localStorage.getItem('token');
-  await axios.post('http://localhost:3000/api/events', {
+  await api.post('/api/events', {
     ...newEvent.value,
     target_seats: newEvent.value.target_seats ? Number(newEvent.value.target_seats) : null,
     target_sales: newEvent.value.target_sales ? Number(newEvent.value.target_sales) : null,
@@ -63,7 +63,7 @@ const createEvent = async () => {
 const deleteEvent = async (eventId: number) => {
   if (!confirm('このイベントを削除しますか？')) return;
   const token = localStorage.getItem('token');
-  await axios.delete(`http://localhost:3000/api/events/${eventId}`, { headers: { Authorization: token } });
+  await api.delete(`/api/events/${eventId}`, { headers: { Authorization: token } });
   fetchEvents();
 };
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import axios from 'axios';
+import { api } from '../lib/api';
 import Layout from '../components/Layout.vue';
 import {
   ArrowLeft,
@@ -42,14 +42,14 @@ const searchTerm = ref('');
 
 const fetchDetail = async () => {
   const token = localStorage.getItem('token');
-  const res = await axios.get(`http://localhost:3000/api/events/${eventId}`, { headers: { Authorization: token } });
+  const res = await api.get(`/api/events/${eventId}`, { headers: { Authorization: token } });
   event.value = res.data.event;
   participants.value = res.data.participants;
 };
 
 const updateStatus = async (studentId: number, status: string) => {
   const token = localStorage.getItem('token');
-  await axios.put(`http://localhost:3000/api/events/${eventId}/participants/${studentId}`,
+  await api.put(`/api/events/${eventId}/participants/${studentId}`,
     { status },
     { headers: { Authorization: token } }
   );

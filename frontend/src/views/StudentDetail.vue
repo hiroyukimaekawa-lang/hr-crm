@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import axios from 'axios';
+import { api } from '../lib/api';
 import Layout from '../components/Layout.vue';
 import {
   ArrowLeft,
@@ -35,7 +35,7 @@ const statusDraft = ref('');
 
 const fetchDetail = async () => {
   const token = localStorage.getItem('token');
-  const res = await axios.get(`http://localhost:3000/api/students/${studentId}`, { headers: { Authorization: token } });
+  const res = await api.get(`/api/students/${studentId}`, { headers: { Authorization: token } });
   student.value = res.data.student;
   studentEvents.value = res.data.events;
   interviewLogs.value = res.data.logs;
@@ -44,7 +44,7 @@ const fetchDetail = async () => {
 
 const fetchAllEvents = async () => {
   const token = localStorage.getItem('token');
-  const res = await axios.get('http://localhost:3000/api/events', { headers: { Authorization: token } });
+  const res = await api.get('/api/events', { headers: { Authorization: token } });
   availableEvents.value = res.data;
 };
 
@@ -52,7 +52,7 @@ const addLog = async () => {
   if (!newLog.value) return;
   const token = localStorage.getItem('token');
   const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)"}');
-  await axios.post('http://localhost:3000/api/interview-logs', {
+  await api.post('/api/interview-logs', {
     student_id: studentId,
     staff_id: user.id,
     log_type: newLogType.value,
@@ -69,7 +69,7 @@ const addLog = async () => {
 const deleteLog = async (logId: number) => {
   if (!confirm('このログを削除しますか？')) return;
   const token = localStorage.getItem('token');
-  await axios.delete(`http://localhost:3000/api/students/interview-logs/${logId}`, { headers: { Authorization: token } });
+  await api.delete(`/api/students/interview-logs/${logId}`, { headers: { Authorization: token } });
   fetchDetail();
 };
 
@@ -80,7 +80,7 @@ const toggleLog = (logId: number) => {
 const linkEvent = async () => {
   if (!selectedEventId.value) return;
   const token = localStorage.getItem('token');
-  await axios.post(`http://localhost:3000/api/students/${studentId}/events`, {
+  await api.post(`/api/students/${studentId}/events`, {
     event_id: selectedEventId.value
   }, { headers: { Authorization: token } });
   selectedEventId.value = '';
@@ -89,7 +89,7 @@ const linkEvent = async () => {
 
 const updateStatus = async () => {
   const token = localStorage.getItem('token');
-  await axios.put(`http://localhost:3000/api/students/${studentId}/status`, {
+  await api.put(`/api/students/${studentId}/status`, {
     status: statusDraft.value
   }, { headers: { Authorization: token } });
   editingStatus.value = false;

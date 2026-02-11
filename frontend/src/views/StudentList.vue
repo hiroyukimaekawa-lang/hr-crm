@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import axios from 'axios';
+import { api } from '../lib/api';
 import { useRouter } from 'vue-router';
 import Layout from '../components/Layout.vue';
 import {
@@ -67,11 +67,11 @@ const newStudent = ref({
 const fetchStudents = async () => {
   try {
     const token = localStorage.getItem('token');
-    let url = 'http://localhost:3000/api/students';
+    let url = '/api/students';
     if (!showAll.value && user.id) {
       url += `?staffId=${user.id}`;
     }
-    const res = await axios.get(url, { headers: { Authorization: token } });
+    const res = await api.get(url, { headers: { Authorization: token } });
     students.value = res.data;
   } catch (err) {
     console.error(err);
@@ -81,7 +81,7 @@ const fetchStudents = async () => {
 const fetchStaffUsers = async () => {
   try {
     const token = localStorage.getItem('token');
-    const res = await axios.get('http://localhost:3000/api/auth/users', { headers: { Authorization: token } });
+    const res = await api.get('/api/auth/users', { headers: { Authorization: token } });
     staffUsers.value = res.data;
   } catch (err) {
     console.error(err);
@@ -91,7 +91,7 @@ const fetchStaffUsers = async () => {
 const updateStaff = async (studentId: number, staffId: number | null) => {
   try {
     const token = localStorage.getItem('token');
-    await axios.put(`http://localhost:3000/api/students/${studentId}/staff`, {
+    await api.put(`/api/students/${studentId}/staff`, {
       staff_id: staffId
     }, { headers: { Authorization: token } });
     fetchStudents();
@@ -104,7 +104,7 @@ const deleteStudent = async (studentId: number) => {
   if (!confirm('この学生を削除しますか？')) return;
   try {
     const token = localStorage.getItem('token');
-    await axios.delete(`http://localhost:3000/api/students/${studentId}`, { headers: { Authorization: token } });
+    await api.delete(`/api/students/${studentId}`, { headers: { Authorization: token } });
     fetchStudents();
   } catch (err) {
     console.error(err);
@@ -115,7 +115,7 @@ const createStudent = async () => {
   try {
     const token = localStorage.getItem('token');
 
-    await axios.post('http://localhost:3000/api/students', {
+    await api.post('/api/students', {
       source_company: newStudent.value.source_company,
       name: newStudent.value.name,
       university: newStudent.value.university,
@@ -321,7 +321,7 @@ const importCsv = async (file: File) => {
   }));
 
   const token = localStorage.getItem('token');
-  await axios.post('http://localhost:3000/api/students/import', {
+  await api.post('/api/students/import', {
     students: payload
   }, { headers: { Authorization: token } });
 

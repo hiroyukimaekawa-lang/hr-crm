@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import axios from 'axios';
+import { api } from '../lib/api';
 import { useRouter } from 'vue-router';
 import { LogIn } from 'lucide-vue-next';
 
@@ -11,8 +11,7 @@ const error = ref('');
 
 const login = async () => {
   try {
-    const apiUrl = 'http://localhost:3000/api/auth/login';
-    const res = await axios.post(apiUrl, {
+    const res = await api.post('/api/auth/login', {
       username: username.value,
       password: password.value
     });

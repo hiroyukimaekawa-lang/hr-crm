@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import axios from 'axios';
+import { api } from '../lib/api';
 import { LogIn } from 'lucide-vue-next';
 
 const route = useRoute();
@@ -17,7 +17,7 @@ const register = async () => {
   try {
     error.value = '';
     success.value = '';
-    const res = await axios.post('http://localhost:3000/api/auth/register-invite', {
+    const res = await api.post('/api/auth/register-invite', {
       token: token.value,
       username: username.value,
       name: name.value,

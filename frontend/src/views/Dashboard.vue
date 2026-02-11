@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import axios from 'axios';
+import { api } from '../lib/api';
 import Layout from '../components/Layout.vue';
 import { Users, Calendar, UserPlus, FileCheck, Link as LinkIcon } from 'lucide-vue-next';
 
@@ -29,8 +29,8 @@ const fetchData = async () => {
   try {
     const token = localStorage.getItem('token');
     const [studentRes, eventRes] = await Promise.all([
-      axios.get('http://localhost:3000/api/students', { headers: { Authorization: token } }),
-      axios.get('http://localhost:3000/api/events', { headers: { Authorization: token } })
+      api.get('/api/students', { headers: { Authorization: token } }),
+      api.get('/api/events', { headers: { Authorization: token } })
     ]);
     students.value = studentRes.data;
     events.value = eventRes.data;
@@ -43,7 +43,7 @@ const createInvite = async () => {
   try {
     inviteMessage.value = '';
     const token = localStorage.getItem('token');
-    const res = await axios.post('http://localhost:3000/api/auth/invite', {}, { headers: { Authorization: token } });
+    const res = await api.post('/api/auth/invite', {}, { headers: { Authorization: token } });
     inviteUrl.value = res.data.invite_url;
   } catch (err) {
     inviteMessage.value = '招待URLの発行に失敗しました。';
