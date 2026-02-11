@@ -16,7 +16,7 @@ import {
 
 const route = useRoute();
 const router = useRouter();
-const sidebarCollapsed = ref(false);
+const sidebarCollapsed = ref(true);
 const mobileSidebarOpen = ref(false);
 
 const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
