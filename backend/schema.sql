@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS events (
     location VARCHAR(255),
     capacity INTEGER,
     target_seats INTEGER,
+    unit_price INTEGER,
     target_sales INTEGER,
     current_sales INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -75,10 +76,10 @@ INSERT INTO users (username, password, name, role)
 VALUES ('admin', '$2b$10$K9oIoHcgYoz98Gg.UVQ2AO9Vnk57KPVQ2ekdDPC4392sslwXrUSVy', 'Admin User', 'admin') ON CONFLICT (username) DO NOTHING;
 
 -- Sample Data (Events)
-INSERT INTO events (id, title, description, event_date, location, capacity, target_seats, target_sales, current_sales)
+INSERT INTO events (id, title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales)
 VALUES
-    (1, '春季キャリアフォーラム', '各業界の企業が参加する大規模イベント', '2026-03-20 13:00:00', '東京ビッグサイト', 100, 80, 2000000, 1200000),
-    (2, 'エンジニア向け座談会', '現場エンジニアとの座談会', '2026-04-15 18:00:00', 'オンライン', 50, 40, 800000, 300000),
-    (3, '内定者懇親会', '内定者同士の交流イベント', '2026-06-01 17:00:00', '本社オフィス', 30, 25, 400000, 150000),
-    (4, '業界研究セミナー', '複数業界の理解を深めるセミナー', '2026-02-20 19:00:00', 'オンライン', 200, 150, 500000, 220000)
+    (1, '春季キャリアフォーラム', '各業界の企業が参加する大規模イベント', '2026-03-20 13:00:00', '東京ビッグサイト', 100, 80, 25000, 2000000, 1200000),
+    (2, 'エンジニア向け座談会', '現場エンジニアとの座談会', '2026-04-15 18:00:00', 'オンライン', 50, 40, 20000, 800000, 300000),
+    (3, '内定者懇親会', '内定者同士の交流イベント', '2026-06-01 17:00:00', '本社オフィス', 30, 25, 16000, 400000, 150000),
+    (4, '業界研究セミナー', '複数業界の理解を深めるセミナー', '2026-02-20 19:00:00', 'オンライン', 200, 150, 3000, 500000, 220000)
 ON CONFLICT (id) DO NOTHING;

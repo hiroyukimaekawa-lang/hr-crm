@@ -20,6 +20,7 @@ interface EventItem {
   location?: string;
   capacity?: number;
   target_seats?: number;
+  unit_price?: number;
   target_sales?: number;
   current_sales?: number;
   registered_count?: number;
@@ -35,6 +36,7 @@ const newEvent = ref({
   event_date: '',
   location: '',
   target_seats: '',
+  unit_price: '',
   target_sales: '',
   current_sales: ''
 });
@@ -52,10 +54,11 @@ const createEvent = async () => {
   await api.post('/api/events', {
     ...newEvent.value,
     target_seats: newEvent.value.target_seats ? Number(newEvent.value.target_seats) : null,
+    unit_price: newEvent.value.unit_price ? Number(newEvent.value.unit_price) : null,
     target_sales: newEvent.value.target_sales ? Number(newEvent.value.target_sales) : null,
     current_sales: newEvent.value.current_sales ? Number(newEvent.value.current_sales) : 0
   }, { headers: { Authorization: token } });
-  newEvent.value = { title: '', description: '', event_date: '', location: '', target_seats: '', target_sales: '', current_sales: '' };
+  newEvent.value = { title: '', description: '', event_date: '', location: '', target_seats: '', unit_price: '', target_sales: '', current_sales: '' };
   showCreate.value = false;
   fetchEvents();
 };
@@ -131,6 +134,9 @@ onMounted(fetchEvents);
                 <UsersIcon class="w-4 h-4" />
                 <span>目標着座: {{ e.target_seats || '-' }}名</span>
               </div>
+              <div class="flex items-center gap-2 text-sm text-gray-600">
+                <span>単価: {{ (e.unit_price || 0).toLocaleString() }}円</span>
+              </div>
             </div>
           </div>
           <div class="px-6 py-4 bg-gray-50 border-t border-gray-200">
@@ -195,6 +201,10 @@ onMounted(fetchEvents);
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">目標着座人数</label>
             <input v-model="newEvent.target_seats" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">単価（円）</label>
+            <input v-model="newEvent.unit_price" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">目標売上（円）</label>

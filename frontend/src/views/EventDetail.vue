@@ -27,9 +27,14 @@ interface Participant {
 interface EventDetail {
   id: number;
   title: string;
+  description?: string;
   event_date?: string;
   location?: string;
   capacity?: number;
+  target_seats?: number;
+  unit_price?: number;
+  target_sales?: number;
+  current_sales?: number;
 }
 
 const route = useRoute();
@@ -39,12 +44,34 @@ const eventId = route.params.id as string;
 const event = ref<EventDetail | null>(null);
 const participants = ref<Participant[]>([]);
 const searchTerm = ref('');
+const isEditing = ref(false);
+const saveMessage = ref('');
+const form = ref({
+  title: '',
+  description: '',
+  event_date: '',
+  location: '',
+  target_seats: '',
+  unit_price: '',
+  target_sales: '',
+  current_sales: ''
+});
 
 const fetchDetail = async () => {
   const token = localStorage.getItem('token');
   const res = await api.get(`/api/events/${eventId}`, { headers: { Authorization: token } });
   event.value = res.data.event;
   participants.value = res.data.participants;
+  form.value = {
+    title: event.value?.title || '',
+    description: event.value?.description || '',
+    event_date: event.value?.event_date ? new Date(event.value.event_date).toISOString().slice(0, 16) : '',
+    location: event.value?.location || '',
+    target_seats: event.value?.target_seats ? String(event.value.target_seats) : '',
+    unit_price: event.value?.unit_price ? String(event.value.unit_price) : '',
+    target_sales: event.value?.target_sales ? String(event.value.target_sales) : '',
+    current_sales: event.value?.current_sales ? String(event.value.current_sales) : ''
+  };
 };
 
 const updateStatus = async (studentId: number, status: string) => {
@@ -53,6 +80,24 @@ const updateStatus = async (studentId: number, status: string) => {
     { status },
     { headers: { Authorization: token } }
   );
+  fetchDetail();
+};
+
+const updateEvent = async () => {
+  const token = localStorage.getItem('token');
+  saveMessage.value = '';
+  await api.put(`/api/events/${eventId}`, {
+    title: form.value.title,
+    description: form.value.description,
+    event_date: form.value.event_date || null,
+    location: form.value.location || null,
+    target_seats: form.value.target_seats ? Number(form.value.target_seats) : null,
+    unit_price: form.value.unit_price ? Number(form.value.unit_price) : null,
+    target_sales: form.value.target_sales ? Number(form.value.target_sales) : null,
+    current_sales: form.value.current_sales ? Number(form.value.current_sales) : 0
+  }, { headers: { Authorization: token } });
+  isEditing.value = false;
+  saveMessage.value = 'イベント情報を更新しました。';
   fetchDetail();
 };
 
@@ -94,8 +139,16 @@ onMounted(fetchDetail);
 
       <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div class="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h1 class="text-2xl font-bold text-gray-900 mb-4">{{ event.title }}</h1>
-          <div class="space-y-3">
+          <div class="flex items-center justify-between mb-4">
+            <h1 class="text-2xl font-bold text-gray-900">{{ event.title }}</h1>
+            <button
+              class="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50"
+              @click="isEditing = !isEditing"
+            >
+              {{ isEditing ? '編集を閉じる' : 'イベント編集' }}
+            </button>
+          </div>
+          <div class="space-y-3 mb-4">
             <div class="flex items-center gap-2 text-sm text-gray-600">
               <Calendar class="w-4 h-4" />
               <span>{{ event.event_date ? new Date(event.event_date).toLocaleString('ja-JP') : '未定' }}</span>
@@ -106,8 +159,50 @@ onMounted(fetchDetail);
             </div>
             <div class="flex items-center gap-2 text-sm text-gray-600">
               <UsersIcon class="w-4 h-4" />
-              <span>定員: {{ event.capacity || '-' }}名</span>
+              <span>目標人数: {{ event.target_seats || '-' }}名</span>
             </div>
+            <div class="flex items-center gap-2 text-sm text-gray-600">
+              <span>単価: {{ (event.unit_price || 0).toLocaleString() }}円</span>
+            </div>
+          </div>
+          <div v-if="saveMessage" class="text-xs text-green-600 mb-3">{{ saveMessage }}</div>
+
+          <div v-if="isEditing" class="border-t border-gray-100 pt-4 space-y-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">イベント名</label>
+              <input v-model="form.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">開催日時</label>
+              <input v-model="form.event_date" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">場所（オンライン/会場）</label>
+              <input v-model="form.location" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">目標人数</label>
+              <input v-model="form.target_seats" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">単価（円）</label>
+              <input v-model="form.unit_price" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">目標売上（円）</label>
+              <input v-model="form.target_sales" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">実績売上（円）</label>
+              <input v-model="form.current_sales" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">説明</label>
+              <textarea v-model="form.description" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm h-24"></textarea>
+            </div>
+            <button class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700" @click="updateEvent">
+              保存
+            </button>
           </div>
         </div>
 

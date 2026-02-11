@@ -29,10 +29,10 @@ export const getEvents = async (req: Request, res: Response) => {
 };
 
 export const createEvent = async (req: Request, res: Response) => {
-    const { title, description, event_date, location, capacity, target_seats, target_sales, current_sales } = req.body;
+    const { title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
     try {
         const result = await pool.query(
-            'INSERT INTO events (title, description, event_date, location, capacity, target_seats, target_sales, current_sales) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+            'INSERT INTO events (title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
             [
                 title,
                 description,
@@ -40,10 +40,51 @@ export const createEvent = async (req: Request, res: Response) => {
                 location || null,
                 capacity || null,
                 target_seats || null,
+                unit_price || null,
                 target_sales || null,
                 current_sales || 0
             ]
         );
+        res.json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const updateEvent = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    try {
+        const result = await pool.query(
+            `UPDATE events
+             SET title = $1,
+                 description = $2,
+                 event_date = $3,
+                 location = $4,
+                 capacity = $5,
+                 target_seats = $6,
+                 unit_price = $7,
+                 target_sales = $8,
+                 current_sales = $9
+             WHERE id = $10
+             RETURNING *`,
+            [
+                title,
+                description || null,
+                event_date || null,
+                location || null,
+                capacity || null,
+                target_seats || null,
+                unit_price || null,
+                target_sales || null,
+                current_sales || 0,
+                id
+            ]
+        );
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Event not found' });
+            return;
+        }
         res.json(result.rows[0]);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
