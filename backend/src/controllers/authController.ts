@@ -60,7 +60,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
 export const getUsers = async (req: Request, res: Response) => {
     try {
-        const result = await pool.query('SELECT id, name FROM users');
+        // Staff dropdown should avoid duplicate display names and exclude admin.
+        const result = await pool.query(`
+            SELECT DISTINCT ON (name) id, name
+            FROM users
+            WHERE role = 'staff'
+            ORDER BY name, created_at DESC, id DESC
+        `);
         res.json(result.rows);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
