@@ -9,4 +9,8 @@ const auth_1 = require("../middlewares/auth");
 const router = express_1.default.Router();
 router.get('/', auth_1.authenticate, eventController_1.getEvents);
 router.post('/', auth_1.authenticate, eventController_1.createEvent);
+router.get('/:id', auth_1.authenticate, eventController_1.getEventDetail);
+router.put('/:id', auth_1.authenticate, eventController_1.updateEvent);
+router.put('/:id/participants/:studentId', auth_1.authenticate, eventController_1.updateParticipantStatus);
+router.delete('/:id', auth_1.authenticate, eventController_1.deleteEvent);
 exports.default = router;

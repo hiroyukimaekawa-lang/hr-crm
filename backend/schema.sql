@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS students (
     university VARCHAR(255),
     academic_track VARCHAR(20),
     faculty VARCHAR(255),
+    referral_status VARCHAR(50) DEFAULT '不明',
+    progress_stage VARCHAR(50) DEFAULT '初回面談',
+    next_meeting_date DATE,
+    next_action TEXT,
     desired_industry VARCHAR(255),
     desired_role VARCHAR(255),
     graduation_year INTEGER,
@@ -27,6 +31,14 @@ CREATE TABLE IF NOT EXISTS students (
     interview_reason VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+-- Student Tasks
+CREATE TABLE IF NOT EXISTS student_tasks (
+    id SERIAL PRIMARY KEY,
+    student_id INTEGER REFERENCES students(id) ON DELETE CASCADE,
+    due_date DATE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 -- Events
 CREATE TABLE IF NOT EXISTS events (

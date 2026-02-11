@@ -9,7 +9,16 @@ const auth_1 = require("../middlewares/auth");
 const router = express_1.default.Router();
 router.get('/', auth_1.authenticate, studentController_1.getStudents);
 router.post('/', auth_1.authenticate, studentController_1.createStudent);
+router.post('/import', auth_1.authenticate, studentController_1.importStudents);
 router.get('/:id', auth_1.authenticate, studentController_1.getStudentDetail);
 router.post('/:id/events', auth_1.authenticate, studentController_1.linkEvent);
-router.post('/interview-logs', auth_1.authenticate, studentController_1.addInterviewLog); // Note: I'll stick to /api/students/interview-logs or similar if needed
+router.post('/interview-logs', auth_1.authenticate, studentController_1.addInterviewLog);
+router.delete('/interview-logs/:id', auth_1.authenticate, studentController_1.deleteInterviewLog);
+router.put('/:id', auth_1.authenticate, studentController_1.updateStudentBasic);
+router.put('/:id/status', auth_1.authenticate, studentController_1.updateStudentStatus);
+router.put('/:id/staff', auth_1.authenticate, studentController_1.updateStudentStaff);
+router.put('/:id/meta', auth_1.authenticate, studentController_1.updateStudentMeta);
+router.post('/:id/tasks', auth_1.authenticate, studentController_1.addStudentTask);
+router.delete('/tasks/:taskId', auth_1.authenticate, studentController_1.deleteStudentTask);
+router.delete('/:id', auth_1.authenticate, studentController_1.deleteStudent);
 exports.default = router;

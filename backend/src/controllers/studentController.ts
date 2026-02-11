@@ -34,7 +34,22 @@ export const getStudents = async (req: Request, res: Response) => {
     const staffId = req.query.staffId;
     const authUser = (req as any).user as { sub?: string; role?: string } | undefined;
     try {
-        let query = 'SELECT students.*, users.name as staff_name FROM students LEFT JOIN users ON students.staff_id = users.id';
+        let query = `
+            SELECT
+                students.*,
+                users.name as staff_name,
+                st.content as latest_task_content,
+                st.due_date as latest_task_due_date
+            FROM students
+            LEFT JOIN users ON students.staff_id = users.id
+            LEFT JOIN LATERAL (
+                SELECT content, due_date
+                FROM student_tasks
+                WHERE student_id = students.id
+                ORDER BY due_date NULLS LAST, created_at DESC
+                LIMIT 1
+            ) st ON true
+        `;
         const params: any[] = [];
 
         // staff users can only see their own students regardless of query param
@@ -58,6 +73,10 @@ export const createStudent = async (req: Request, res: Response) => {
         university,
         academic_track,
         faculty,
+        referral_status,
+        progress_stage,
+        next_meeting_date,
+        next_action,
         desired_industry,
         desired_role,
         graduation_year,
@@ -70,13 +89,26 @@ export const createStudent = async (req: Request, res: Response) => {
         interview_reason
     } = req.body;
     try {
+        const duplicateRes = await pool.query(
+            'SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') AND COALESCE(faculty, \'\') = COALESCE($3, \'\') LIMIT 1',
+            [name, university || null, faculty || null]
+        );
+        if (duplicateRes.rows.length > 0) {
+            res.status(409).json({ error: 'Student already exists' });
+            return;
+        }
+
         const result = await pool.query(
-            'INSERT INTO students (name, university, academic_track, faculty, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *',
+            'INSERT INTO students (name, university, academic_track, faculty, referral_status, progress_stage, next_meeting_date, next_action, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *',
             [
                 name,
                 university,
                 academic_track || null,
                 faculty || null,
+                referral_status || '不明',
+                progress_stage || '初回面談',
+                next_meeting_date || null,
+                next_action || null,
                 desired_industry || null,
                 desired_role || null,
                 graduation_year || null,
@@ -117,11 +149,16 @@ export const getStudentDetail = async (req: Request, res: Response) => {
             WHERE il.student_id = $1
             ORDER BY il.created_at DESC
         `, [id]);
+        const tasksRes = await pool.query(
+            'SELECT * FROM student_tasks WHERE student_id = $1 ORDER BY due_date NULLS LAST, created_at DESC',
+            [id]
+        );
 
         res.json({
             student: studentRes.rows[0],
             events: eventsRes.rows,
-            logs: logsRes.rows
+            logs: logsRes.rows,
+            tasks: tasksRes.rows
         });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -183,6 +220,69 @@ export const updateStudentStatus = async (req: Request, res: Response) => {
     }
 };
 
+export const updateStudentBasic = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const {
+        name,
+        university,
+        academic_track,
+        faculty,
+        email,
+        phone,
+        graduation_year,
+        source_company,
+        interview_reason,
+        desired_industry,
+        desired_role,
+        next_meeting_date,
+        next_action
+    } = req.body;
+    try {
+        const result = await pool.query(
+            `UPDATE students
+             SET name = $1,
+                 university = $2,
+                 academic_track = $3,
+                 faculty = $4,
+                 email = $5,
+                 phone = $6,
+                 graduation_year = $7,
+                 source_company = $8,
+                 interview_reason = $9,
+                 desired_industry = $10,
+                 desired_role = $11,
+                 next_meeting_date = $12,
+                 next_action = $13,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $14
+             RETURNING *`,
+            [
+                name || null,
+                university || null,
+                academic_track || null,
+                faculty || null,
+                email || null,
+                phone || null,
+                normalizeGraduationYear(graduation_year),
+                source_company || null,
+                interview_reason || null,
+                desired_industry || null,
+                desired_role || null,
+                next_meeting_date || null,
+                next_action || null,
+                id
+            ]
+        );
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
 export const updateStudentStaff = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { staff_id } = req.body;
@@ -192,6 +292,64 @@ export const updateStudentStaff = async (req: Request, res: Response) => {
             [staff_id || null, id]
         );
         res.json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const updateStudentMeta = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { referral_status, progress_stage, source_company, next_meeting_date, next_action } = req.body;
+    try {
+        const result = await pool.query(
+            `UPDATE students
+             SET referral_status = COALESCE($1, referral_status),
+                 progress_stage = COALESCE($2, progress_stage),
+                 source_company = COALESCE($3, source_company),
+                 next_meeting_date = COALESCE($4, next_meeting_date),
+                 next_action = COALESCE($5, next_action),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $6
+             RETURNING *`,
+            [referral_status, progress_stage, source_company, next_meeting_date, next_action, id]
+        );
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const addStudentTask = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { due_date, content } = req.body;
+    if (!content || !String(content).trim()) {
+        res.status(400).json({ error: 'Task content is required' });
+        return;
+    }
+    try {
+        const result = await pool.query(
+            'INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3) RETURNING *',
+            [id, due_date || null, content]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const deleteStudentTask = async (req: Request, res: Response) => {
+    const { taskId } = req.params;
+    try {
+        const result = await pool.query('DELETE FROM student_tasks WHERE id = $1 RETURNING id', [taskId]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Task not found' });
+            return;
+        }
+        res.json({ success: true });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
@@ -235,7 +393,7 @@ export const importStudents = async (req: Request, res: Response) => {
             if (existsRes.rows.length > 0) {
                 const id = existsRes.rows[0].id;
                 await pool.query(
-                    'UPDATE students SET source_company = $1, graduation_year = $2, email = $3, status = $4, staff_id = $5, interview_reason = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7',
+                    'UPDATE students SET source_company = $1, graduation_year = $2, email = $3, status = $4, staff_id = $5, interview_reason = $6, referral_status = $7, progress_stage = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9',
                     [
                         s.source_company || null,
                         normalizeGraduationYear(s.graduation_year),
@@ -243,6 +401,8 @@ export const importStudents = async (req: Request, res: Response) => {
                         s.status || '面談',
                         s.staff_id || null,
                         s.interview_reason || null,
+                        s.referral_status || '不明',
+                        s.progress_stage || '初回面談',
                         id
                     ]
                 );
@@ -251,7 +411,7 @@ export const importStudents = async (req: Request, res: Response) => {
             }
 
             await pool.query(
-                'INSERT INTO students (name, university, faculty, graduation_year, email, status, staff_id, source_company, interview_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                'INSERT INTO students (name, university, faculty, graduation_year, email, status, staff_id, source_company, interview_reason, referral_status, progress_stage) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
                 [
                     name,
                     university || null,
@@ -261,7 +421,9 @@ export const importStudents = async (req: Request, res: Response) => {
                     s.status || '面談',
                     s.staff_id || null,
                     s.source_company || null,
-                    s.interview_reason || null
+                    s.interview_reason || null,
+                    s.referral_status || '不明',
+                    s.progress_stage || '初回面談'
                 ]
             );
             inserted++;

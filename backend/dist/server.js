@@ -22,6 +22,7 @@ app.use('/api/events', eventRoutes_1.default);
 // 旧APIとの互換性のためのエイリアス（必要に応じて）
 app.post('/api/login', (req, res) => res.redirect(307, '/api/auth/login'));
 app.post('/api/interview-logs', (req, res) => res.redirect(307, '/api/students/interview-logs'));
+app.delete('/api/interview-logs/:id', (req, res) => res.redirect(307, `/api/students/interview-logs/${req.params.id}`));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
