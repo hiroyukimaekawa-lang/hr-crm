@@ -1,6 +1,19 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 
+let studentColumnsCache: Set<string> | null = null;
+
+const getStudentColumns = async () => {
+    if (studentColumnsCache) return studentColumnsCache;
+    const result = await pool.query(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'students'`
+    );
+    studentColumnsCache = new Set(result.rows.map((r: any) => r.column_name));
+    return studentColumnsCache;
+};
+
 const normalizeGraduationYear = (value: any) => {
     if (value === null || value === undefined) return null;
     const raw = String(value).trim();
@@ -71,6 +84,7 @@ export const createStudent = async (req: Request, res: Response) => {
     const {
         name,
         university,
+        prefecture,
         academic_track,
         faculty,
         referral_status,
@@ -98,28 +112,40 @@ export const createStudent = async (req: Request, res: Response) => {
             return;
         }
 
+        const cols = await getStudentColumns();
+        const insertCols: string[] = [];
+        const insertVals: any[] = [];
+
+        const pushCol = (col: string, val: any) => {
+            if (!cols.has(col)) return;
+            insertCols.push(col);
+            insertVals.push(val);
+        };
+
+        pushCol('name', name);
+        pushCol('university', university || null);
+        pushCol('prefecture', prefecture || null);
+        pushCol('academic_track', academic_track || null);
+        pushCol('faculty', faculty || null);
+        pushCol('referral_status', referral_status || '不明');
+        pushCol('progress_stage', progress_stage || '初回面談');
+        pushCol('next_meeting_date', next_meeting_date || null);
+        pushCol('next_action', next_action || null);
+        pushCol('desired_industry', desired_industry || null);
+        pushCol('desired_role', desired_role || null);
+        pushCol('graduation_year', normalizeGraduationYear(graduation_year));
+        pushCol('email', email || null);
+        pushCol('phone', phone || null);
+        pushCol('status', status || 'active');
+        pushCol('tags', tags || null);
+        pushCol('staff_id', staff_id || null);
+        pushCol('source_company', source_company || null);
+        pushCol('interview_reason', interview_reason || null);
+
+        const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         const result = await pool.query(
-            'INSERT INTO students (name, university, academic_track, faculty, referral_status, progress_stage, next_meeting_date, next_action, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *',
-            [
-                name,
-                university,
-                academic_track || null,
-                faculty || null,
-                referral_status || '不明',
-                progress_stage || '初回面談',
-                next_meeting_date || null,
-                next_action || null,
-                desired_industry || null,
-                desired_role || null,
-                graduation_year || null,
-                email || null,
-                phone || null,
-                status || 'active',
-                tags || null,
-                staff_id || null,
-                source_company || null,
-                interview_reason || null
-            ]
+            `INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`,
+            insertVals
         );
         res.json(result.rows[0]);
     } catch (err: any) {
@@ -225,6 +251,7 @@ export const updateStudentBasic = async (req: Request, res: Response) => {
     const {
         name,
         university,
+        prefecture,
         academic_track,
         faculty,
         email,
@@ -238,40 +265,38 @@ export const updateStudentBasic = async (req: Request, res: Response) => {
         next_action
     } = req.body;
     try {
+        const cols = await getStudentColumns();
+        const setParts: string[] = [];
+        const values: any[] = [];
+
+        const pushSet = (col: string, val: any) => {
+            if (!cols.has(col)) return;
+            values.push(val);
+            setParts.push(`${col} = $${values.length}`);
+        };
+
+        pushSet('name', name || null);
+        pushSet('university', university || null);
+        pushSet('prefecture', prefecture || null);
+        pushSet('academic_track', academic_track || null);
+        pushSet('faculty', faculty || null);
+        pushSet('email', email || null);
+        pushSet('phone', phone || null);
+        pushSet('graduation_year', normalizeGraduationYear(graduation_year));
+        pushSet('source_company', source_company || null);
+        pushSet('interview_reason', interview_reason || null);
+        pushSet('desired_industry', desired_industry || null);
+        pushSet('desired_role', desired_role || null);
+        pushSet('next_meeting_date', next_meeting_date || null);
+        pushSet('next_action', next_action || null);
+        if (cols.has('updated_at')) {
+            setParts.push('updated_at = CURRENT_TIMESTAMP');
+        }
+
+        values.push(id);
         const result = await pool.query(
-            `UPDATE students
-             SET name = $1,
-                 university = $2,
-                 academic_track = $3,
-                 faculty = $4,
-                 email = $5,
-                 phone = $6,
-                 graduation_year = $7,
-                 source_company = $8,
-                 interview_reason = $9,
-                 desired_industry = $10,
-                 desired_role = $11,
-                 next_meeting_date = $12,
-                 next_action = $13,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $14
-             RETURNING *`,
-            [
-                name || null,
-                university || null,
-                academic_track || null,
-                faculty || null,
-                email || null,
-                phone || null,
-                normalizeGraduationYear(graduation_year),
-                source_company || null,
-                interview_reason || null,
-                desired_industry || null,
-                desired_role || null,
-                next_meeting_date || null,
-                next_action || null,
-                id
-            ]
+            `UPDATE students SET ${setParts.join(', ')} WHERE id = $${values.length} RETURNING *`,
+            values
         );
         if (result.rows.length === 0) {
             res.status(404).json({ error: 'Student not found' });
