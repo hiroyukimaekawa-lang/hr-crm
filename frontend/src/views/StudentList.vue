@@ -16,6 +16,7 @@ interface Student {
   id: number;
   name: string;
   university?: string;
+  prefecture?: string;
   academic_track?: string;
   faculty?: string;
   referral_status?: string;
@@ -55,13 +56,11 @@ const staffFilter = ref('ALL');
 const sourceCompanyFilter = ref('ALL');
 const academicTrackFilter = ref('ALL');
 const referralStatusFilter = ref('ALL');
-const nextMeetingFilter = ref('ALL');
-const nextMeetingFrom = ref('');
-const nextMeetingTo = ref('');
 const graduationYearFilter = ref('ALL');
-const taskDueFilter = ref<'ALL' | 'HAS' | 'NO'>('ALL');
-const taskDueFrom = ref('');
-const taskDueTo = ref('');
+const nextMeetingDateFrom = ref('');
+const nextMeetingDateTo = ref('');
+const taskDueDateFrom = ref('');
+const taskDueDateTo = ref('');
 
 const showCreate = ref(false);
 const newStudent = ref({
@@ -221,7 +220,7 @@ const graduationYearOptions = computed(() => {
 });
 
 const filteredStudents = computed(() => {
-  const normalizeDateKey = (value?: string | null) => {
+  const normalizeDate = (value?: string | null) => {
     if (!value) return '';
     const d = new Date(value);
     if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
@@ -248,25 +247,17 @@ const filteredStudents = computed(() => {
     const matchesReferral =
       referralStatusFilter.value === 'ALL' ||
       (s.referral_status || '不明') === referralStatusFilter.value;
-    const hasNextMeeting = !!s.next_meeting_date;
-    const matchesNextMeeting =
-      nextMeetingFilter.value === 'ALL' ||
-      (nextMeetingFilter.value === 'SET' ? hasNextMeeting : !hasNextMeeting);
-    const nextMeetingKey = normalizeDateKey(s.next_meeting_date);
-    const matchesNextMeetingDate =
-      (!nextMeetingFrom.value || (nextMeetingKey && nextMeetingKey >= nextMeetingFrom.value)) &&
-      (!nextMeetingTo.value || (nextMeetingKey && nextMeetingKey <= nextMeetingTo.value));
     const matchesGraduationYear =
       graduationYearFilter.value === 'ALL' ||
       String(s.graduation_year || '') === graduationYearFilter.value;
-    const hasTaskDue = !!s.latest_task_due_date;
-    const matchesTaskDue =
-      taskDueFilter.value === 'ALL' ||
-      (taskDueFilter.value === 'HAS' ? hasTaskDue : !hasTaskDue);
-    const taskDueKey = normalizeDateKey(s.latest_task_due_date);
+    const nextMeetingDate = normalizeDate(s.next_meeting_date);
+    const matchesNextMeetingDate =
+      (!nextMeetingDateFrom.value || (nextMeetingDate && nextMeetingDate >= nextMeetingDateFrom.value)) &&
+      (!nextMeetingDateTo.value || (nextMeetingDate && nextMeetingDate <= nextMeetingDateTo.value));
+    const taskDueDate = normalizeDate(s.latest_task_due_date);
     const matchesTaskDueDate =
-      (!taskDueFrom.value || (taskDueKey && taskDueKey >= taskDueFrom.value)) &&
-      (!taskDueTo.value || (taskDueKey && taskDueKey <= taskDueTo.value));
+      (!taskDueDateFrom.value || (taskDueDate && taskDueDate >= taskDueDateFrom.value)) &&
+      (!taskDueDateTo.value || (taskDueDate && taskDueDate <= taskDueDateTo.value));
     return matchesName
       && matchesUniversity
       && matchesStaff
@@ -274,10 +265,8 @@ const filteredStudents = computed(() => {
       && matchesAcademicTrack
       && matchesGraduationYear
       && matchesReferral
-      && matchesNextMeeting
       && matchesNextMeetingDate
-      && matchesTaskDueDate
-      && matchesTaskDue;
+      && matchesTaskDueDate;
   });
 });
 
@@ -296,13 +285,11 @@ const clearFilters = () => {
   sourceCompanyFilter.value = 'ALL';
   academicTrackFilter.value = 'ALL';
   referralStatusFilter.value = 'ALL';
-  nextMeetingFilter.value = 'ALL';
-  nextMeetingFrom.value = '';
-  nextMeetingTo.value = '';
   graduationYearFilter.value = 'ALL';
-  taskDueFilter.value = 'ALL';
-  taskDueFrom.value = '';
-  taskDueTo.value = '';
+  nextMeetingDateFrom.value = '';
+  nextMeetingDateTo.value = '';
+  taskDueDateFrom.value = '';
+  taskDueDateTo.value = '';
 };
 
 const formatDate = (value?: string | null) => {
@@ -580,48 +567,32 @@ onMounted(() => {
                   {{ g === 'ALL' ? '卒業年度: すべて' : `${g}年` }}
                 </option>
               </select>
-              <select
-                v-model="nextMeetingFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="ALL">次回面談: すべて</option>
-                <option value="SET">設定あり</option>
-                <option value="UNSET">未設定</option>
-              </select>
-              <div class="flex items-center gap-1 px-2 py-1 border border-gray-200 rounded-lg bg-white">
-                <span class="text-xs text-gray-500 whitespace-nowrap">次回面談日</span>
+              <div class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-white">
+                <span class="text-sm text-gray-600 whitespace-nowrap">面談日</span>
                 <input
-                  v-model="nextMeetingFrom"
+                  v-model="nextMeetingDateFrom"
                   type="date"
-                  class="px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                  class="px-2 py-1 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <span class="text-xs text-gray-400">〜</span>
+                <span class="text-gray-400">〜</span>
                 <input
-                  v-model="nextMeetingTo"
+                  v-model="nextMeetingDateTo"
                   type="date"
-                  class="px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                  class="px-2 py-1 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <select
-                v-model="taskDueFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="ALL">履行日: すべて</option>
-                <option value="HAS">履行日あり</option>
-                <option value="NO">履行日なし</option>
-              </select>
-              <div class="flex items-center gap-1 px-2 py-1 border border-gray-200 rounded-lg bg-white">
-                <span class="text-xs text-gray-500 whitespace-nowrap">履行日</span>
+              <div class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-white">
+                <span class="text-sm text-gray-600 whitespace-nowrap">タスク履行日</span>
                 <input
-                  v-model="taskDueFrom"
+                  v-model="taskDueDateFrom"
                   type="date"
-                  class="px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                  class="px-2 py-1 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <span class="text-xs text-gray-400">〜</span>
+                <span class="text-gray-400">〜</span>
                 <input
-                  v-model="taskDueTo"
+                  v-model="taskDueDateTo"
                   type="date"
-                  class="px-2 py-1 text-xs border border-gray-200 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                  class="px-2 py-1 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -653,6 +624,10 @@ onMounted(() => {
             <div>
               <p class="text-gray-400">流入経路</p>
               <p class="text-gray-700">{{ s.source_company || '-' }}</p>
+            </div>
+            <div>
+              <p class="text-gray-400">所在地</p>
+              <p class="text-gray-700">{{ s.prefecture || '-' }}</p>
             </div>
             <div>
               <p class="text-gray-400">文理</p>
@@ -741,6 +716,7 @@ onMounted(() => {
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">流入経路</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">氏名</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">大学</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">所在地</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">文理</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">卒業年度</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">担当</th>
@@ -755,6 +731,7 @@ onMounted(() => {
               <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{{ s.source_company || '-' }}</td>
               <td class="px-4 py-3 text-xs font-medium text-gray-900 whitespace-nowrap">{{ s.name }}</td>
               <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.university }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.prefecture || '-' }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.academic_track || '-' }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.graduation_year || '-' }}</td>
               <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
@@ -800,7 +777,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="filteredStudents.length === 0">
-              <td colSpan="10" class="px-6 py-10 text-center text-sm text-gray-400">
+              <td colSpan="11" class="px-6 py-10 text-center text-sm text-gray-400">
                 該当する学生が見つかりませんでした。
               </td>
             </tr>
@@ -875,7 +852,7 @@ onMounted(() => {
               <input v-model="newStudent.email" type="email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
             </div>
             <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">選考ステータス</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">ステータス</label>
             <select v-model="newStudent.status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
               <option value="キーマン">キーマン</option>
               <option value="出そう">出そう</option>

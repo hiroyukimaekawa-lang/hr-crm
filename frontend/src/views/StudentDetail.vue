@@ -325,7 +325,7 @@ onMounted(() => {
             <div class="space-y-2 mb-4">
               <div v-for="t in tasks" :key="t.id" class="flex items-start justify-between gap-3 bg-gray-50 rounded-lg p-3">
                 <div>
-                  <p class="text-xs text-gray-500">{{ t.due_date || '期限未設定' }}</p>
+                  <p class="text-xs text-gray-500">{{ t.due_date || '履行日未設定' }}</p>
                   <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ t.content }}</p>
                 </div>
                 <button class="text-gray-400 hover:text-red-600" @click="deleteTask(t.id)">
@@ -335,6 +335,7 @@ onMounted(() => {
               <p v-if="tasks.length === 0" class="text-sm text-gray-400">タスクはまだありません</p>
             </div>
             <div class="space-y-2">
+              <label class="block text-xs text-gray-500">タスク履行日</label>
               <input v-model="newTaskDate" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               <textarea v-model="newTaskContent" placeholder="やることを入力..." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm h-24"></textarea>
               <button class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700" @click="addTask">
