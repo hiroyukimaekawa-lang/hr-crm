@@ -56,6 +56,7 @@ const staffFilter = ref('ALL');
 const sourceCompanyFilter = ref('ALL');
 const academicTrackFilter = ref('ALL');
 const referralStatusFilter = ref('ALL');
+const progressStageFilter = ref('ALL');
 const graduationYearFilter = ref('ALL');
 const nextMeetingDateFrom = ref('');
 const nextMeetingDateTo = ref('');
@@ -70,6 +71,7 @@ const newStudent = ref({
   university: '',
   prefecture: '',
   academic_track: '',
+  progress_stage: '面談調整中',
   referral_status: '不明',
   next_meeting_date: '',
   graduation_year: '',
@@ -113,7 +115,7 @@ const updateStaff = async (studentId: number, staffId: number | null) => {
 };
 
 const referralStatusOptions = ['キーマン', '出そう', 'ほぼ無理ワンチャン', '無理', '不明'];
-const progressStageOptions = ['初回面談', '2回目面談', '顧客化', 'トビ'];
+const progressStageOptions = ['面談調整中', '初回面談', '2回目面談', '顧客化', 'トビ'];
 
 const updateStudentMeta = async (studentId: number, payload: { referral_status?: string; progress_stage?: string; source_company?: string; next_meeting_date?: string | null; next_action?: string | null }) => {
   try {
@@ -156,6 +158,7 @@ const createStudent = async () => {
       university: newStudent.value.university,
       prefecture: newStudent.value.prefecture || null,
       academic_track: newStudent.value.academic_track || null,
+      progress_stage: newStudent.value.progress_stage || '面談調整中',
       referral_status: newStudent.value.referral_status,
       next_meeting_date: newStudent.value.next_meeting_date || null,
       graduation_year: newStudent.value.graduation_year ? Number(newStudent.value.graduation_year) : null,
@@ -169,6 +172,7 @@ const createStudent = async () => {
       university: '',
       prefecture: '',
       academic_track: '',
+      progress_stage: '面談調整中',
       referral_status: '不明',
       next_meeting_date: '',
       graduation_year: '',
@@ -243,6 +247,9 @@ const filteredStudents = computed(() => {
     const matchesReferral =
       referralStatusFilter.value === 'ALL' ||
       (s.referral_status || '不明') === referralStatusFilter.value;
+    const matchesProgress =
+      progressStageFilter.value === 'ALL' ||
+      (s.progress_stage || '面談調整中') === progressStageFilter.value;
     const matchesGraduationYear =
       graduationYearFilter.value === 'ALL' ||
       String(s.graduation_year || '') === graduationYearFilter.value;
@@ -261,6 +268,7 @@ const filteredStudents = computed(() => {
       && matchesAcademicTrack
       && matchesGraduationYear
       && matchesReferral
+      && matchesProgress
       && matchesNextMeetingDate
       && matchesTaskDueDate;
   });
@@ -281,6 +289,7 @@ const clearFilters = () => {
   sourceCompanyFilter.value = 'ALL';
   academicTrackFilter.value = 'ALL';
   referralStatusFilter.value = 'ALL';
+  progressStageFilter.value = 'ALL';
   graduationYearFilter.value = 'ALL';
   nextMeetingDateFrom.value = '';
   nextMeetingDateTo.value = '';
@@ -556,6 +565,13 @@ onMounted(() => {
                 <option v-for="s in referralStatusOptions" :key="s" :value="s">{{ s }}</option>
               </select>
               <select
+                v-model="progressStageFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">進捗: すべて</option>
+                <option v-for="s in progressStageOptions" :key="s" :value="s">{{ s }}</option>
+              </select>
+              <select
                 v-model="graduationYearFilter"
                 class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
               >
@@ -628,6 +644,10 @@ onMounted(() => {
             <div>
               <p class="text-gray-400">文理</p>
               <p class="text-gray-700">{{ s.academic_track || '-' }}</p>
+            </div>
+            <div>
+              <p class="text-gray-400">進捗</p>
+              <p class="text-gray-700">{{ s.progress_stage || '面談調整中' }}</p>
             </div>
             <div>
               <p class="text-gray-400">次回面談日</p>
@@ -712,6 +732,7 @@ onMounted(() => {
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">流入経路</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">氏名</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">大学</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">進捗</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">所在地</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">文理</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">卒業年度</th>
@@ -727,6 +748,15 @@ onMounted(() => {
               <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{{ s.source_company || '-' }}</td>
               <td class="px-4 py-3 text-xs font-medium text-gray-900 whitespace-nowrap">{{ s.name }}</td>
               <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.university }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                <select
+                  class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs"
+                  :value="s.progress_stage || '面談調整中'"
+                  @change="updateStudentMeta(s.id, { progress_stage: ($event.target as HTMLSelectElement).value })"
+                >
+                  <option v-for="v in progressStageOptions" :key="`desktop-prog-${s.id}-${v}`" :value="v">{{ v }}</option>
+                </select>
+              </td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.prefecture || '-' }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.academic_track || '-' }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.graduation_year || '-' }}</td>
@@ -773,7 +803,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="filteredStudents.length === 0">
-              <td colSpan="11" class="px-6 py-10 text-center text-sm text-gray-400">
+              <td colSpan="12" class="px-6 py-10 text-center text-sm text-gray-400">
                 該当する学生が見つかりませんでした。
               </td>
             </tr>
@@ -818,6 +848,12 @@ onMounted(() => {
             <label class="block text-sm font-medium text-gray-700 mb-1">ステータス</label>
             <select v-model="newStudent.referral_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
               <option v-for="v in referralStatusOptions" :key="v" :value="v">{{ v }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">進捗</label>
+            <select v-model="newStudent.progress_stage" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+              <option v-for="v in progressStageOptions" :key="`create-prog-${v}`" :value="v">{{ v }}</option>
             </select>
           </div>
           <div>
