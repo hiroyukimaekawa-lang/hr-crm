@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { api } from '../lib/api';
 import { useRouter } from 'vue-router';
 import Layout from '../components/Layout.vue';
@@ -9,7 +9,8 @@ import {
   Users as UsersIcon,
   Plus,
   ChevronRight,
-  Trash2
+  Trash2,
+  ChevronLeft
 } from 'lucide-vue-next';
 
 interface EventItem {
@@ -23,6 +24,7 @@ interface EventItem {
   unit_price?: number;
   target_sales?: number;
   current_sales?: number;
+  lp_url?: string;
   registered_count?: number;
   attended_count?: number;
   total_count?: number;
@@ -34,12 +36,15 @@ const newEvent = ref({
   description: '',
   event_date: '',
   location: '',
+  lp_url: '',
   target_seats: '',
   unit_price: '',
   target_sales: '',
   current_sales: ''
 });
 const showCreate = ref(false);
+const calendarMonth = ref(new Date());
+const selectedCalendarEvent = ref<EventItem | null>(null);
 const router = useRouter();
 
 const fetchEvents = async () => {
@@ -57,7 +62,7 @@ const createEvent = async () => {
     target_sales: newEvent.value.target_sales ? Number(newEvent.value.target_sales) : null,
     current_sales: newEvent.value.current_sales ? Number(newEvent.value.current_sales) : 0
   }, { headers: { Authorization: token } });
-  newEvent.value = { title: '', description: '', event_date: '', location: '', target_seats: '', unit_price: '', target_sales: '', current_sales: '' };
+  newEvent.value = { title: '', description: '', event_date: '', location: '', lp_url: '', target_seats: '', unit_price: '', target_sales: '', current_sales: '' };
   showCreate.value = false;
   fetchEvents();
 };
@@ -89,6 +94,65 @@ const remainingEntries = (event: EventItem) => {
   return remain > 0 ? remain : 0;
 };
 
+const formatDateKey = (value: string | Date) => {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const monthLabel = computed(() =>
+  new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long' }).format(calendarMonth.value)
+);
+
+const eventsByDate = computed(() => {
+  const map: Record<string, EventItem[]> = {};
+  events.value.forEach(e => {
+    if (!e.event_date) return;
+    const key = formatDateKey(e.event_date);
+    if (!key) return;
+    if (!map[key]) map[key] = [];
+    map[key].push(e);
+  });
+  return map;
+});
+
+const getEventsForDate = (key: string) => eventsByDate.value[key] || [];
+
+const calendarCells = computed(() => {
+  const base = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth(), 1);
+  const year = base.getFullYear();
+  const month = base.getMonth();
+  const firstWeekday = base.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: Array<{ date: Date | null; key: string }> = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push({ date: null, key: `blank-start-${i}` });
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month, day);
+    cells.push({ date, key: formatDateKey(date) });
+  }
+  while (cells.length % 7 !== 0) cells.push({ date: null, key: `blank-end-${cells.length}` });
+  return cells;
+});
+
+const prevMonth = () => {
+  calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() - 1, 1);
+};
+
+const nextMonth = () => {
+  calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() + 1, 1);
+};
+
+const openEventDetailPanel = (event: EventItem) => {
+  selectedCalendarEvent.value = event;
+};
+
+const closeEventDetailPanel = () => {
+  selectedCalendarEvent.value = null;
+};
+
 onMounted(fetchEvents);
 </script>
 
@@ -107,6 +171,44 @@ onMounted(fetchEvents);
           <Plus class="w-4 h-4" />
           <span>イベント作成</span>
         </button>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold text-gray-900">イベント開催カレンダー</h2>
+          <div class="flex items-center gap-2">
+            <button @click="prevMonth" class="p-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
+              <ChevronLeft class="w-4 h-4" />
+            </button>
+            <span class="text-sm font-medium text-gray-700 min-w-[120px] text-center">{{ monthLabel }}</span>
+            <button @click="nextMonth" class="p-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
+              <ChevronRight class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <div class="grid grid-cols-7 text-xs text-gray-500 mb-2">
+          <div class="py-1 text-center">日</div><div class="py-1 text-center">月</div><div class="py-1 text-center">火</div><div class="py-1 text-center">水</div><div class="py-1 text-center">木</div><div class="py-1 text-center">金</div><div class="py-1 text-center">土</div>
+        </div>
+        <div class="grid grid-cols-7 border border-gray-200 rounded-lg overflow-hidden">
+          <div v-for="cell in calendarCells" :key="cell.key" class="min-h-[72px] border-r border-b border-gray-200 p-2 text-xs" :class="{ 'bg-gray-50': !cell.date }">
+            <template v-if="cell.date">
+              <div class="text-gray-700">{{ cell.date.getDate() }}</div>
+              <div v-if="getEventsForDate(cell.key).length" class="mt-1 space-y-1">
+                <div
+                  v-for="ev in getEventsForDate(cell.key).slice(0, 2)"
+                  :key="ev.id"
+                  class="truncate px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100"
+                  @click="openEventDetailPanel(ev)"
+                >
+                  {{ ev.title }}
+                </div>
+                <div v-if="getEventsForDate(cell.key).length > 2" class="text-[10px] text-gray-500">
+                  +{{ getEventsForDate(cell.key).length - 2 }}件
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -144,6 +246,19 @@ onMounted(fetchEvents);
               </div>
               <div class="flex items-center gap-2 text-sm text-gray-600">
                 <span>単価: {{ (e.unit_price || 0).toLocaleString() }}円</span>
+              </div>
+              <div class="flex items-center gap-2 text-sm text-gray-600">
+                <span class="font-medium">LP:</span>
+                <a
+                  v-if="e.lp_url"
+                  :href="e.lp_url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-blue-600 hover:text-blue-700 truncate"
+                >
+                  {{ e.lp_url }}
+                </a>
+                <span v-else>-</span>
               </div>
             </div>
           </div>
@@ -198,6 +313,10 @@ onMounted(fetchEvents);
             <input v-model="newEvent.location" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">LPリンク</label>
+            <input v-model="newEvent.lp_url" type="url" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">目標着座人数</label>
             <input v-model="newEvent.target_seats" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
@@ -217,6 +336,26 @@ onMounted(fetchEvents);
         <div class="mt-6 flex justify-end gap-3">
           <button @click="showCreate = false" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">キャンセル</button>
           <button @click="createEvent" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">作成</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="selectedCalendarEvent" class="fixed inset-0 z-[90]">
+      <div class="absolute inset-0 bg-black/20" @click="closeEventDetailPanel" />
+      <div class="absolute right-0 top-0 h-full w-full md:w-1/2 bg-white shadow-2xl border-l border-gray-200 p-6 overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-bold text-gray-900">イベント詳細</h2>
+          <button class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50" @click="closeEventDetailPanel">閉じる</button>
+        </div>
+        <div class="space-y-3 text-sm">
+          <div><p class="text-gray-500">イベント名</p><p class="text-gray-900 font-semibold">{{ selectedCalendarEvent.title }}</p></div>
+          <div><p class="text-gray-500">開催日時</p><p class="text-gray-900">{{ selectedCalendarEvent.event_date ? new Date(selectedCalendarEvent.event_date).toLocaleString('ja-JP') : '-' }}</p></div>
+          <div><p class="text-gray-500">会場</p><p class="text-gray-900">{{ selectedCalendarEvent.location || '-' }}</p></div>
+          <div><p class="text-gray-500">説明</p><p class="text-gray-900 whitespace-pre-wrap">{{ selectedCalendarEvent.description || '-' }}</p></div>
+          <div><p class="text-gray-500">LPリンク</p>
+            <a v-if="selectedCalendarEvent.lp_url" :href="selectedCalendarEvent.lp_url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-700 break-all">{{ selectedCalendarEvent.lp_url }}</a>
+            <p v-else class="text-gray-900">未設定</p>
+          </div>
         </div>
       </div>
     </div>

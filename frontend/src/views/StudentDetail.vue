@@ -35,6 +35,8 @@ const newLogEventId = ref('');
 const selectedEventId = ref('');
 const editingStatus = ref(false);
 const referralStatusDraft = ref('不明');
+const progressStageDraft = ref('面談調整中');
+const progressStageOptions = ['面談調整中', '初回面談', '2回目面談', '顧客化', 'トビ'];
 const editingBasic = ref(false);
 const basicDraft = ref({
   name: '',
@@ -78,6 +80,7 @@ const fetchDetail = async () => {
   interviewLogs.value = res.data.logs;
   tasks.value = res.data.tasks || [];
   referralStatusDraft.value = student.value?.referral_status || '不明';
+  progressStageDraft.value = student.value?.progress_stage || '面談調整中';
   resetBasicDraft();
 };
 
@@ -148,7 +151,8 @@ const linkEvent = async () => {
 const updateStatus = async () => {
   const token = localStorage.getItem('token');
   await api.put(`/api/students/${studentId}/meta`, {
-    referral_status: referralStatusDraft.value
+    referral_status: referralStatusDraft.value,
+    progress_stage: progressStageDraft.value
   }, { headers: { Authorization: token } });
   editingStatus.value = false;
   fetchDetail();
@@ -237,6 +241,9 @@ onMounted(() => {
               <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="statusClass(student.referral_status)">
                 {{ student.referral_status || '不明' }}
               </span>
+              <span class="text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-700">
+                進捗: {{ student.progress_stage || '面談調整中' }}
+              </span>
               <div v-if="editingStatus" class="flex items-center gap-2">
                 <select v-model="referralStatusDraft" class="px-2 py-1 border border-gray-300 rounded-md text-xs">
                   <option value="キーマン">キーマン</option>
@@ -244,6 +251,9 @@ onMounted(() => {
                   <option value="ほぼ無理ワンチャン">ほぼ無理ワンチャン</option>
                   <option value="無理">無理</option>
                   <option value="不明">不明</option>
+                </select>
+                <select v-model="progressStageDraft" class="px-2 py-1 border border-gray-300 rounded-md text-xs">
+                  <option v-for="v in progressStageOptions" :key="`detail-progress-${v}`" :value="v">{{ v }}</option>
                 </select>
                 <button class="text-xs px-2 py-1 bg-blue-600 text-white rounded-md" @click="updateStatus">保存</button>
               </div>

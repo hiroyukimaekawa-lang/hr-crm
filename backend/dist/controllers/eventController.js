@@ -14,6 +14,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteEvent = exports.updateParticipantStatus = exports.getEventDetail = exports.updateEvent = exports.createEvent = exports.getEvents = void 0;
 const db_1 = __importDefault(require("../config/db"));
+const getEventColumns = () => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield db_1.default.query(`SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'events'`);
+    return new Set(result.rows.map((r) => r.column_name));
+});
 const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const result = yield db_1.default.query(`
@@ -43,19 +49,29 @@ const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.getEvents = getEvents;
 const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
     try {
-        const result = yield db_1.default.query('INSERT INTO events (title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *', [
-            title,
-            description,
-            event_date,
-            location || null,
-            capacity || null,
-            target_seats || null,
-            unit_price || null,
-            target_sales || null,
-            current_sales || 0
-        ]);
+        const cols = yield getEventColumns();
+        const insertCols = [];
+        const insertVals = [];
+        const push = (col, val) => {
+            if (!cols.has(col))
+                return;
+            insertCols.push(col);
+            insertVals.push(val);
+        };
+        push('title', title);
+        push('description', description || null);
+        push('event_date', event_date || null);
+        push('location', location || null);
+        push('lp_url', lp_url || null);
+        push('capacity', capacity || null);
+        push('target_seats', target_seats || null);
+        push('unit_price', unit_price || null);
+        push('target_sales', target_sales || null);
+        push('current_sales', current_sales || 0);
+        const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
+        const result = yield db_1.default.query(`INSERT INTO events (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`, insertVals);
         res.json(result.rows[0]);
     }
     catch (err) {
@@ -65,31 +81,32 @@ const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 exports.createEvent = createEvent;
 const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
     try {
+        const cols = yield getEventColumns();
+        const setParts = [];
+        const values = [];
+        const pushSet = (col, val) => {
+            if (!cols.has(col))
+                return;
+            values.push(val);
+            setParts.push(`${col} = $${values.length}`);
+        };
+        pushSet('title', title);
+        pushSet('description', description || null);
+        pushSet('event_date', event_date || null);
+        pushSet('location', location || null);
+        pushSet('lp_url', lp_url || null);
+        pushSet('capacity', capacity || null);
+        pushSet('target_seats', target_seats || null);
+        pushSet('unit_price', unit_price || null);
+        pushSet('target_sales', target_sales || null);
+        pushSet('current_sales', current_sales || 0);
+        values.push(id);
         const result = yield db_1.default.query(`UPDATE events
-             SET title = $1,
-                 description = $2,
-                 event_date = $3,
-                 location = $4,
-                 capacity = $5,
-                 target_seats = $6,
-                 unit_price = $7,
-                 target_sales = $8,
-                 current_sales = $9
-             WHERE id = $10
-             RETURNING *`, [
-            title,
-            description || null,
-            event_date || null,
-            location || null,
-            capacity || null,
-            target_seats || null,
-            unit_price || null,
-            target_sales || null,
-            current_sales || 0,
-            id
-        ]);
+             SET ${setParts.join(', ')}
+             WHERE id = $${values.length}
+             RETURNING *`, values);
         if (result.rows.length === 0) {
             res.status(404).json({ error: 'Event not found' });
             return;

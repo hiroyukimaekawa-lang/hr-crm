@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue';
 import { api } from '../lib/api';
 import { useRouter } from 'vue-router';
 import Layout from '../components/Layout.vue';
+import { pushNotification } from '../lib/notifications';
 import {
   Filter,
   ChevronRight,
@@ -42,11 +43,42 @@ interface StaffUser {
   name: string;
 }
 
+type ExportColumnKey =
+  | 'source_company'
+  | 'name'
+  | 'university'
+  | 'progress_stage'
+  | 'prefecture'
+  | 'academic_track'
+  | 'graduation_year'
+  | 'staff_name'
+  | 'referral_status'
+  | 'next_meeting_date'
+  | 'task_due_date';
+
+const exportColumnOptions: Array<{ key: ExportColumnKey; label: string }> = [
+  { key: 'source_company', label: '流入経路' },
+  { key: 'name', label: '氏名' },
+  { key: 'university', label: '大学' },
+  { key: 'progress_stage', label: '進捗' },
+  { key: 'prefecture', label: '所在地' },
+  { key: 'academic_track', label: '文理' },
+  { key: 'graduation_year', label: '卒業年度' },
+  { key: 'staff_name', label: '担当' },
+  { key: 'referral_status', label: 'ステータス' },
+  { key: 'next_meeting_date', label: '次回面談日' },
+  { key: 'task_due_date', label: 'タスク履行日' }
+];
+
 const students = ref<Student[]>([]);
 const staffUsers = ref<StaffUser[]>([]);
 const router = useRouter();
 const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
 const showAll = ref(user.role === 'admin');
+const selectedExportColumns = ref<ExportColumnKey[]>(exportColumnOptions.map(c => c.key));
+const toastMessage = ref('');
+const toastType = ref<'success' | 'error'>('success');
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 const selectedNames = ref<string[]>([]);
 const selectedUniversities = ref<string[]>([]);
@@ -54,6 +86,7 @@ const nameSearch = ref('');
 const universitySearch = ref('');
 const staffFilter = ref('ALL');
 const sourceCompanyFilter = ref('ALL');
+const prefectureFilter = ref('ALL');
 const academicTrackFilter = ref('ALL');
 const referralStatusFilter = ref('ALL');
 const progressStageFilter = ref('ALL');
@@ -62,6 +95,22 @@ const nextMeetingDateFrom = ref('');
 const nextMeetingDateTo = ref('');
 const taskDueDateFrom = ref('');
 const taskDueDateTo = ref('');
+
+const appliedFilters = ref({
+  selectedNames: [] as string[],
+  selectedUniversities: [] as string[],
+  staffFilter: 'ALL',
+  sourceCompanyFilter: 'ALL',
+  prefectureFilter: 'ALL',
+  academicTrackFilter: 'ALL',
+  referralStatusFilter: 'ALL',
+  progressStageFilter: 'ALL',
+  graduationYearFilter: 'ALL',
+  nextMeetingDateFrom: '',
+  nextMeetingDateTo: '',
+  taskDueDateFrom: '',
+  taskDueDateTo: ''
+});
 
 const showCreate = ref(false);
 const createError = ref('');
@@ -229,42 +278,47 @@ const filteredStudents = computed(() => {
   };
 
   return students.value.filter(s => {
+    const af = appliedFilters.value;
     const matchesName =
-      selectedNames.value.length === 0 ||
-      selectedNames.value.includes(s.name || '');
+      af.selectedNames.length === 0 ||
+      af.selectedNames.includes(s.name || '');
     const matchesUniversity =
-      selectedUniversities.value.length === 0 ||
-      selectedUniversities.value.includes(s.university || '');
+      af.selectedUniversities.length === 0 ||
+      af.selectedUniversities.includes(s.university || '');
     const matchesStaff =
-      staffFilter.value === 'ALL' ||
-      String(s.staff_id || '') === staffFilter.value;
+      af.staffFilter === 'ALL' ||
+      String(s.staff_id || '') === af.staffFilter;
     const matchesSourceCompany =
-      sourceCompanyFilter.value === 'ALL' ||
-      (s.source_company || '') === sourceCompanyFilter.value;
+      af.sourceCompanyFilter === 'ALL' ||
+      (s.source_company || '') === af.sourceCompanyFilter;
+    const matchesPrefecture =
+      af.prefectureFilter === 'ALL' ||
+      (s.prefecture || '') === af.prefectureFilter;
     const matchesAcademicTrack =
-      academicTrackFilter.value === 'ALL' ||
-      (s.academic_track || '') === academicTrackFilter.value;
+      af.academicTrackFilter === 'ALL' ||
+      (s.academic_track || '') === af.academicTrackFilter;
     const matchesReferral =
-      referralStatusFilter.value === 'ALL' ||
-      (s.referral_status || '不明') === referralStatusFilter.value;
+      af.referralStatusFilter === 'ALL' ||
+      (s.referral_status || '不明') === af.referralStatusFilter;
     const matchesProgress =
-      progressStageFilter.value === 'ALL' ||
-      (s.progress_stage || '面談調整中') === progressStageFilter.value;
+      af.progressStageFilter === 'ALL' ||
+      (s.progress_stage || '面談調整中') === af.progressStageFilter;
     const matchesGraduationYear =
-      graduationYearFilter.value === 'ALL' ||
-      String(s.graduation_year || '') === graduationYearFilter.value;
+      af.graduationYearFilter === 'ALL' ||
+      String(s.graduation_year || '') === af.graduationYearFilter;
     const nextMeetingDate = normalizeDate(s.next_meeting_date);
     const matchesNextMeetingDate =
-      (!nextMeetingDateFrom.value || (nextMeetingDate && nextMeetingDate >= nextMeetingDateFrom.value)) &&
-      (!nextMeetingDateTo.value || (nextMeetingDate && nextMeetingDate <= nextMeetingDateTo.value));
+      (!af.nextMeetingDateFrom || (nextMeetingDate && nextMeetingDate >= af.nextMeetingDateFrom)) &&
+      (!af.nextMeetingDateTo || (nextMeetingDate && nextMeetingDate <= af.nextMeetingDateTo));
     const taskDueDate = normalizeDate(s.latest_task_due_date);
     const matchesTaskDueDate =
-      (!taskDueDateFrom.value || (taskDueDate && taskDueDate >= taskDueDateFrom.value)) &&
-      (!taskDueDateTo.value || (taskDueDate && taskDueDate <= taskDueDateTo.value));
+      (!af.taskDueDateFrom || (taskDueDate && taskDueDate >= af.taskDueDateFrom)) &&
+      (!af.taskDueDateTo || (taskDueDate && taskDueDate <= af.taskDueDateTo));
     return matchesName
       && matchesUniversity
       && matchesStaff
       && matchesSourceCompany
+      && matchesPrefecture
       && matchesAcademicTrack
       && matchesGraduationYear
       && matchesReferral
@@ -280,6 +334,30 @@ const sourceCompanyOptions = computed(() => {
   return Array.from(set);
 });
 
+const prefectureOptions = computed(() => {
+  const set = new Set<string>();
+  students.value.forEach(s => s.prefecture && set.add(s.prefecture));
+  return Array.from(set);
+});
+
+const applyFilters = () => {
+  appliedFilters.value = {
+    selectedNames: [...selectedNames.value],
+    selectedUniversities: [...selectedUniversities.value],
+    staffFilter: staffFilter.value,
+    sourceCompanyFilter: sourceCompanyFilter.value,
+    prefectureFilter: prefectureFilter.value,
+    academicTrackFilter: academicTrackFilter.value,
+    referralStatusFilter: referralStatusFilter.value,
+    progressStageFilter: progressStageFilter.value,
+    graduationYearFilter: graduationYearFilter.value,
+    nextMeetingDateFrom: nextMeetingDateFrom.value,
+    nextMeetingDateTo: nextMeetingDateTo.value,
+    taskDueDateFrom: taskDueDateFrom.value,
+    taskDueDateTo: taskDueDateTo.value
+  };
+};
+
 const clearFilters = () => {
   selectedNames.value = [];
   selectedUniversities.value = [];
@@ -287,6 +365,7 @@ const clearFilters = () => {
   universitySearch.value = '';
   staffFilter.value = 'ALL';
   sourceCompanyFilter.value = 'ALL';
+  prefectureFilter.value = 'ALL';
   academicTrackFilter.value = 'ALL';
   referralStatusFilter.value = 'ALL';
   progressStageFilter.value = 'ALL';
@@ -295,6 +374,7 @@ const clearFilters = () => {
   nextMeetingDateTo.value = '';
   taskDueDateFrom.value = '';
   taskDueDateTo.value = '';
+  applyFilters();
 };
 
 const formatDate = (value?: string | null) => {
@@ -304,36 +384,49 @@ const formatDate = (value?: string | null) => {
   return d.toLocaleDateString('ja-JP');
 };
 
+const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  toastMessage.value = message;
+  toastType.value = type;
+  pushNotification(message, type === 'success' ? 'success' : 'error');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toastMessage.value = '';
+  }, 2500);
+};
+
 const downloadCsv = () => {
-  const rows = filteredStudents.value.map(s => ({
-    source_company: s.source_company || '',
-    name: s.name,
-    university: s.university || '',
-    faculty: s.faculty || '',
-    referral_status: s.referral_status || '不明',
-    progress_stage: s.progress_stage || '初回面談',
-    graduation_year: s.graduation_year || '',
-    email: s.email || '',
-    status: s.status || '',
-    staff_name: s.staff_name || '',
-    interview_reason: s.interview_reason || ''
-  }));
-  const header = ['流入経路', '氏名', '大学', '学部', '紹介打診', '進捗', '卒業年', 'メール', 'ステータス', '担当', '面談理由'];
+  if (selectedExportColumns.value.length === 0) {
+    showToast('出力項目を1つ以上選択してください。', 'error');
+    return;
+  }
+  const header = exportColumnOptions
+    .filter(c => selectedExportColumns.value.includes(c.key))
+    .map(c => c.label);
+
+  const getValue = (s: Student, key: ExportColumnKey) => {
+    switch (key) {
+      case 'source_company': return s.source_company || '';
+      case 'name': return s.name || '';
+      case 'university': return s.university || '';
+      case 'progress_stage': return s.progress_stage || '面談調整中';
+      case 'prefecture': return s.prefecture || '';
+      case 'academic_track': return s.academic_track || '';
+      case 'graduation_year': return s.graduation_year || '';
+      case 'staff_name': return s.staff_name || '';
+      case 'referral_status': return s.referral_status || '不明';
+      case 'next_meeting_date': return s.next_meeting_date || '';
+      case 'task_due_date': return s.latest_task_due_date || '';
+      default: return '';
+    }
+  };
+
   const csv = [
     header.join(','),
-    ...rows.map(r => [
-      r.source_company,
-      r.name,
-      r.university,
-      r.faculty,
-      r.referral_status,
-      r.progress_stage,
-      r.graduation_year,
-      r.email,
-      r.status,
-      r.staff_name,
-      r.interview_reason
-    ].map(v => `"${String(v).replace(/\"/g, '""')}"`).join(','))
+    ...filteredStudents.value.map(s =>
+      selectedExportColumns.value
+        .map(col => `"${String(getValue(s, col)).replace(/\"/g, '""')}"`)
+        .join(',')
+    )
   ].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
@@ -341,6 +434,7 @@ const downloadCsv = () => {
   link.download = 'students.csv';
   link.click();
   URL.revokeObjectURL(link.href);
+  showToast('CSV出力が完了しました。', 'success');
 };
 
 const parseCsv = (text: string) => {
@@ -401,48 +495,62 @@ const importCsv = async (file: File) => {
     return row[idx] || '';
   };
 
+  const getValByKeys = (row: string[], keys: string[]) => {
+    for (const key of keys) {
+      const value = getVal(row, key);
+      if (value !== '') return value;
+    }
+    return '';
+  };
+
   const items = rows.slice(1).map(r => ({
-    source_company: getVal(r, '流入経路'),
-    name: getVal(r, '氏名'),
-    university: getVal(r, '大学'),
-    faculty: getVal(r, '学部'),
-    referral_status: getVal(r, '紹介打診') || '不明',
-    progress_stage: getVal(r, '進捗') || '初回面談',
-    graduation_year: getVal(r, '卒業年'),
-    email: getVal(r, 'メール'),
-    status: getVal(r, 'ステータス') || '面談',
-    staff_name: getVal(r, '担当'),
-    interview_reason: getVal(r, '面談理由')
+    source_company: getValByKeys(r, ['流入経路']).trim(),
+    name: getValByKeys(r, ['氏名']).trim(),
+    university: getValByKeys(r, ['大学']).trim(),
+    progress_stage: (getValByKeys(r, ['進捗']).trim() || '面談調整中'),
+    prefecture: getValByKeys(r, ['所在地', '所在地（都道府県）', '都道府県']).trim(),
+    academic_track: getValByKeys(r, ['文理']).trim(),
+    graduation_year: getValByKeys(r, ['卒業年度', '卒業年']).trim(),
+    staff_name: getValByKeys(r, ['担当']).trim(),
+    referral_status: (getValByKeys(r, ['ステータス']).trim() || '不明'),
+    next_meeting_date: getValByKeys(r, ['次回面談日']).trim(),
+    task_due_date: getValByKeys(r, ['タスク履行日']).trim()
   })).filter(i => i.name || i.university);
 
   const staffMap = new Map(staffUsers.value.map(s => [s.name, s.id]));
   const payload = items.map(i => ({
     name: i.name,
     university: i.university,
-    faculty: i.faculty,
-    graduation_year: i.graduation_year ? Number(i.graduation_year) : null,
-    email: i.email,
-    status: i.status,
+    prefecture: i.prefecture || null,
+    academic_track: i.academic_track || null,
+    graduation_year: i.graduation_year || null,
     staff_id: staffMap.get(i.staff_name) || null,
     source_company: i.source_company,
-    interview_reason: i.interview_reason,
     referral_status: i.referral_status,
-    progress_stage: i.progress_stage
+    progress_stage: i.progress_stage,
+    next_meeting_date: i.next_meeting_date || null,
+    task_due_date: i.task_due_date || null
   }));
 
   const token = localStorage.getItem('token');
-  await api.post('/api/students/import', {
+  const res = await api.post('/api/students/import', {
     students: payload
   }, { headers: { Authorization: token } });
 
   fetchStudents();
+  showToast(`CSV入力完了: 追加${res.data?.inserted || 0}件 / 更新${res.data?.updated || 0}件 / スキップ${res.data?.skipped || 0}件`, 'success');
 };
 
 const onCsvFileChange = async (event: Event) => {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
   if (!file) return;
-  await importCsv(file);
+  try {
+    await importCsv(file);
+  } catch (err) {
+    console.error(err);
+    showToast('CSV入力に失敗しました。形式を確認してください。', 'error');
+  }
   target.value = '';
 };
 
@@ -463,6 +571,26 @@ onMounted(() => {
           <p class="text-gray-500 mt-2">登録されている学生の情報を管理・確認できます。</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
+          <details class="relative">
+            <summary class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 cursor-pointer text-sm">
+              出力項目を選択
+            </summary>
+            <div class="absolute right-0 z-20 mt-1 w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-lg shadow p-2">
+              <label
+                v-for="col in exportColumnOptions"
+                :key="`export-col-${col.key}`"
+                class="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-50 rounded"
+              >
+                <input
+                  v-model="selectedExportColumns"
+                  :value="col.key"
+                  type="checkbox"
+                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>{{ col.label }}</span>
+              </label>
+            </div>
+          </details>
           <button
             @click="downloadCsv"
             class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -549,6 +677,13 @@ onMounted(() => {
                 <option v-for="v in sourceCompanyOptions" :key="v" :value="v">{{ v }}</option>
               </select>
               <select
+                v-model="prefectureFilter"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">所在地: すべて</option>
+                <option v-for="v in prefectureOptions" :key="v" :value="v">{{ v }}</option>
+              </select>
+              <select
                 v-model="academicTrackFilter"
                 class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
               >
@@ -613,7 +748,13 @@ onMounted(() => {
           <input type="checkbox" v-model="showAll" @change="fetchStudents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
           全学生を表示
         </label>
-        <div class="flex justify-end">
+        <div class="flex flex-col sm:flex-row gap-2 justify-end">
+          <button
+            @click="applyFilters"
+            class="px-3 py-2 rounded-lg text-sm text-white bg-blue-600 border border-blue-600 hover:bg-blue-700"
+          >
+            検索
+          </button>
           <button
             @click="clearFilters"
             class="px-3 py-2 rounded-lg text-sm text-red-600 border border-red-200 hover:bg-red-50"
@@ -621,6 +762,14 @@ onMounted(() => {
             フィルタクリア
           </button>
         </div>
+      </div>
+
+      <div
+        v-if="toastMessage"
+        class="fixed right-4 bottom-4 z-[100] px-4 py-3 rounded-lg shadow-lg text-sm"
+        :class="toastType === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'"
+      >
+        {{ toastMessage }}
       </div>
 
       <div class="md:hidden space-y-3">

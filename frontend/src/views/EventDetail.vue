@@ -35,6 +35,7 @@ interface EventDetail {
   unit_price?: number;
   target_sales?: number;
   current_sales?: number;
+  lp_url?: string;
 }
 
 const route = useRoute();
@@ -51,6 +52,7 @@ const form = ref({
   description: '',
   event_date: '',
   location: '',
+  lp_url: '',
   target_seats: '',
   unit_price: '',
   target_sales: '',
@@ -67,6 +69,7 @@ const fetchDetail = async () => {
     description: event.value?.description || '',
     event_date: event.value?.event_date ? new Date(event.value.event_date).toISOString().slice(0, 16) : '',
     location: event.value?.location || '',
+    lp_url: event.value?.lp_url || '',
     target_seats: event.value?.target_seats ? String(event.value.target_seats) : '',
     unit_price: event.value?.unit_price ? String(event.value.unit_price) : '',
     target_sales: event.value?.target_sales ? String(event.value.target_sales) : '',
@@ -91,6 +94,7 @@ const updateEvent = async () => {
     description: form.value.description,
     event_date: form.value.event_date || null,
     location: form.value.location || null,
+    lp_url: form.value.lp_url || null,
     target_seats: form.value.target_seats ? Number(form.value.target_seats) : null,
     unit_price: form.value.unit_price ? Number(form.value.unit_price) : null,
     target_sales: form.value.target_sales ? Number(form.value.target_sales) : null,
@@ -164,6 +168,19 @@ onMounted(fetchDetail);
             <div class="flex items-center gap-2 text-sm text-gray-600">
               <span>単価: {{ (event.unit_price || 0).toLocaleString() }}円</span>
             </div>
+            <div class="flex items-center gap-2 text-sm text-gray-600">
+              <span class="font-medium">LP:</span>
+              <a
+                v-if="event.lp_url"
+                :href="event.lp_url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-blue-600 hover:text-blue-700 break-all"
+              >
+                {{ event.lp_url }}
+              </a>
+              <span v-else>-</span>
+            </div>
           </div>
           <div v-if="saveMessage" class="text-xs text-green-600 mb-3">{{ saveMessage }}</div>
 
@@ -179,6 +196,10 @@ onMounted(fetchDetail);
             <div>
               <label class="block text-xs text-gray-500 mb-1">場所（オンライン/会場）</label>
               <input v-model="form.location" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">LPリンク</label>
+              <input v-model="form.lp_url" type="url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">目標人数</label>

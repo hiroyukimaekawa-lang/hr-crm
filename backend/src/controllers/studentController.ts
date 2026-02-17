@@ -1,17 +1,13 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 
-let studentColumnsCache: Set<string> | null = null;
-
 const getStudentColumns = async () => {
-    if (studentColumnsCache) return studentColumnsCache;
     const result = await pool.query(
         `SELECT column_name
          FROM information_schema.columns
          WHERE table_schema = 'public' AND table_name = 'students'`
     );
-    studentColumnsCache = new Set(result.rows.map((r: any) => r.column_name));
-    return studentColumnsCache;
+    return new Set(result.rows.map((r: any) => r.column_name));
 };
 
 const normalizeGraduationYear = (value: any) => {
@@ -41,6 +37,36 @@ const normalizeGraduationYear = (value: any) => {
     }
 
     return null;
+};
+
+const normalizeProgressStage = (value: any) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '面談調整中';
+    if (raw === '調整中(初回)' || raw === '調整中') return '面談調整中';
+    if (raw.includes('初回')) return '初回面談';
+    if (raw.includes('2回')) return '2回目面談';
+    if (raw.includes('顧客')) return '顧客化';
+    if (raw.includes('トビ')) return 'トビ';
+    return '面談調整中';
+};
+
+const normalizeReferralStatus = (value: any) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '不明';
+    if (raw.includes('キーマン')) return 'キーマン';
+    if (raw.includes('出そう')) return '出そう';
+    if (raw.includes('ワンチャン') || raw.includes('ほぼ無理')) return 'ほぼ無理ワンチャン';
+    if (raw === '無理') return '無理';
+    if (raw.includes('不明')) return '不明';
+    return '不明';
+};
+
+const normalizeAcademicTrack = (value: any) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+    if (raw.includes('文')) return '文系';
+    if (raw.includes('理')) return '理系';
+    return raw;
 };
 
 export const getStudents = async (req: Request, res: Response) => {
@@ -127,8 +153,8 @@ export const createStudent = async (req: Request, res: Response) => {
         pushCol('prefecture', prefecture || null);
         pushCol('academic_track', academic_track || null);
         pushCol('faculty', faculty || null);
-        pushCol('referral_status', referral_status || '不明');
-        pushCol('progress_stage', progress_stage || '初回面談');
+        pushCol('referral_status', normalizeReferralStatus(referral_status));
+        pushCol('progress_stage', normalizeProgressStage(progress_stage));
         pushCol('next_meeting_date', next_meeting_date || null);
         pushCol('next_action', next_action || null);
         pushCol('desired_industry', desired_industry || null);
@@ -403,58 +429,119 @@ export const importStudents = async (req: Request, res: Response) => {
 
     let inserted = 0;
     let updated = 0;
+    let skipped = 0;
+    const seen = new Set<string>();
 
     try {
+        const cols = await getStudentColumns();
         for (const s of students) {
             const name = s.name || '';
             const university = s.university || '';
-            const faculty = s.faculty || '';
+            const prefecture = s.prefecture || '';
+            const dedupeKey = `${name}__${university}__${prefecture}`;
+            if (!name) {
+                skipped++;
+                continue;
+            }
+            if (seen.has(dedupeKey)) {
+                skipped++;
+                continue;
+            }
+            seen.add(dedupeKey);
 
             const existsRes = await pool.query(
-                'SELECT id FROM students WHERE name = $1 AND university = $2 AND faculty = $3',
-                [name, university, faculty]
+                cols.has('prefecture')
+                    ? 'SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') AND COALESCE(prefecture, \'\') = COALESCE($3, \'\') LIMIT 1'
+                    : 'SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') LIMIT 1',
+                cols.has('prefecture')
+                    ? [name, university || null, prefecture || null]
+                    : [name, university || null]
             );
+
+            const updateParts: string[] = [];
+            const values: any[] = [];
+            const pushSet = (col: string, val: any) => {
+                if (!cols.has(col)) return;
+                values.push(val);
+                updateParts.push(`${col} = $${values.length}`);
+            };
+
+            pushSet('source_company', s.source_company || null);
+            pushSet('graduation_year', normalizeGraduationYear(s.graduation_year));
+            pushSet('staff_id', s.staff_id || null);
+            pushSet('referral_status', normalizeReferralStatus(s.referral_status));
+            pushSet('progress_stage', normalizeProgressStage(s.progress_stage));
+            pushSet('next_meeting_date', s.next_meeting_date || null);
+            pushSet('academic_track', normalizeAcademicTrack(s.academic_track));
+            pushSet('prefecture', s.prefecture || null);
+            if (cols.has('updated_at')) updateParts.push('updated_at = CURRENT_TIMESTAMP');
 
             if (existsRes.rows.length > 0) {
                 const id = existsRes.rows[0].id;
-                await pool.query(
-                    'UPDATE students SET source_company = $1, graduation_year = $2, email = $3, status = $4, staff_id = $5, interview_reason = $6, referral_status = $7, progress_stage = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9',
-                    [
-                        s.source_company || null,
-                        normalizeGraduationYear(s.graduation_year),
-                        s.email || null,
-                        s.status || '面談',
-                        s.staff_id || null,
-                        s.interview_reason || null,
-                        s.referral_status || '不明',
-                        s.progress_stage || '初回面談',
-                        id
-                    ]
-                );
+                if (updateParts.length > 0) {
+                    values.push(id);
+                    await pool.query(
+                        `UPDATE students SET ${updateParts.join(', ')} WHERE id = $${values.length}`,
+                        values
+                    );
+                }
+
+                if (s.task_due_date) {
+                    const lastTask = await pool.query(
+                        'SELECT id FROM student_tasks WHERE student_id = $1 ORDER BY created_at DESC LIMIT 1',
+                        [id]
+                    );
+                    if (lastTask.rows.length > 0) {
+                        await pool.query(
+                            'UPDATE student_tasks SET due_date = $1 WHERE id = $2',
+                            [s.task_due_date, lastTask.rows[0].id]
+                        );
+                    } else {
+                        await pool.query(
+                            'INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)',
+                            [id, s.task_due_date, 'CSV更新タスク']
+                        );
+                    }
+                }
                 updated++;
                 continue;
             }
 
-            await pool.query(
-                'INSERT INTO students (name, university, faculty, graduation_year, email, status, staff_id, source_company, interview_reason, referral_status, progress_stage) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
-                [
-                    name,
-                    university || null,
-                    faculty || null,
-                    normalizeGraduationYear(s.graduation_year),
-                    s.email || null,
-                    s.status || '面談',
-                    s.staff_id || null,
-                    s.source_company || null,
-                    s.interview_reason || null,
-                    s.referral_status || '不明',
-                    s.progress_stage || '初回面談'
-                ]
+            const insertCols: string[] = [];
+            const insertVals: any[] = [];
+            const pushInsert = (col: string, val: any) => {
+                if (!cols.has(col)) return;
+                insertCols.push(col);
+                insertVals.push(val);
+            };
+
+            pushInsert('name', name);
+            pushInsert('university', university || null);
+            pushInsert('prefecture', s.prefecture || null);
+            pushInsert('academic_track', normalizeAcademicTrack(s.academic_track));
+            pushInsert('graduation_year', normalizeGraduationYear(s.graduation_year));
+            pushInsert('staff_id', s.staff_id || null);
+            pushInsert('source_company', s.source_company || null);
+            pushInsert('referral_status', normalizeReferralStatus(s.referral_status));
+            pushInsert('progress_stage', normalizeProgressStage(s.progress_stage));
+            pushInsert('next_meeting_date', s.next_meeting_date || null);
+
+            const placeholders = insertCols.map((_: any, idx: number) => `$${idx + 1}`).join(', ');
+            const insertedRes = await pool.query(
+                `INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING id`,
+                insertVals
             );
+
+            if (s.task_due_date && insertedRes.rows[0]?.id) {
+                await pool.query(
+                    'INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)',
+                    [insertedRes.rows[0].id, s.task_due_date, 'CSV更新タスク']
+                );
+            }
             inserted++;
         }
 
-        res.json({ inserted, updated });
+        res.json({ inserted, updated, skipped });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

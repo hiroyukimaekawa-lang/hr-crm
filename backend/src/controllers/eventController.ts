@@ -1,6 +1,15 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 
+const getEventColumns = async () => {
+    const result = await pool.query(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'events'`
+    );
+    return new Set(result.rows.map((r: any) => r.column_name));
+};
+
 export const getEvents = async (req: Request, res: Response) => {
     try {
         const result = await pool.query(`
@@ -29,21 +38,31 @@ export const getEvents = async (req: Request, res: Response) => {
 };
 
 export const createEvent = async (req: Request, res: Response) => {
-    const { title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
     try {
+        const cols = await getEventColumns();
+        const insertCols: string[] = [];
+        const insertVals: any[] = [];
+        const push = (col: string, val: any) => {
+            if (!cols.has(col)) return;
+            insertCols.push(col);
+            insertVals.push(val);
+        };
+        push('title', title);
+        push('description', description || null);
+        push('event_date', event_date || null);
+        push('location', location || null);
+        push('lp_url', lp_url || null);
+        push('capacity', capacity || null);
+        push('target_seats', target_seats || null);
+        push('unit_price', unit_price || null);
+        push('target_sales', target_sales || null);
+        push('current_sales', current_sales || 0);
+
+        const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         const result = await pool.query(
-            'INSERT INTO events (title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
-            [
-                title,
-                description,
-                event_date,
-                location || null,
-                capacity || null,
-                target_seats || null,
-                unit_price || null,
-                target_sales || null,
-                current_sales || 0
-            ]
+            `INSERT INTO events (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`,
+            insertVals
         );
         res.json(result.rows[0]);
     } catch (err: any) {
@@ -53,33 +72,34 @@ export const createEvent = async (req: Request, res: Response) => {
 
 export const updateEvent = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
     try {
+        const cols = await getEventColumns();
+        const setParts: string[] = [];
+        const values: any[] = [];
+        const pushSet = (col: string, val: any) => {
+            if (!cols.has(col)) return;
+            values.push(val);
+            setParts.push(`${col} = $${values.length}`);
+        };
+        pushSet('title', title);
+        pushSet('description', description || null);
+        pushSet('event_date', event_date || null);
+        pushSet('location', location || null);
+        pushSet('lp_url', lp_url || null);
+        pushSet('capacity', capacity || null);
+        pushSet('target_seats', target_seats || null);
+        pushSet('unit_price', unit_price || null);
+        pushSet('target_sales', target_sales || null);
+        pushSet('current_sales', current_sales || 0);
+        values.push(id);
+
         const result = await pool.query(
             `UPDATE events
-             SET title = $1,
-                 description = $2,
-                 event_date = $3,
-                 location = $4,
-                 capacity = $5,
-                 target_seats = $6,
-                 unit_price = $7,
-                 target_sales = $8,
-                 current_sales = $9
-             WHERE id = $10
+             SET ${setParts.join(', ')}
+             WHERE id = $${values.length}
              RETURNING *`,
-            [
-                title,
-                description || null,
-                event_date || null,
-                location || null,
-                capacity || null,
-                target_seats || null,
-                unit_price || null,
-                target_sales || null,
-                current_sales || 0,
-                id
-            ]
+            values
         );
         if (result.rows.length === 0) {
             res.status(404).json({ error: 'Event not found' });
