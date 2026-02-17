@@ -82,11 +82,11 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 const selectedNames = ref<string[]>([]);
 const selectedUniversities = ref<string[]>([]);
+const selectedSourceCompanies = ref<string[]>([]);
+const selectedPrefectures = ref<string[]>([]);
 const nameSearch = ref('');
 const universitySearch = ref('');
 const staffFilter = ref('ALL');
-const sourceCompanyFilter = ref('ALL');
-const prefectureFilter = ref('ALL');
 const academicTrackFilter = ref('ALL');
 const referralStatusFilter = ref('ALL');
 const progressStageFilter = ref('ALL');
@@ -99,9 +99,9 @@ const taskDueDateTo = ref('');
 const appliedFilters = ref({
   selectedNames: [] as string[],
   selectedUniversities: [] as string[],
+  selectedSourceCompanies: [] as string[],
+  selectedPrefectures: [] as string[],
   staffFilter: 'ALL',
-  sourceCompanyFilter: 'ALL',
-  prefectureFilter: 'ALL',
   academicTrackFilter: 'ALL',
   referralStatusFilter: 'ALL',
   progressStageFilter: 'ALL',
@@ -289,11 +289,11 @@ const filteredStudents = computed(() => {
       af.staffFilter === 'ALL' ||
       String(s.staff_id || '') === af.staffFilter;
     const matchesSourceCompany =
-      af.sourceCompanyFilter === 'ALL' ||
-      (s.source_company || '') === af.sourceCompanyFilter;
+      af.selectedSourceCompanies.length === 0 ||
+      af.selectedSourceCompanies.includes(s.source_company || '');
     const matchesPrefecture =
-      af.prefectureFilter === 'ALL' ||
-      (s.prefecture || '') === af.prefectureFilter;
+      af.selectedPrefectures.length === 0 ||
+      af.selectedPrefectures.includes(s.prefecture || '');
     const matchesAcademicTrack =
       af.academicTrackFilter === 'ALL' ||
       (s.academic_track || '') === af.academicTrackFilter;
@@ -344,9 +344,9 @@ const applyFilters = () => {
   appliedFilters.value = {
     selectedNames: [...selectedNames.value],
     selectedUniversities: [...selectedUniversities.value],
+    selectedSourceCompanies: [...selectedSourceCompanies.value],
+    selectedPrefectures: [...selectedPrefectures.value],
     staffFilter: staffFilter.value,
-    sourceCompanyFilter: sourceCompanyFilter.value,
-    prefectureFilter: prefectureFilter.value,
     academicTrackFilter: academicTrackFilter.value,
     referralStatusFilter: referralStatusFilter.value,
     progressStageFilter: progressStageFilter.value,
@@ -361,11 +361,11 @@ const applyFilters = () => {
 const clearFilters = () => {
   selectedNames.value = [];
   selectedUniversities.value = [];
+  selectedSourceCompanies.value = [];
+  selectedPrefectures.value = [];
   nameSearch.value = '';
   universitySearch.value = '';
   staffFilter.value = 'ALL';
-  sourceCompanyFilter.value = 'ALL';
-  prefectureFilter.value = 'ALL';
   academicTrackFilter.value = 'ALL';
   referralStatusFilter.value = 'ALL';
   progressStageFilter.value = 'ALL';
@@ -669,20 +669,30 @@ onMounted(() => {
                 <option value="ALL">担当者: すべて</option>
                 <option v-for="u in staffUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
               </select>
-              <select
-                v-model="sourceCompanyFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="ALL">流入経路: すべて</option>
-                <option v-for="v in sourceCompanyOptions" :key="v" :value="v">{{ v }}</option>
-              </select>
-              <select
-                v-model="prefectureFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="ALL">所在地: すべて</option>
-                <option v-for="v in prefectureOptions" :key="v" :value="v">{{ v }}</option>
-              </select>
+              <details class="relative">
+                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-sm cursor-pointer bg-white">
+                  流入経路: {{ selectedSourceCompanies.length ? `${selectedSourceCompanies.length}件` : 'すべて' }}
+                </summary>
+                <div class="absolute z-20 mt-1 w-64 max-h-60 overflow-auto bg-white border border-gray-200 rounded-lg shadow">
+                  <label v-for="v in sourceCompanyOptions" :key="`source-${v}`" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50">
+                    <input type="checkbox" :value="v" v-model="selectedSourceCompanies" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    <span>{{ v }}</span>
+                  </label>
+                  <div v-if="sourceCompanyOptions.length === 0" class="px-3 py-2 text-xs text-gray-400">候補がありません</div>
+                </div>
+              </details>
+              <details class="relative">
+                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-sm cursor-pointer bg-white">
+                  所在地: {{ selectedPrefectures.length ? `${selectedPrefectures.length}件` : 'すべて' }}
+                </summary>
+                <div class="absolute z-20 mt-1 w-56 max-h-60 overflow-auto bg-white border border-gray-200 rounded-lg shadow">
+                  <label v-for="v in prefectureOptions" :key="`pref-${v}`" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50">
+                    <input type="checkbox" :value="v" v-model="selectedPrefectures" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    <span>{{ v }}</span>
+                  </label>
+                  <div v-if="prefectureOptions.length === 0" class="px-3 py-2 text-xs text-gray-400">候補がありません</div>
+                </div>
+              </details>
               <select
                 v-model="academicTrackFilter"
                 class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
