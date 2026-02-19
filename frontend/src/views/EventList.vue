@@ -37,15 +37,16 @@ const newEvent = ref({
   event_date: '',
   location: '',
   lp_url: '',
+  capacity: '',
   target_seats: '',
   unit_price: '',
   target_sales: '',
   current_sales: ''
 });
 const showCreate = ref(false);
-const calendarMonth = ref(new Date());
 const selectedCalendarEvent = ref<EventItem | null>(null);
 const router = useRouter();
+const calendarBaseMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
 const fetchEvents = async () => {
   const token = localStorage.getItem('token');
@@ -57,12 +58,13 @@ const createEvent = async () => {
   const token = localStorage.getItem('token');
   await api.post('/api/events', {
     ...newEvent.value,
+    capacity: newEvent.value.capacity ? Number(newEvent.value.capacity) : null,
     target_seats: newEvent.value.target_seats ? Number(newEvent.value.target_seats) : null,
     unit_price: newEvent.value.unit_price ? Number(newEvent.value.unit_price) : null,
     target_sales: newEvent.value.target_sales ? Number(newEvent.value.target_sales) : null,
     current_sales: newEvent.value.current_sales ? Number(newEvent.value.current_sales) : 0
   }, { headers: { Authorization: token } });
-  newEvent.value = { title: '', description: '', event_date: '', location: '', lp_url: '', target_seats: '', unit_price: '', target_sales: '', current_sales: '' };
+  newEvent.value = { title: '', description: '', event_date: '', location: '', lp_url: '', capacity: '', target_seats: '', unit_price: '', target_sales: '', current_sales: '' };
   showCreate.value = false;
   fetchEvents();
 };
@@ -80,7 +82,7 @@ const eventStatus = (eventDate?: string) => {
 };
 
 const progressRate = (event: EventItem) => {
-  const target = event.target_seats || 0;
+  const target = event.capacity || event.target_seats || 0;
   if (target === 0) return 0;
   return Math.min(Math.round(((event.registered_count || 0) / target) * 100), 100);
 };
@@ -90,7 +92,7 @@ const expectedSales = (event: EventItem) => {
 };
 
 const remainingEntries = (event: EventItem) => {
-  const remain = Number(event.target_seats || 0) - Number(event.registered_count || 0);
+  const remain = Number(event.capacity || event.target_seats || 0) - Number(event.registered_count || 0);
   return remain > 0 ? remain : 0;
 };
 
@@ -103,9 +105,12 @@ const formatDateKey = (value: string | Date) => {
   return `${y}-${m}-${day}`;
 };
 
-const monthLabel = computed(() =>
-  new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long' }).format(calendarMonth.value)
-);
+const currentMonthBase = computed(() => new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth(), 1));
+
+const nextMonthBase = computed(() => {
+  const base = currentMonthBase.value;
+  return new Date(base.getFullYear(), base.getMonth() + 1, 1);
+});
 
 const eventsByDate = computed(() => {
   const map: Record<string, EventItem[]> = {};
@@ -121,8 +126,7 @@ const eventsByDate = computed(() => {
 
 const getEventsForDate = (key: string) => eventsByDate.value[key] || [];
 
-const calendarCells = computed(() => {
-  const base = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth(), 1);
+const getCalendarCellsForMonth = (base: Date) => {
   const year = base.getFullYear();
   const month = base.getMonth();
   const firstWeekday = base.getDay();
@@ -135,14 +139,18 @@ const calendarCells = computed(() => {
   }
   while (cells.length % 7 !== 0) cells.push({ date: null, key: `blank-end-${cells.length}` });
   return cells;
-});
+};
+
+const currentMonthCells = computed(() => getCalendarCellsForMonth(currentMonthBase.value));
+const nextMonthCells = computed(() => getCalendarCellsForMonth(nextMonthBase.value));
+const monthLabel = (value: Date) => new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long' }).format(value);
 
 const prevMonth = () => {
-  calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() - 1, 1);
+  calendarBaseMonth.value = new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth() - 1, 1);
 };
 
 const nextMonth = () => {
-  calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() + 1, 1);
+  calendarBaseMonth.value = new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth() + 1, 1);
 };
 
 const openEventDetailPanel = (event: EventItem) => {
@@ -175,39 +183,70 @@ onMounted(fetchEvents);
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-bold text-gray-900">イベント開催カレンダー</h2>
+          <h2 class="text-lg font-bold text-gray-900">イベント開催カレンダー（今月・来月）</h2>
           <div class="flex items-center gap-2">
             <button @click="prevMonth" class="p-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
               <ChevronLeft class="w-4 h-4" />
             </button>
-            <span class="text-sm font-medium text-gray-700 min-w-[120px] text-center">{{ monthLabel }}</span>
             <button @click="nextMonth" class="p-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
               <ChevronRight class="w-4 h-4" />
             </button>
           </div>
         </div>
-        <div class="grid grid-cols-7 text-xs text-gray-500 mb-2">
-          <div class="py-1 text-center">日</div><div class="py-1 text-center">月</div><div class="py-1 text-center">火</div><div class="py-1 text-center">水</div><div class="py-1 text-center">木</div><div class="py-1 text-center">金</div><div class="py-1 text-center">土</div>
-        </div>
-        <div class="grid grid-cols-7 border border-gray-200 rounded-lg overflow-hidden">
-          <div v-for="cell in calendarCells" :key="cell.key" class="min-h-[72px] border-r border-b border-gray-200 p-2 text-xs" :class="{ 'bg-gray-50': !cell.date }">
-            <template v-if="cell.date">
-              <div class="text-gray-700">{{ cell.date.getDate() }}</div>
-              <div v-if="getEventsForDate(cell.key).length" class="mt-1 space-y-1">
-                <div
-                  v-for="ev in getEventsForDate(cell.key).slice(0, 2)"
-                  :key="ev.id"
-                  class="truncate px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100"
-                  @click="openEventDetailPanel(ev)"
-                >
-                  {{ ev.title }}
-                </div>
-                <div v-if="getEventsForDate(cell.key).length > 2" class="text-[10px] text-gray-500">
-                  +{{ getEventsForDate(cell.key).length - 2 }}件
-                </div>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <section>
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">{{ monthLabel(currentMonthBase) }}</h3>
+            <div class="grid grid-cols-7 text-xs text-gray-500 mb-2">
+              <div class="py-1 text-center">日</div><div class="py-1 text-center">月</div><div class="py-1 text-center">火</div><div class="py-1 text-center">水</div><div class="py-1 text-center">木</div><div class="py-1 text-center">金</div><div class="py-1 text-center">土</div>
+            </div>
+            <div class="grid grid-cols-7 border border-gray-200 rounded-lg overflow-hidden">
+              <div v-for="cell in currentMonthCells" :key="`current-${cell.key}`" class="min-h-[72px] border-r border-b border-gray-200 p-2 text-xs" :class="{ 'bg-gray-50': !cell.date }">
+                <template v-if="cell.date">
+                  <div class="text-gray-700">{{ cell.date.getDate() }}</div>
+                  <div v-if="getEventsForDate(cell.key).length" class="mt-1 space-y-1">
+                    <div
+                      v-for="ev in getEventsForDate(cell.key).slice(0, 2)"
+                      :key="ev.id"
+                      class="truncate px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100"
+                      @click="openEventDetailPanel(ev)"
+                    >
+                      {{ ev.title }}
+                    </div>
+                    <div v-if="getEventsForDate(cell.key).length > 2" class="text-[10px] text-gray-500">
+                      +{{ getEventsForDate(cell.key).length - 2 }}件
+                    </div>
+                  </div>
+                </template>
               </div>
-            </template>
-          </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">{{ monthLabel(nextMonthBase) }}</h3>
+            <div class="grid grid-cols-7 text-xs text-gray-500 mb-2">
+              <div class="py-1 text-center">日</div><div class="py-1 text-center">月</div><div class="py-1 text-center">火</div><div class="py-1 text-center">水</div><div class="py-1 text-center">木</div><div class="py-1 text-center">金</div><div class="py-1 text-center">土</div>
+            </div>
+            <div class="grid grid-cols-7 border border-gray-200 rounded-lg overflow-hidden">
+              <div v-for="cell in nextMonthCells" :key="`next-${cell.key}`" class="min-h-[72px] border-r border-b border-gray-200 p-2 text-xs" :class="{ 'bg-gray-50': !cell.date }">
+                <template v-if="cell.date">
+                  <div class="text-gray-700">{{ cell.date.getDate() }}</div>
+                  <div v-if="getEventsForDate(cell.key).length" class="mt-1 space-y-1">
+                    <div
+                      v-for="ev in getEventsForDate(cell.key).slice(0, 2)"
+                      :key="ev.id"
+                      class="truncate px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100"
+                      @click="openEventDetailPanel(ev)"
+                    >
+                      {{ ev.title }}
+                    </div>
+                    <div v-if="getEventsForDate(cell.key).length > 2" class="text-[10px] text-gray-500">
+                      +{{ getEventsForDate(cell.key).length - 2 }}件
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -233,7 +272,10 @@ onMounted(fetchEvents);
               </div>
             </div>
             <h3 class="text-lg font-bold text-gray-900 mb-2">{{ e.title }}</h3>
-            <p class="text-sm text-gray-500 mb-4 line-clamp-2">{{ e.description || '説明は未登録です' }}</p>
+            <details class="text-sm text-gray-600 mb-4 rounded-lg border border-gray-200 bg-gray-50">
+              <summary class="cursor-pointer px-3 py-2 font-medium text-gray-700">概要を表示</summary>
+              <p class="px-3 pb-3 whitespace-pre-wrap">{{ e.description || '説明は未登録です' }}</p>
+            </details>
 
             <div class="space-y-2">
               <div class="flex items-center gap-2 text-sm text-gray-600">
@@ -242,7 +284,11 @@ onMounted(fetchEvents);
               </div>
               <div class="flex items-center gap-2 text-sm text-gray-600">
                 <UsersIcon class="w-4 h-4" />
-                <span>目標着座: {{ e.target_seats || '-' }}名</span>
+                <span>エントリー目標: {{ e.capacity || '-' }}名</span>
+              </div>
+              <div class="flex items-center gap-2 text-sm text-gray-600">
+                <UsersIcon class="w-4 h-4" />
+                <span>着座目標: {{ e.target_seats || '-' }}名</span>
               </div>
               <div class="flex items-center gap-2 text-sm text-gray-600">
                 <span>単価: {{ (e.unit_price || 0).toLocaleString() }}円</span>
@@ -301,7 +347,7 @@ onMounted(fetchEvents);
             <input v-model="newEvent.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">説明</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">概要</label>
             <textarea v-model="newEvent.description" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-24"></textarea>
           </div>
           <div>
@@ -317,7 +363,11 @@ onMounted(fetchEvents);
             <input v-model="newEvent.lp_url" type="url" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">目標着座人数</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">エントリー目標人数</label>
+            <input v-model="newEvent.capacity" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">着座目標人数</label>
             <input v-model="newEvent.target_seats" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
@@ -351,7 +401,9 @@ onMounted(fetchEvents);
           <div><p class="text-gray-500">イベント名</p><p class="text-gray-900 font-semibold">{{ selectedCalendarEvent.title }}</p></div>
           <div><p class="text-gray-500">開催日時</p><p class="text-gray-900">{{ selectedCalendarEvent.event_date ? new Date(selectedCalendarEvent.event_date).toLocaleString('ja-JP') : '-' }}</p></div>
           <div><p class="text-gray-500">会場</p><p class="text-gray-900">{{ selectedCalendarEvent.location || '-' }}</p></div>
-          <div><p class="text-gray-500">説明</p><p class="text-gray-900 whitespace-pre-wrap">{{ selectedCalendarEvent.description || '-' }}</p></div>
+          <div><p class="text-gray-500">エントリー目標人数</p><p class="text-gray-900">{{ selectedCalendarEvent.capacity || '-' }}名</p></div>
+          <div><p class="text-gray-500">着座目標人数</p><p class="text-gray-900">{{ selectedCalendarEvent.target_seats || '-' }}名</p></div>
+          <div><p class="text-gray-500">概要</p><p class="text-gray-900 whitespace-pre-wrap">{{ selectedCalendarEvent.description || '-' }}</p></div>
           <div><p class="text-gray-500">LPリンク</p>
             <a v-if="selectedCalendarEvent.lp_url" :href="selectedCalendarEvent.lp_url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-700 break-all">{{ selectedCalendarEvent.lp_url }}</a>
             <p v-else class="text-gray-900">未設定</p>

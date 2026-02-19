@@ -114,17 +114,17 @@ const appliedFilters = ref({
 
 const showCreate = ref(false);
 const createError = ref('');
+const isCreatingStudent = ref(false);
 const newStudent = ref({
   source_company: '',
   name: '',
   university: '',
+  faculty: '',
+  interview_reason: '',
   prefecture: '',
   academic_track: '',
-  progress_stage: '面談調整中',
-  referral_status: '不明',
   next_meeting_date: '',
-  graduation_year: '',
-  staff_id: ''
+  graduation_year: ''
 });
 
 const fetchStudents = async () => {
@@ -188,27 +188,29 @@ const deleteStudent = async (studentId: number) => {
 };
 
 const createStudent = async () => {
+  if (isCreatingStudent.value) return;
   try {
+    isCreatingStudent.value = true;
     createError.value = '';
     if (!newStudent.value.name.trim()) {
       createError.value = '氏名は必須です。';
+      showToast(createError.value, 'error');
       return;
     }
+    showToast('学生登録を受け付けました。', 'success');
     const token = localStorage.getItem('token');
     const assignedStaffId = user.role === 'admin'
-      ? (newStudent.value.staff_id
-        ? Number(newStudent.value.staff_id)
-        : (!showAll.value ? Number(user.id) : null))
+      ? (!showAll.value ? Number(user.id) : null)
       : Number(user.id);
 
     await api.post('/api/students', {
       source_company: newStudent.value.source_company,
       name: newStudent.value.name,
       university: newStudent.value.university,
+      faculty: newStudent.value.faculty || null,
+      interview_reason: newStudent.value.interview_reason || null,
       prefecture: newStudent.value.prefecture || null,
       academic_track: newStudent.value.academic_track || null,
-      progress_stage: newStudent.value.progress_stage || '面談調整中',
-      referral_status: newStudent.value.referral_status,
       next_meeting_date: newStudent.value.next_meeting_date || null,
       graduation_year: newStudent.value.graduation_year ? Number(newStudent.value.graduation_year) : null,
       staff_id: assignedStaffId
@@ -219,19 +221,26 @@ const createStudent = async () => {
       source_company: '',
       name: '',
       university: '',
+      faculty: '',
+      interview_reason: '',
       prefecture: '',
       academic_track: '',
-      progress_stage: '面談調整中',
-      referral_status: '不明',
       next_meeting_date: '',
-      graduation_year: '',
-      staff_id: ''
+      graduation_year: ''
     };
     clearFilters();
     await fetchStudents();
+    showToast('学生登録が完了しました。', 'success');
   } catch (err: any) {
     console.error(err);
-    createError.value = err?.response?.data?.error || '学生登録に失敗しました。入力内容を確認してください。';
+    if (err?.response?.status === 409) {
+      createError.value = '同じ「氏名 + 大学 + 学部」の学生がすでに存在します。';
+    } else {
+      createError.value = err?.response?.data?.error || '学生登録に失敗しました。入力内容を確認してください。';
+    }
+    showToast(createError.value, 'error');
+  } finally {
+    isCreatingStudent.value = false;
   }
 };
 
@@ -992,6 +1001,19 @@ onMounted(() => {
             <input v-model="newStudent.university" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">学部</label>
+            <input v-model="newStudent.faculty" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">面談理由</label>
+            <select v-model="newStudent.interview_reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">未設定</option>
+              <option value="企業相談">企業相談</option>
+              <option value="就活相談">就活相談</option>
+              <option value="面接対策">面接対策</option>
+            </select>
+          </div>
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">所在地（都道府県）</label>
             <input v-model="newStudent.prefecture" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
@@ -1004,18 +1026,6 @@ onMounted(() => {
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">ステータス</label>
-            <select v-model="newStudent.referral_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-              <option v-for="v in referralStatusOptions" :key="v" :value="v">{{ v }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">進捗</label>
-            <select v-model="newStudent.progress_stage" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-              <option v-for="v in progressStageOptions" :key="`create-prog-${v}`" :value="v">{{ v }}</option>
-            </select>
-          </div>
-          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">次回面談日</label>
             <input v-model="newStudent.next_meeting_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
@@ -1023,17 +1033,12 @@ onMounted(() => {
             <label class="block text-sm font-medium text-gray-700 mb-1">卒業年</label>
             <input v-model="newStudent.graduation_year" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
-          <div v-if="user.role === 'admin'">
-            <label class="block text-sm font-medium text-gray-700 mb-1">担当</label>
-            <select v-model="newStudent.staff_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-              <option value="">未割当</option>
-              <option v-for="u in staffUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
-            </select>
-          </div>
         </div>
           <div class="mt-6 flex justify-end gap-3">
-            <button @click="createError = ''; showCreate = false" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">キャンセル</button>
-            <button @click="createStudent" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">保存</button>
+            <button @click="createError = ''; showCreate = false" :disabled="isCreatingStudent" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">キャンセル</button>
+            <button @click="createStudent" :disabled="isCreatingStudent" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              {{ isCreatingStudent ? '登録中...' : '保存' }}
+            </button>
           </div>
         </div>
       </div>

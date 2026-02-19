@@ -53,6 +53,7 @@ const form = ref({
   event_date: '',
   location: '',
   lp_url: '',
+  capacity: '',
   target_seats: '',
   unit_price: '',
   target_sales: '',
@@ -70,6 +71,7 @@ const fetchDetail = async () => {
     event_date: event.value?.event_date ? new Date(event.value.event_date).toISOString().slice(0, 16) : '',
     location: event.value?.location || '',
     lp_url: event.value?.lp_url || '',
+    capacity: event.value?.capacity ? String(event.value.capacity) : '',
     target_seats: event.value?.target_seats ? String(event.value.target_seats) : '',
     unit_price: event.value?.unit_price ? String(event.value.unit_price) : '',
     target_sales: event.value?.target_sales ? String(event.value.target_sales) : '',
@@ -95,6 +97,7 @@ const updateEvent = async () => {
     event_date: form.value.event_date || null,
     location: form.value.location || null,
     lp_url: form.value.lp_url || null,
+    capacity: form.value.capacity ? Number(form.value.capacity) : null,
     target_seats: form.value.target_seats ? Number(form.value.target_seats) : null,
     unit_price: form.value.unit_price ? Number(form.value.unit_price) : null,
     target_sales: form.value.target_sales ? Number(form.value.target_sales) : null,
@@ -163,7 +166,11 @@ onMounted(fetchDetail);
             </div>
             <div class="flex items-center gap-2 text-sm text-gray-600">
               <UsersIcon class="w-4 h-4" />
-              <span>目標人数: {{ event.target_seats || '-' }}名</span>
+              <span>エントリー目標人数: {{ event.capacity || '-' }}名</span>
+            </div>
+            <div class="flex items-center gap-2 text-sm text-gray-600">
+              <UsersIcon class="w-4 h-4" />
+              <span>着座目標人数: {{ event.target_seats || '-' }}名</span>
             </div>
             <div class="flex items-center gap-2 text-sm text-gray-600">
               <span>単価: {{ (event.unit_price || 0).toLocaleString() }}円</span>
@@ -202,7 +209,11 @@ onMounted(fetchDetail);
               <input v-model="form.lp_url" type="url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
             <div>
-              <label class="block text-xs text-gray-500 mb-1">目標人数</label>
+              <label class="block text-xs text-gray-500 mb-1">エントリー目標人数</label>
+              <input v-model="form.capacity" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">着座目標人数</label>
               <input v-model="form.target_seats" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
             <div>
@@ -218,7 +229,7 @@ onMounted(fetchDetail);
               <input v-model="form.current_sales" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
             <div>
-              <label class="block text-xs text-gray-500 mb-1">説明</label>
+              <label class="block text-xs text-gray-500 mb-1">概要</label>
               <textarea v-model="form.description" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm h-24"></textarea>
             </div>
             <button class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700" @click="updateEvent">

@@ -195,6 +195,13 @@ const statusClass = (status?: string) => {
   }
 };
 
+const formatDateTime = (value?: string | null) => {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString('ja-JP');
+};
+
 const tags = computed(() => Array.isArray(student.value?.tags) ? student.value.tags : []);
 
 onMounted(() => {
@@ -263,8 +270,22 @@ onMounted(() => {
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
+                  <p class="text-xs text-gray-500">流入経路</p>
+                  <p class="text-sm font-medium">{{ student.source_company || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <GraduationCap class="w-5 h-5" />
+                <div>
                   <p class="text-xs text-gray-500">大学</p>
-                  <p class="text-sm font-medium">{{ student.university }}</p>
+                  <p class="text-sm font-medium">{{ student.university || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <GraduationCap class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">所在地（都道府県）</p>
+                  <p class="text-sm font-medium">{{ student.prefecture || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
@@ -279,6 +300,20 @@ onMounted(() => {
                 <div>
                   <p class="text-xs text-gray-500">学部</p>
                   <p class="text-sm font-medium">{{ student.faculty || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <MessageSquare class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">面談理由</p>
+                  <p class="text-sm font-medium">{{ student.interview_reason || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <GraduationCap class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">卒業年度</p>
+                  <p class="text-sm font-medium">{{ student.graduation_year || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
@@ -321,6 +356,34 @@ onMounted(() => {
                 <div>
                   <p class="text-xs text-gray-500">ネクストアクション</p>
                   <p class="text-sm font-medium">{{ student.next_action || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <GraduationCap class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">選考ステータス</p>
+                  <p class="text-sm font-medium">{{ student.status || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <GraduationCap class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">担当ID</p>
+                  <p class="text-sm font-medium">{{ student.staff_id || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <Calendar class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">登録日時</p>
+                  <p class="text-sm font-medium">{{ formatDateTime(student.created_at) }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <Calendar class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">更新日時</p>
+                  <p class="text-sm font-medium">{{ formatDateTime(student.updated_at) }}</p>
                 </div>
               </div>
             </div>
