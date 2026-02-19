@@ -123,7 +123,6 @@ const newStudent = ref({
   interview_reason: '',
   prefecture: '',
   academic_track: '',
-  next_meeting_date: '',
   graduation_year: ''
 });
 
@@ -211,7 +210,6 @@ const createStudent = async () => {
       interview_reason: newStudent.value.interview_reason || null,
       prefecture: newStudent.value.prefecture || null,
       academic_track: newStudent.value.academic_track || null,
-      next_meeting_date: newStudent.value.next_meeting_date || null,
       graduation_year: newStudent.value.graduation_year ? Number(newStudent.value.graduation_year) : null,
       staff_id: assignedStaffId
     }, { headers: { Authorization: token } });
@@ -225,7 +223,6 @@ const createStudent = async () => {
       interview_reason: '',
       prefecture: '',
       academic_track: '',
-      next_meeting_date: '',
       graduation_year: ''
     };
     clearFilters();
@@ -1024,10 +1021,6 @@ onMounted(() => {
               <option value="文系">文系</option>
               <option value="理系">理系</option>
             </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">次回面談日</label>
-            <input v-model="newStudent.next_meeting_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">卒業年</label>
