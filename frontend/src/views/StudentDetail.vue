@@ -39,9 +39,13 @@ const referralStatusDraft = ref('不明');
 const progressStageDraft = ref('面談調整中');
 const progressStageOptions = ['面談調整中', '初回面談', '2回目面談', '顧客化', 'トビ'];
 const editingBasic = ref(false);
+const basicSaving = ref(false);
+const basicSaveMessage = ref('');
+const basicSaveError = ref('');
 const basicDraft = ref({
   name: '',
   university: '',
+  prefecture: '',
   academic_track: '',
   faculty: '',
   desired_industry: '',
@@ -59,6 +63,7 @@ const resetBasicDraft = () => {
   basicDraft.value = {
     name: student.value?.name || '',
     university: student.value?.university || '',
+    prefecture: student.value?.prefecture || '',
     academic_track: student.value?.academic_track || '',
     faculty: student.value?.faculty || '',
     desired_industry: student.value?.desired_industry || '',
@@ -206,24 +211,38 @@ const updateStatus = async () => {
 };
 
 const saveBasic = async () => {
-  const token = localStorage.getItem('token');
-  await api.put(`/api/students/${studentId}`, {
-    ...basicDraft.value,
-    graduation_year: basicDraft.value.graduation_year ? Number(basicDraft.value.graduation_year) : null,
-    next_meeting_date: basicDraft.value.next_meeting_date || null,
-    next_action: basicDraft.value.next_action || null
-  }, { headers: { Authorization: token } });
-  editingBasic.value = false;
-  fetchDetail();
+  try {
+    basicSaving.value = true;
+    basicSaveError.value = '';
+    basicSaveMessage.value = '';
+    const token = localStorage.getItem('token');
+    await api.put(`/api/students/${studentId}`, {
+      ...basicDraft.value,
+      graduation_year: basicDraft.value.graduation_year ? Number(basicDraft.value.graduation_year) : null,
+      next_meeting_date: basicDraft.value.next_meeting_date || null,
+      next_action: basicDraft.value.next_action || null
+    }, { headers: { Authorization: token } });
+    basicSaveMessage.value = '基本情報を保存しました。';
+    await fetchDetail();
+    editingBasic.value = false;
+  } catch (err: any) {
+    basicSaveError.value = err?.response?.data?.error || '保存に失敗しました。入力内容を確認してください。';
+  } finally {
+    basicSaving.value = false;
+  }
 };
 
 const startEditBasic = () => {
   resetBasicDraft();
+  basicSaveError.value = '';
+  basicSaveMessage.value = '';
   editingBasic.value = true;
 };
 
 const cancelEditBasic = () => {
   resetBasicDraft();
+  basicSaveError.value = '';
+  basicSaveMessage.value = '';
   editingBasic.value = false;
 };
 
@@ -604,9 +623,16 @@ onMounted(() => {
       <div v-if="editingBasic" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[90]">
         <div class="bg-white rounded-xl shadow-xl w-[90vw] max-w-2xl max-h-[85vh] overflow-y-auto p-6">
           <h3 class="text-lg font-bold text-gray-900 mb-4">基本情報を編集</h3>
+          <p v-if="basicSaveError" class="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            {{ basicSaveError }}
+          </p>
+          <p v-if="basicSaveMessage" class="mb-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+            {{ basicSaveMessage }}
+          </p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input v-model="basicDraft.name" type="text" placeholder="氏名" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             <input v-model="basicDraft.university" type="text" placeholder="大学" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <input v-model="basicDraft.prefecture" type="text" placeholder="所在地（都道府県）" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             <select v-model="basicDraft.academic_track" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
               <option value="">文理（未設定）</option>
               <option value="文系">文系</option>
@@ -621,6 +647,8 @@ onMounted(() => {
               <option value="">面談理由（未設定）</option>
               <option value="就活相談">就活相談</option>
               <option value="企業分析">企業分析</option>
+              <option value="企業相談">企業相談</option>
+              <option value="面接対策">面接対策</option>
             </select>
             <input v-model="basicDraft.desired_industry" type="text" placeholder="志望業界" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             <input v-model="basicDraft.desired_role" type="text" placeholder="志望職種" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
@@ -631,8 +659,8 @@ onMounted(() => {
             <button class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50" @click="cancelEditBasic">
               やめる
             </button>
-            <button class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700" @click="saveBasic">
-              保存
+            <button class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="basicSaving" @click="saveBasic">
+              {{ basicSaving ? '保存中...' : '保存' }}
             </button>
           </div>
         </div>

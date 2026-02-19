@@ -46,6 +46,7 @@ const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admi
 const selectedYomiEvent = ref<EventItem | null>(null);
 const yomiParticipants = ref<EventParticipant[]>([]);
 const yomiLoading = ref(false);
+type YomiKey = 'A' | 'B' | 'C' | 'XA';
 
 const fetchData = async () => {
   try {
@@ -164,6 +165,45 @@ const closeYomiEventDetail = () => {
   selectedYomiEvent.value = null;
   yomiParticipants.value = [];
 };
+
+const normalizedYomiKey = (status?: string): 'A' | 'B' | 'C' | 'XA' | 'OTHER' => {
+  if (status === 'A_ENTRY' || status === 'registered') return 'A';
+  if (status === 'B_WAITING') return 'B';
+  if (status === 'C_WAITING') return 'C';
+  if (status === 'XA_CANCEL' || status === 'canceled') return 'XA';
+  return 'OTHER';
+};
+
+const yomiCounts = computed(() => ({
+  A: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'A').length,
+  B: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'B').length,
+  C: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'C').length,
+  XA: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'XA').length
+}));
+
+const yomiAmounts = computed(() => {
+  const unitPrice = Number(selectedYomiEvent.value?.unit_price || 0);
+  return {
+    A: yomiCounts.value.A * unitPrice,
+    B: yomiCounts.value.B * unitPrice,
+    C: yomiCounts.value.C * unitPrice,
+    XA: yomiCounts.value.XA * unitPrice
+  };
+});
+
+const yomiGroups = computed<Record<YomiKey, EventParticipant[]>>(() => ({
+  A: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'A'),
+  B: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'B'),
+  C: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'C'),
+  XA: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'XA')
+}));
+
+const yomiSections: Array<{ key: YomiKey; label: string; accent: string }> = [
+  { key: 'A', label: 'A:エントリー', accent: 'text-blue-700 border-blue-200 bg-blue-50' },
+  { key: 'B', label: 'B:回答待ち', accent: 'text-amber-700 border-amber-200 bg-amber-50' },
+  { key: 'C', label: 'C:回答待ち', accent: 'text-purple-700 border-purple-200 bg-purple-50' },
+  { key: 'XA', label: 'XA:エントリーキャンセル', accent: 'text-red-700 border-red-200 bg-red-50' }
+];
 
 const updateYomiParticipantStatus = async (eventId: number, studentId: number, status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL') => {
   try {
@@ -301,48 +341,53 @@ onMounted(fetchData);
           </div>
           <button class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50" @click="closeYomiEventDetail">閉じる</button>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">学生名</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">大学</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">担当</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">ステータス</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">変更</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              <tr v-if="yomiLoading">
-                <td colSpan="5" class="px-3 py-8 text-center text-gray-400">読み込み中...</td>
-              </tr>
-              <tr v-for="p in yomiParticipants" :key="p.student_id" class="hover:bg-gray-50">
-                <td class="px-3 py-2 text-gray-900">{{ p.name }}</td>
-                <td class="px-3 py-2 text-gray-600">{{ p.university || '-' }}</td>
-                <td class="px-3 py-2 text-gray-600">{{ p.staff_name || '-' }}</td>
-                <td class="px-3 py-2">
-                  <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="yomiStatusClass(p.status)">
-                    {{ yomiStatusLabel(p.status) }}
-                  </span>
-                </td>
-                <td class="px-3 py-2">
-                  <select
-                    class="w-full min-w-[170px] px-2 py-1 border border-gray-300 rounded-md text-xs bg-white"
-                    :value="p.status === 'registered' ? 'A_ENTRY' : (p.status || 'A_ENTRY')"
-                    @change="selectedYomiEvent && updateYomiParticipantStatus(selectedYomiEvent.id, p.student_id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL')"
-                  >
-                    <option value="A_ENTRY">A:エントリー</option>
-                    <option value="B_WAITING">B:回答待ち</option>
-                    <option value="C_WAITING">C:回答待ち</option>
-                    <option value="XA_CANCEL">XA:エントリーキャンセル（誤登録時）</option>
-                  </select>
-                </td>
-              </tr>
-              <tr v-if="!yomiLoading && yomiParticipants.length === 0">
-                <td colSpan="5" class="px-3 py-8 text-center text-gray-400">参加予定の学生がいません。</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+          <div v-for="section in yomiSections" :key="`sum-${section.key}`" class="text-left px-3 py-2 rounded-lg border text-xs" :class="section.accent">
+            <p class="font-semibold">{{ section.label }}</p>
+            <p>{{ yomiCounts[section.key] }}名 / {{ yomiAmounts[section.key].toLocaleString() }}円</p>
+          </div>
+        </div>
+        <div v-if="yomiLoading" class="text-center text-gray-400 py-10">読み込み中...</div>
+        <div v-else class="space-y-4">
+          <div v-for="section in yomiSections" :key="section.key" class="border border-gray-200 rounded-lg overflow-hidden">
+            <div class="px-3 py-2 text-sm font-semibold border-b border-gray-200" :class="section.accent">
+              {{ section.label }}（{{ yomiCounts[section.key] }}名）
+            </div>
+            <div class="max-h-56 overflow-y-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b border-gray-200 sticky top-0">
+                  <tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">学生名</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">大学</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">担当</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">変更</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <tr v-for="p in yomiGroups[section.key]" :key="`${section.key}-${p.student_id}`" class="hover:bg-gray-50">
+                    <td class="px-3 py-2 text-gray-900">{{ p.name }}</td>
+                    <td class="px-3 py-2 text-gray-600">{{ p.university || '-' }}</td>
+                    <td class="px-3 py-2 text-gray-600">{{ p.staff_name || '-' }}</td>
+                    <td class="px-3 py-2">
+                      <select
+                        class="w-full min-w-[170px] px-2 py-1 border border-gray-300 rounded-md text-xs bg-white"
+                        :value="p.status === 'registered' ? 'A_ENTRY' : (p.status || 'A_ENTRY')"
+                        @change="selectedYomiEvent && updateYomiParticipantStatus(selectedYomiEvent.id, p.student_id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL')"
+                      >
+                        <option value="A_ENTRY">A:エントリー</option>
+                        <option value="B_WAITING">B:回答待ち</option>
+                        <option value="C_WAITING">C:回答待ち</option>
+                        <option value="XA_CANCEL">XA:エントリーキャンセル（誤登録時）</option>
+                      </select>
+                    </td>
+                  </tr>
+                  <tr v-if="yomiGroups[section.key].length === 0">
+                    <td colSpan="4" class="px-3 py-6 text-center text-gray-400">該当学生はいません。</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
