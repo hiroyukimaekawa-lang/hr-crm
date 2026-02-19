@@ -33,7 +33,7 @@ const newLog = ref('');
 const newLogType = ref<'面談' | 'エントリー' | 'その他'>('面談');
 const newLogEventId = ref('');
 const selectedEventId = ref('');
-const selectedEventStatus = ref<'A_ENTRY' | 'B_WAITING' | 'C_WAITING'>('A_ENTRY');
+const selectedEventStatus = ref<'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL'>('A_ENTRY');
 const editingStatus = ref(false);
 const referralStatusDraft = ref('不明');
 const progressStageDraft = ref('面談調整中');
@@ -151,7 +151,7 @@ const linkEvent = async () => {
   fetchDetail();
 };
 
-const updateEventParticipationStatus = async (eventId: number, status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING') => {
+const updateEventParticipationStatus = async (eventId: number, status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL') => {
   const token = localStorage.getItem('token');
   await api.put(`/api/events/${eventId}/participants/${studentId}`, { status }, { headers: { Authorization: token } });
   fetchDetail();
@@ -166,6 +166,9 @@ const participationStatusClass = (status?: string) => {
       return 'bg-amber-100 text-amber-700';
     case 'C_WAITING':
       return 'bg-purple-100 text-purple-700';
+    case 'XA_CANCEL':
+    case 'canceled':
+      return 'bg-red-100 text-red-700';
     case 'attended':
       return 'bg-green-100 text-green-700';
     default:
@@ -182,6 +185,9 @@ const participationStatusLabel = (status?: string) => {
       return 'B:回答待ち';
     case 'C_WAITING':
       return 'C:回答待ち';
+    case 'XA_CANCEL':
+    case 'canceled':
+      return 'XA:エントリーキャンセル';
     case 'attended':
       return '出席';
     default:
@@ -476,11 +482,12 @@ onMounted(() => {
                   <select
                     class="px-2 py-1 border border-gray-300 rounded-md text-xs bg-white"
                     :value="e.participation_status === 'registered' ? 'A_ENTRY' : (e.participation_status || 'A_ENTRY')"
-                    @change="updateEventParticipationStatus(e.id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING')"
+                    @change="updateEventParticipationStatus(e.id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL')"
                   >
                     <option value="A_ENTRY">A:エントリー</option>
                     <option value="B_WAITING">B:回答待ち</option>
                     <option value="C_WAITING">C:回答待ち</option>
+                    <option value="XA_CANCEL">XA:エントリーキャンセル</option>
                   </select>
                 </div>
               </div>
@@ -491,17 +498,18 @@ onMounted(() => {
 
             <div class="pt-4 border-t border-gray-100">
               <label class="block text-xs font-medium text-gray-500 mb-2">イベントに紐付ける</label>
-              <div class="flex gap-2">
-                <select v-model="selectedEventId" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                <select v-model="selectedEventId" class="sm:col-span-6 w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                   <option disabled value="">選択してください</option>
                   <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
                 </select>
-                <select v-model="selectedEventStatus" class="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                <select v-model="selectedEventStatus" class="sm:col-span-4 w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="A_ENTRY">A:エントリー</option>
                   <option value="B_WAITING">B:回答待ち</option>
                   <option value="C_WAITING">C:回答待ち</option>
+                  <option value="XA_CANCEL">XA:エントリーキャンセル（誤登録時）</option>
                 </select>
-                <button @click="linkEvent" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">追加</button>
+                <button @click="linkEvent" class="sm:col-span-2 w-full bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">追加</button>
               </div>
             </div>
           </div>

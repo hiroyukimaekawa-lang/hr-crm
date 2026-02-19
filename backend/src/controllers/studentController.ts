@@ -221,7 +221,7 @@ export const linkEvent = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { event_id, status } = req.body;
     try {
-        const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING'].includes(status) ? status : 'A_ENTRY';
+        const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING', 'XA_CANCEL'].includes(status) ? status : 'A_ENTRY';
         await pool.query(
             `INSERT INTO student_events (student_id, event_id, status)
              VALUES ($1, $2, $3)

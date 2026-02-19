@@ -31,6 +31,7 @@ const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 COUNT(se.*) FILTER (WHERE se.status = 'A_ENTRY' OR se.status = 'registered') as a_entry_count,
                 COUNT(se.*) FILTER (WHERE se.status = 'B_WAITING') as b_waiting_count,
                 COUNT(se.*) FILTER (WHERE se.status = 'C_WAITING') as c_waiting_count,
+                COUNT(se.*) FILTER (WHERE se.status = 'XA_CANCEL' OR se.status = 'canceled') as xa_cancel_count,
                 COUNT(se.*) as total_count,
                 COALESCE(
                     json_agg(

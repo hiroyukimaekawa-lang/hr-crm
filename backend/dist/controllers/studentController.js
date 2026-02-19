@@ -210,7 +210,7 @@ const linkEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
     const { event_id, status } = req.body;
     try {
-        const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING'].includes(status) ? status : 'A_ENTRY';
+        const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING', 'XA_CANCEL'].includes(status) ? status : 'A_ENTRY';
         yield db_1.default.query(`INSERT INTO student_events (student_id, event_id, status)
              VALUES ($1, $2, $3)
              ON CONFLICT (student_id, event_id) DO UPDATE SET status = EXCLUDED.status`, [id, event_id, safeStatus]);

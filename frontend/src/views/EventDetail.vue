@@ -9,7 +9,8 @@ import {
   MapPin,
   Users as UsersIcon,
   Search,
-  CheckCircle
+  CheckCircle,
+  XCircle
 } from 'lucide-vue-next';
 
 interface Participant {
@@ -123,6 +124,8 @@ const statusBadge = (status: string) => {
       return 'bg-amber-100 text-amber-700';
     case 'C_WAITING':
       return 'bg-purple-100 text-purple-700';
+    case 'XA_CANCEL':
+      return 'bg-red-100 text-red-700';
     case 'attended':
       return 'bg-green-100 text-green-700';
     case 'registered':
@@ -142,6 +145,8 @@ const statusLabel = (status: string) => {
       return 'B:回答待ち';
     case 'C_WAITING':
       return 'C:回答待ち';
+    case 'XA_CANCEL':
+      return 'XA:エントリーキャンセル';
     case 'attended':
       return '出席';
     case 'registered':
@@ -280,6 +285,7 @@ onMounted(fetchDetail);
             <button type="button" class="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs">A:エントリー</button>
             <button type="button" class="px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700 text-xs">B:回答待ち</button>
             <button type="button" class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs">C:回答待ち</button>
+            <button type="button" class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs">XA:エントリーキャンセル</button>
           </div>
 
           <div class="overflow-x-auto">
@@ -308,7 +314,7 @@ onMounted(fetchDetail);
                     </span>
                   </td>
                   <td class="px-4 py-3 text-right">
-                    <div class="inline-flex items-center gap-2 flex-wrap justify-end">
+                    <div class="inline-flex items-center gap-1.5 flex-wrap justify-end max-w-[260px] ml-auto">
                       <button class="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs hover:bg-blue-100" @click="updateStatus(p.student_id, 'A_ENTRY')" title="A:エントリー">
                         A
                       </button>
@@ -318,8 +324,14 @@ onMounted(fetchDetail);
                       <button class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs hover:bg-purple-100" @click="updateStatus(p.student_id, 'C_WAITING')" title="C:回答待ち">
                         C
                       </button>
-                      <button class="px-2 py-1 rounded border border-green-200 bg-green-50 text-green-700 text-xs hover:bg-green-100" @click="updateStatus(p.student_id, 'attended')" title="出席">
+                      <button class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs hover:bg-red-100" @click="updateStatus(p.student_id, 'XA_CANCEL')" title="XA:エントリーキャンセル">
+                        XA
+                      </button>
+                      <button class="px-2 py-1 rounded border border-green-200 bg-green-50 text-green-700 text-xs hover:bg-green-100" @click="updateStatus(p.student_id, 'attended')" title="出席（任意）">
                         <CheckCircle class="w-4 h-4" />
+                      </button>
+                      <button class="px-2 py-1 rounded border border-gray-200 bg-gray-50 text-gray-600 text-xs hover:bg-gray-100" @click="updateStatus(p.student_id, 'canceled')" title="旧キャンセル">
+                        <XCircle class="w-4 h-4" />
                       </button>
                     </div>
                   </td>

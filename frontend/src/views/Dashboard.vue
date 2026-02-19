@@ -26,6 +26,7 @@ interface EventItem {
   a_entry_count?: number;
   b_waiting_count?: number;
   c_waiting_count?: number;
+  xa_cancel_count?: number;
 }
 
 interface EventParticipant {
@@ -100,6 +101,7 @@ const eventYomiRows = computed(() =>
       a: Number(e.a_entry_count || 0),
       b: Number(e.b_waiting_count || 0),
       c: Number(e.c_waiting_count || 0),
+      xa: Number(e.xa_cancel_count || 0),
       total: Number(e.total_count || 0)
     }))
 );
@@ -113,6 +115,9 @@ const yomiStatusLabel = (status?: string) => {
       return 'B:回答待ち';
     case 'C_WAITING':
       return 'C:回答待ち';
+    case 'XA_CANCEL':
+    case 'canceled':
+      return 'XA:エントリーキャンセル';
     case 'attended':
       return '出席';
     default:
@@ -129,6 +134,9 @@ const yomiStatusClass = (status?: string) => {
       return 'bg-amber-100 text-amber-700';
     case 'C_WAITING':
       return 'bg-purple-100 text-purple-700';
+    case 'XA_CANCEL':
+    case 'canceled':
+      return 'bg-red-100 text-red-700';
     case 'attended':
       return 'bg-green-100 text-green-700';
     default:
@@ -155,6 +163,17 @@ const openYomiEventDetail = async (eventId: number) => {
 const closeYomiEventDetail = () => {
   selectedYomiEvent.value = null;
   yomiParticipants.value = [];
+};
+
+const updateYomiParticipantStatus = async (eventId: number, studentId: number, status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL') => {
+  try {
+    const token = localStorage.getItem('token');
+    await api.put(`/api/events/${eventId}/participants/${studentId}`, { status }, { headers: { Authorization: token } });
+    await openYomiEventDetail(eventId);
+    await fetchData();
+  } catch (err) {
+    console.error(err);
+  }
 };
 
 const recentStudents = computed(() => {
@@ -206,6 +225,7 @@ onMounted(fetchData);
           <span class="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs">A:エントリー</span>
           <span class="px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700 text-xs">B:回答待ち</span>
           <span class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs">C:回答待ち</span>
+          <span class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs">XA:エントリーキャンセル</span>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
@@ -216,6 +236,7 @@ onMounted(fetchData);
                 <th class="px-3 py-2 text-right text-xs font-medium text-blue-700 uppercase">A</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-amber-700 uppercase">B</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-purple-700 uppercase">C</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-red-700 uppercase">XA</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">合計</th>
               </tr>
             </thead>
@@ -230,10 +251,11 @@ onMounted(fetchData);
                 <td class="px-3 py-2 text-right text-blue-700 font-semibold">{{ row.a }}</td>
                 <td class="px-3 py-2 text-right text-amber-700 font-semibold">{{ row.b }}</td>
                 <td class="px-3 py-2 text-right text-purple-700 font-semibold">{{ row.c }}</td>
+                <td class="px-3 py-2 text-right text-red-700 font-semibold">{{ row.xa }}</td>
                 <td class="px-3 py-2 text-right text-gray-700 font-semibold">{{ row.total }}</td>
               </tr>
               <tr v-if="eventYomiRows.length === 0">
-                <td colSpan="6" class="px-3 py-8 text-center text-gray-400">イベントデータがありません。</td>
+                <td colSpan="7" class="px-3 py-8 text-center text-gray-400">イベントデータがありません。</td>
               </tr>
             </tbody>
           </table>
@@ -287,11 +309,12 @@ onMounted(fetchData);
                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">大学</th>
                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">担当</th>
                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">ステータス</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">変更</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
               <tr v-if="yomiLoading">
-                <td colSpan="4" class="px-3 py-8 text-center text-gray-400">読み込み中...</td>
+                <td colSpan="5" class="px-3 py-8 text-center text-gray-400">読み込み中...</td>
               </tr>
               <tr v-for="p in yomiParticipants" :key="p.student_id" class="hover:bg-gray-50">
                 <td class="px-3 py-2 text-gray-900">{{ p.name }}</td>
@@ -302,9 +325,21 @@ onMounted(fetchData);
                     {{ yomiStatusLabel(p.status) }}
                   </span>
                 </td>
+                <td class="px-3 py-2">
+                  <select
+                    class="w-full min-w-[170px] px-2 py-1 border border-gray-300 rounded-md text-xs bg-white"
+                    :value="p.status === 'registered' ? 'A_ENTRY' : (p.status || 'A_ENTRY')"
+                    @change="selectedYomiEvent && updateYomiParticipantStatus(selectedYomiEvent.id, p.student_id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL')"
+                  >
+                    <option value="A_ENTRY">A:エントリー</option>
+                    <option value="B_WAITING">B:回答待ち</option>
+                    <option value="C_WAITING">C:回答待ち</option>
+                    <option value="XA_CANCEL">XA:エントリーキャンセル（誤登録時）</option>
+                  </select>
+                </td>
               </tr>
               <tr v-if="!yomiLoading && yomiParticipants.length === 0">
-                <td colSpan="4" class="px-3 py-8 text-center text-gray-400">参加予定の学生がいません。</td>
+                <td colSpan="5" class="px-3 py-8 text-center text-gray-400">参加予定の学生がいません。</td>
               </tr>
             </tbody>
           </table>
