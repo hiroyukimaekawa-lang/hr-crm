@@ -33,6 +33,7 @@ const newLog = ref('');
 const newLogType = ref<'面談' | 'エントリー' | 'その他'>('面談');
 const newLogEventId = ref('');
 const selectedEventId = ref('');
+const selectedEventStatus = ref<'A_ENTRY' | 'B_WAITING' | 'C_WAITING'>('A_ENTRY');
 const editingStatus = ref(false);
 const referralStatusDraft = ref('不明');
 const progressStageDraft = ref('面談調整中');
@@ -142,10 +143,50 @@ const linkEvent = async () => {
   if (!selectedEventId.value) return;
   const token = localStorage.getItem('token');
   await api.post(`/api/students/${studentId}/events`, {
-    event_id: selectedEventId.value
+    event_id: selectedEventId.value,
+    status: selectedEventStatus.value
   }, { headers: { Authorization: token } });
   selectedEventId.value = '';
+  selectedEventStatus.value = 'A_ENTRY';
   fetchDetail();
+};
+
+const updateEventParticipationStatus = async (eventId: number, status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING') => {
+  const token = localStorage.getItem('token');
+  await api.put(`/api/events/${eventId}/participants/${studentId}`, { status }, { headers: { Authorization: token } });
+  fetchDetail();
+};
+
+const participationStatusClass = (status?: string) => {
+  switch (status) {
+    case 'A_ENTRY':
+    case 'registered':
+      return 'bg-blue-100 text-blue-700';
+    case 'B_WAITING':
+      return 'bg-amber-100 text-amber-700';
+    case 'C_WAITING':
+      return 'bg-purple-100 text-purple-700';
+    case 'attended':
+      return 'bg-green-100 text-green-700';
+    default:
+      return 'bg-gray-100 text-gray-600';
+  }
+};
+
+const participationStatusLabel = (status?: string) => {
+  switch (status) {
+    case 'A_ENTRY':
+    case 'registered':
+      return 'A:エントリー';
+    case 'B_WAITING':
+      return 'B:回答待ち';
+    case 'C_WAITING':
+      return 'C:回答待ち';
+    case 'attended':
+      return '出席';
+    default:
+      return '未設定';
+  }
 };
 
 const updateStatus = async () => {
@@ -428,9 +469,20 @@ onMounted(() => {
                   <span class="text-sm font-medium text-gray-800">{{ e.title }}</span>
                   <p class="text-xs text-gray-500">{{ new Date(e.event_date).toLocaleDateString('ja-JP') }}</p>
                 </div>
-                <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="e.participation_status === 'attended' ? 'bg-green-100 text-green-700' : e.participation_status === 'registered' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'">
-                  {{ e.participation_status === 'attended' ? '出席' : e.participation_status === 'registered' ? '申込' : 'キャンセル' }}
-                </span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="participationStatusClass(e.participation_status)">
+                    {{ participationStatusLabel(e.participation_status) }}
+                  </span>
+                  <select
+                    class="px-2 py-1 border border-gray-300 rounded-md text-xs bg-white"
+                    :value="e.participation_status === 'registered' ? 'A_ENTRY' : (e.participation_status || 'A_ENTRY')"
+                    @change="updateEventParticipationStatus(e.id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING')"
+                  >
+                    <option value="A_ENTRY">A:エントリー</option>
+                    <option value="B_WAITING">B:回答待ち</option>
+                    <option value="C_WAITING">C:回答待ち</option>
+                  </select>
+                </div>
               </div>
               <div v-if="studentEvents.length === 0" class="text-sm text-gray-400 text-center py-4">
                 イベントへの参加はありません
@@ -443,6 +495,11 @@ onMounted(() => {
                 <select v-model="selectedEventId" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                   <option disabled value="">選択してください</option>
                   <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
+                </select>
+                <select v-model="selectedEventStatus" class="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="A_ENTRY">A:エントリー</option>
+                  <option value="B_WAITING">B:回答待ち</option>
+                  <option value="C_WAITING">C:回答待ち</option>
                 </select>
                 <button @click="linkEvent" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">追加</button>
               </div>

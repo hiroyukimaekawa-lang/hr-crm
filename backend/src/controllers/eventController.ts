@@ -15,14 +15,17 @@ export const getEvents = async (req: Request, res: Response) => {
         const result = await pool.query(`
             SELECT 
                 e.*,
-                COUNT(se.*) FILTER (WHERE se.status = 'registered') as registered_count,
+                COUNT(se.*) FILTER (WHERE se.status = 'registered' OR se.status = 'A_ENTRY') as registered_count,
                 COUNT(se.*) FILTER (WHERE se.status = 'attended') as attended_count,
                 COUNT(se.*) FILTER (WHERE se.status = 'canceled') as canceled_count,
+                COUNT(se.*) FILTER (WHERE se.status = 'A_ENTRY' OR se.status = 'registered') as a_entry_count,
+                COUNT(se.*) FILTER (WHERE se.status = 'B_WAITING') as b_waiting_count,
+                COUNT(se.*) FILTER (WHERE se.status = 'C_WAITING') as c_waiting_count,
                 COUNT(se.*) as total_count,
                 COALESCE(
                     json_agg(
                         jsonb_build_object('id', s.id, 'name', s.name)
-                    ) FILTER (WHERE se.status = 'registered'),
+                    ) FILTER (WHERE se.status = 'registered' OR se.status = 'A_ENTRY'),
                     '[]'::json
                 ) as registered_participants
             FROM events e
@@ -124,9 +127,11 @@ export const getEventDetail = async (req: Request, res: Response) => {
                 s.university,
                 s.email,
                 s.phone,
-                s.graduation_year
+                s.graduation_year,
+                u.name as staff_name
             FROM student_events se
             JOIN students s ON s.id = se.student_id
+            LEFT JOIN users u ON u.id = s.staff_id
             WHERE se.event_id = $1
             ORDER BY se.created_at DESC
         `, [id]);

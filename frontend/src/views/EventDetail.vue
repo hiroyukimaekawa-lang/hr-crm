@@ -9,8 +9,7 @@ import {
   MapPin,
   Users as UsersIcon,
   Search,
-  CheckCircle,
-  XCircle
+  CheckCircle
 } from 'lucide-vue-next';
 
 interface Participant {
@@ -118,6 +117,12 @@ const filteredParticipants = computed(() => {
 
 const statusBadge = (status: string) => {
   switch (status) {
+    case 'A_ENTRY':
+      return 'bg-blue-100 text-blue-700';
+    case 'B_WAITING':
+      return 'bg-amber-100 text-amber-700';
+    case 'C_WAITING':
+      return 'bg-purple-100 text-purple-700';
     case 'attended':
       return 'bg-green-100 text-green-700';
     case 'registered':
@@ -126,6 +131,25 @@ const statusBadge = (status: string) => {
       return 'bg-gray-100 text-gray-600';
     default:
       return 'bg-slate-100 text-slate-700';
+  }
+};
+
+const statusLabel = (status: string) => {
+  switch (status) {
+    case 'A_ENTRY':
+      return 'A:エントリー';
+    case 'B_WAITING':
+      return 'B:回答待ち';
+    case 'C_WAITING':
+      return 'C:回答待ち';
+    case 'attended':
+      return '出席';
+    case 'registered':
+      return '申込';
+    case 'canceled':
+      return 'キャンセル';
+    default:
+      return status || '-';
   }
 };
 
@@ -251,6 +275,12 @@ onMounted(fetchDetail);
               />
             </div>
           </div>
+          <div class="flex flex-wrap items-center gap-2 mb-4">
+            <span class="text-xs text-gray-500">ステータス操作:</span>
+            <button type="button" class="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs">A:エントリー</button>
+            <button type="button" class="px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700 text-xs">B:回答待ち</button>
+            <button type="button" class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs">C:回答待ち</button>
+          </div>
 
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -274,19 +304,22 @@ onMounted(fetchDetail);
                   <td class="px-4 py-3 text-gray-600">{{ new Date(p.created_at).toLocaleDateString('ja-JP') }}</td>
                   <td class="px-4 py-3">
                     <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="statusBadge(p.status)">
-                      {{ p.status === 'attended' ? '出席' : p.status === 'registered' ? '申込' : 'キャンセル' }}
+                      {{ statusLabel(p.status) }}
                     </span>
                   </td>
                   <td class="px-4 py-3 text-right">
-                    <div class="inline-flex items-center gap-2">
-                      <button class="text-green-600 hover:text-green-700" @click="updateStatus(p.student_id, 'attended')" title="出席">
+                    <div class="inline-flex items-center gap-2 flex-wrap justify-end">
+                      <button class="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs hover:bg-blue-100" @click="updateStatus(p.student_id, 'A_ENTRY')" title="A:エントリー">
+                        A
+                      </button>
+                      <button class="px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700 text-xs hover:bg-amber-100" @click="updateStatus(p.student_id, 'B_WAITING')" title="B:回答待ち">
+                        B
+                      </button>
+                      <button class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs hover:bg-purple-100" @click="updateStatus(p.student_id, 'C_WAITING')" title="C:回答待ち">
+                        C
+                      </button>
+                      <button class="px-2 py-1 rounded border border-green-200 bg-green-50 text-green-700 text-xs hover:bg-green-100" @click="updateStatus(p.student_id, 'attended')" title="出席">
                         <CheckCircle class="w-4 h-4" />
-                      </button>
-                      <button class="text-gray-500 hover:text-gray-600" @click="updateStatus(p.student_id, 'registered')" title="申込">
-                        <UsersIcon class="w-4 h-4" />
-                      </button>
-                      <button class="text-red-600 hover:text-red-700" @click="updateStatus(p.student_id, 'canceled')" title="キャンセル">
-                        <XCircle class="w-4 h-4" />
                       </button>
                     </div>
                   </td>

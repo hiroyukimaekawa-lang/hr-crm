@@ -208,9 +208,12 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
 exports.getStudentDetail = getStudentDetail;
 const linkEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { event_id } = req.body;
+    const { event_id, status } = req.body;
     try {
-        yield db_1.default.query('INSERT INTO student_events (student_id, event_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, event_id]);
+        const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING'].includes(status) ? status : 'A_ENTRY';
+        yield db_1.default.query(`INSERT INTO student_events (student_id, event_id, status)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (student_id, event_id) DO UPDATE SET status = EXCLUDED.status`, [id, event_id, safeStatus]);
         res.json({ success: true });
     }
     catch (err) {
