@@ -18,6 +18,7 @@ interface EventItem {
   title: string;
   description?: string;
   event_date?: string;
+  event_dates?: string[];
   location?: string;
   capacity?: number;
   target_seats?: number;
@@ -34,7 +35,7 @@ const events = ref<EventItem[]>([]);
 const newEvent = ref({
   title: '',
   description: '',
-  event_date: '',
+  event_dates: [''],
   location: '',
   lp_url: '',
   capacity: '',
@@ -58,13 +59,14 @@ const createEvent = async () => {
   const token = localStorage.getItem('token');
   await api.post('/api/events', {
     ...newEvent.value,
+    event_dates: newEvent.value.event_dates.filter(v => String(v || '').trim()),
     capacity: newEvent.value.capacity ? Number(newEvent.value.capacity) : null,
     target_seats: newEvent.value.target_seats ? Number(newEvent.value.target_seats) : null,
     unit_price: newEvent.value.unit_price ? Number(newEvent.value.unit_price) : null,
     target_sales: newEvent.value.target_sales ? Number(newEvent.value.target_sales) : null,
     current_sales: newEvent.value.current_sales ? Number(newEvent.value.current_sales) : 0
   }, { headers: { Authorization: token } });
-  newEvent.value = { title: '', description: '', event_date: '', location: '', lp_url: '', capacity: '', target_seats: '', unit_price: '', target_sales: '', current_sales: '' };
+  newEvent.value = { title: '', description: '', event_dates: [''], location: '', lp_url: '', capacity: '', target_seats: '', unit_price: '', target_sales: '', current_sales: '' };
   showCreate.value = false;
   fetchEvents();
 };
@@ -115,14 +117,38 @@ const nextMonthBase = computed(() => {
 const eventsByDate = computed(() => {
   const map: Record<string, EventItem[]> = {};
   events.value.forEach(e => {
-    if (!e.event_date) return;
-    const key = formatDateKey(e.event_date);
-    if (!key) return;
-    if (!map[key]) map[key] = [];
-    map[key].push(e);
+    const dateList = Array.isArray(e.event_dates) && e.event_dates.length > 0
+      ? e.event_dates
+      : (e.event_date ? [e.event_date] : []);
+    dateList.forEach((d) => {
+      const key = formatDateKey(d);
+      if (!key) return;
+      if (!map[key]) map[key] = [];
+      map[key].push(e);
+    });
   });
   return map;
 });
+
+const addEventDateInput = () => {
+  newEvent.value.event_dates.push('');
+};
+
+const removeEventDateInput = (index: number) => {
+  if (newEvent.value.event_dates.length <= 1) {
+    newEvent.value.event_dates = [''];
+    return;
+  }
+  newEvent.value.event_dates.splice(index, 1);
+};
+
+const displayEventDates = (event: EventItem | null) => {
+  if (!event) return [] as string[];
+  const list = Array.isArray(event.event_dates) && event.event_dates.length > 0
+    ? event.event_dates
+    : (event.event_date ? [event.event_date] : []);
+  return list.map((d) => new Date(d).toLocaleString('ja-JP'));
+};
 
 const getEventsForDate = (key: string) => eventsByDate.value[key] || [];
 
@@ -256,7 +282,7 @@ onMounted(fetchEvents);
             <div class="flex justify-between items-start mb-4">
               <span class="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full flex items-center gap-1">
                 <Calendar class="w-3.5 h-3.5" />
-                {{ e.event_date ? new Date(e.event_date).toLocaleDateString('ja-JP') : '日程未定' }}
+                {{ displayEventDates(e)[0] || '日程未定' }}
               </span>
               <div class="flex items-center gap-2">
                 <span class="px-2 py-1 text-xs font-semibold rounded-full" :class="eventStatus(e.event_date) === '開催予定' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'">
@@ -275,6 +301,14 @@ onMounted(fetchEvents);
             <details class="text-sm text-gray-600 mb-4 rounded-lg border border-gray-200 bg-gray-50">
               <summary class="cursor-pointer px-3 py-2 font-medium text-gray-700">概要を表示</summary>
               <p class="px-3 pb-3 whitespace-pre-wrap">{{ e.description || '説明は未登録です' }}</p>
+            </details>
+            <details class="text-sm text-gray-600 mb-4 rounded-lg border border-gray-200 bg-gray-50">
+              <summary class="cursor-pointer px-3 py-2 font-medium text-gray-700">開催日程を表示</summary>
+              <div class="px-3 pb-3">
+                <p v-for="(dt, idx) in displayEventDates(e)" :key="`${e.id}-dt-${idx}`" class="text-xs text-gray-700">
+                  {{ dt }}
+                </p>
+              </div>
             </details>
 
             <div class="space-y-2">
@@ -351,8 +385,14 @@ onMounted(fetchEvents);
             <textarea v-model="newEvent.description" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-24"></textarea>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">開催日時</label>
-            <input v-model="newEvent.event_date" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <label class="block text-sm font-medium text-gray-700 mb-1">開催日時（複数可）</label>
+            <div class="space-y-2">
+              <div v-for="(_, idx) in newEvent.event_dates" :key="`new-event-date-${idx}`" class="flex gap-2">
+                <input v-model="newEvent.event_dates[idx]" type="datetime-local" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                <button type="button" class="px-3 py-2 border border-gray-300 rounded-lg text-xs hover:bg-gray-50" @click="removeEventDateInput(idx)">削除</button>
+              </div>
+              <button type="button" class="px-3 py-2 border border-blue-200 text-blue-700 rounded-lg text-xs hover:bg-blue-50" @click="addEventDateInput">日程追加</button>
+            </div>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">会場</label>
@@ -399,7 +439,11 @@ onMounted(fetchEvents);
         </div>
         <div class="space-y-3 text-sm">
           <div><p class="text-gray-500">イベント名</p><p class="text-gray-900 font-semibold">{{ selectedCalendarEvent.title }}</p></div>
-          <div><p class="text-gray-500">開催日時</p><p class="text-gray-900">{{ selectedCalendarEvent.event_date ? new Date(selectedCalendarEvent.event_date).toLocaleString('ja-JP') : '-' }}</p></div>
+          <div>
+            <p class="text-gray-500">開催日時</p>
+            <p v-for="(dt, idx) in displayEventDates(selectedCalendarEvent)" :key="`panel-dt-${idx}`" class="text-gray-900">{{ dt }}</p>
+            <p v-if="displayEventDates(selectedCalendarEvent).length === 0" class="text-gray-900">-</p>
+          </div>
           <div><p class="text-gray-500">会場</p><p class="text-gray-900">{{ selectedCalendarEvent.location || '-' }}</p></div>
           <div><p class="text-gray-500">エントリー目標人数</p><p class="text-gray-900">{{ selectedCalendarEvent.capacity || '-' }}名</p></div>
           <div><p class="text-gray-500">着座目標人数</p><p class="text-gray-900">{{ selectedCalendarEvent.target_seats || '-' }}名</p></div>

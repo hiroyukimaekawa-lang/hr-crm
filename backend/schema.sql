@@ -54,6 +54,13 @@ CREATE TABLE IF NOT EXISTS events (
     current_sales INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+-- Event Dates (multiple dates for one event title)
+CREATE TABLE IF NOT EXISTS event_dates (
+    id SERIAL PRIMARY KEY,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    event_date TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 -- Student-Event Linking
 CREATE TABLE IF NOT EXISTS student_events (
     student_id INTEGER REFERENCES students(id) ON DELETE CASCADE,
@@ -72,6 +79,20 @@ CREATE TABLE IF NOT EXISTS interview_logs (
     content TEXT NOT NULL,
     interview_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+-- Interview Schedules (for lead-time / reschedule KPI)
+CREATE TABLE IF NOT EXISTS interview_schedules (
+    id SERIAL PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    round_no INTEGER NOT NULL,
+    scheduled_at TIMESTAMP,
+    actual_at TIMESTAMP,
+    status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
+    schedule_type VARCHAR(50) NOT NULL DEFAULT '面談',
+    reschedule_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (student_id, round_no)
 );
 -- Invites
 CREATE TABLE IF NOT EXISTS invites (

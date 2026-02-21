@@ -1,6 +1,27 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 
+const ensureInterviewScheduleTables = async () => {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS interview_schedules (
+            id SERIAL PRIMARY KEY,
+            student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+            round_no INTEGER NOT NULL,
+            scheduled_at TIMESTAMP,
+            actual_at TIMESTAMP,
+            status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
+            reschedule_count INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (student_id, round_no)
+        )
+    `);
+    await pool.query(`
+        ALTER TABLE interview_schedules
+        ADD COLUMN IF NOT EXISTS schedule_type VARCHAR(50) DEFAULT '面談'
+    `);
+};
+
 const getStudentColumns = async () => {
     const result = await pool.query(
         `SELECT column_name
@@ -182,6 +203,7 @@ export const createStudent = async (req: Request, res: Response) => {
 export const getStudentDetail = async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
+        await ensureInterviewScheduleTables();
         const studentRes = await pool.query('SELECT * FROM students WHERE id = $1', [id]);
         const eventsRes = await pool.query(`
             SELECT e.*, se.status as participation_status, se.created_at as participation_created_at
@@ -205,13 +227,163 @@ export const getStudentDetail = async (req: Request, res: Response) => {
             'SELECT * FROM student_tasks WHERE student_id = $1 ORDER BY due_date NULLS LAST, created_at DESC',
             [id]
         );
+        const schedulesRes = await pool.query(
+            'SELECT * FROM interview_schedules WHERE student_id = $1 ORDER BY round_no ASC',
+            [id]
+        );
 
         res.json({
             student: studentRes.rows[0],
             events: eventsRes.rows,
             logs: logsRes.rows,
-            tasks: tasksRes.rows
+            tasks: tasksRes.rows,
+            schedules: schedulesRes.rows
         });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const createInterviewSchedule = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { round_no, scheduled_at, status, schedule_type } = req.body;
+    try {
+        await ensureInterviewScheduleTables();
+        const round = round_no
+            ? Number(round_no)
+            : Number((await pool.query('SELECT COALESCE(MAX(round_no), 0) + 1 AS next_round FROM interview_schedules WHERE student_id = $1', [id])).rows[0]?.next_round || 1);
+        const safeType = ['流入日', '面談', 'リスケ'].includes(schedule_type) ? schedule_type : '面談';
+        const safeStatus = ['scheduled', 'completed', 'rescheduled', 'canceled'].includes(status)
+            ? status
+            : (safeType === 'リスケ' ? 'rescheduled' : safeType === '流入日' ? 'completed' : 'scheduled');
+        const result = await pool.query(
+            `INSERT INTO interview_schedules (student_id, round_no, scheduled_at, status, schedule_type)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (student_id, round_no)
+             DO UPDATE SET
+                scheduled_at = EXCLUDED.scheduled_at,
+                status = EXCLUDED.status,
+                schedule_type = EXCLUDED.schedule_type,
+                updated_at = CURRENT_TIMESTAMP
+             RETURNING *`,
+            [id, round, scheduled_at || null, safeStatus, safeType]
+        );
+        res.json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const updateInterviewSchedule = async (req: Request, res: Response) => {
+    const { scheduleId } = req.params;
+    const { scheduled_at, actual_at, status, schedule_type } = req.body;
+    try {
+        await ensureInterviewScheduleTables();
+        const currentRes = await pool.query('SELECT * FROM interview_schedules WHERE id = $1', [scheduleId]);
+        if (currentRes.rows.length === 0) {
+            res.status(404).json({ error: 'Schedule not found' });
+            return;
+        }
+        const current = currentRes.rows[0];
+        const scheduledChanged = (current.scheduled_at ? new Date(current.scheduled_at).toISOString() : null)
+            !== (scheduled_at ? new Date(scheduled_at).toISOString() : null);
+        const safeType = ['流入日', '面談', 'リスケ'].includes(schedule_type) ? schedule_type : (current.schedule_type || '面談');
+        const typeChangedToReschedule = safeType === 'リスケ' && current.schedule_type !== 'リスケ';
+        const nextRescheduleCount = (scheduledChanged || typeChangedToReschedule)
+            ? Number(current.reschedule_count || 0) + 1
+            : Number(current.reschedule_count || 0);
+        let safeStatus = status || current.status;
+        if (!['scheduled', 'completed', 'rescheduled', 'canceled'].includes(safeStatus)) safeStatus = current.status;
+        if (safeType === 'リスケ') safeStatus = 'rescheduled';
+        if (scheduledChanged && safeStatus === 'scheduled') safeStatus = 'rescheduled';
+
+        const result = await pool.query(
+            `UPDATE interview_schedules
+             SET scheduled_at = COALESCE($1, scheduled_at),
+                 actual_at = COALESCE($2, actual_at),
+                 status = $3,
+                 reschedule_count = $4,
+                 schedule_type = $5,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $6
+             RETURNING *`,
+            [scheduled_at || null, actual_at || null, safeStatus, nextRescheduleCount, safeType, scheduleId]
+        );
+        res.json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const deleteInterviewSchedule = async (req: Request, res: Response) => {
+    const { scheduleId } = req.params;
+    try {
+        await ensureInterviewScheduleTables();
+        const result = await pool.query('DELETE FROM interview_schedules WHERE id = $1 RETURNING id', [scheduleId]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Schedule not found' });
+            return;
+        }
+        res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const getInterviewMetrics = async (req: Request, res: Response) => {
+    const authUser = (req as any).user as { sub?: string; role?: string } | undefined;
+    try {
+        await ensureInterviewScheduleTables();
+
+        const whereClause = authUser?.role === 'admin'
+            ? ''
+            : 'WHERE s.staff_id = $1';
+        const params = authUser?.role === 'admin' ? [] : [Number(authUser?.sub || 0)];
+
+        const sql = `
+            WITH base AS (
+                SELECT sch.*, s.created_at AS inflow_at, s.staff_id
+                FROM interview_schedules sch
+                JOIN students s ON s.id = sch.student_id
+                ${whereClause}
+            ),
+            first_round AS (
+                SELECT *
+                FROM base
+                WHERE round_no = 1
+            ),
+            follow_round AS (
+                SELECT
+                    b.*,
+                    LAG(b.actual_at) OVER (PARTITION BY b.student_id ORDER BY b.round_no) AS prev_actual_at
+                FROM base b
+                WHERE b.round_no >= 2
+            )
+            SELECT
+                ROUND(AVG(EXTRACT(EPOCH FROM (fr.actual_at - fr.inflow_at)) / 86400.0)::numeric, 2) AS first_lead_time_days_avg,
+                COUNT(*) FILTER (WHERE fr.round_no = 1) AS first_total,
+                COUNT(*) FILTER (WHERE fr.round_no = 1 AND fr.reschedule_count > 0) AS first_rescheduled,
+                ROUND(
+                    (
+                        COUNT(*) FILTER (WHERE fr.round_no = 1 AND fr.reschedule_count > 0)::numeric
+                        / NULLIF(COUNT(*) FILTER (WHERE fr.round_no = 1), 0)
+                    ) * 100
+                , 2) AS first_reschedule_rate,
+                ROUND(AVG(EXTRACT(EPOCH FROM (fw.actual_at - fw.prev_actual_at)) / 86400.0)::numeric, 2) AS followup_lead_time_days_avg,
+                COUNT(*) FILTER (WHERE fw.round_no >= 2) AS followup_total,
+                COUNT(*) FILTER (WHERE fw.round_no >= 2 AND fw.reschedule_count > 0) AS followup_rescheduled,
+                ROUND(
+                    (
+                        COUNT(*) FILTER (WHERE fw.round_no >= 2 AND fw.reschedule_count > 0)::numeric
+                        / NULLIF(COUNT(*) FILTER (WHERE fw.round_no >= 2), 0)
+                    ) * 100
+                , 2) AS followup_reschedule_rate
+            FROM first_round fr
+            FULL OUTER JOIN follow_round fw ON false
+        `;
+
+        const result = await pool.query(sql, params);
+        res.json(result.rows[0] || {});
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

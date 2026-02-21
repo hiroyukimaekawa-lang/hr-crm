@@ -14,6 +14,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteEvent = exports.updateParticipantStatus = exports.getEventDetail = exports.updateEvent = exports.createEvent = exports.getEvents = void 0;
 const db_1 = __importDefault(require("../config/db"));
+const ensureEventDatesTable = () => __awaiter(void 0, void 0, void 0, function* () {
+    yield db_1.default.query(`
+        CREATE TABLE IF NOT EXISTS event_dates (
+            id SERIAL PRIMARY KEY,
+            event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            event_date TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+});
+const normalizeEventDates = (event_dates, event_date) => {
+    const raw = Array.isArray(event_dates) ? event_dates : [];
+    const merged = raw.length > 0 ? raw : (event_date ? [event_date] : []);
+    const cleaned = merged
+        .map((v) => String(v || '').trim())
+        .filter((v) => !!v);
+    return Array.from(new Set(cleaned));
+};
 const getEventColumns = () => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield db_1.default.query(`SELECT column_name
          FROM information_schema.columns
@@ -22,27 +40,47 @@ const getEventColumns = () => __awaiter(void 0, void 0, void 0, function* () {
 });
 const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        yield ensureEventDatesTable();
         const result = yield db_1.default.query(`
             SELECT 
                 e.*,
-                COUNT(se.*) FILTER (WHERE se.status = 'registered' OR se.status = 'A_ENTRY') as registered_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'attended') as attended_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'canceled') as canceled_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'A_ENTRY' OR se.status = 'registered') as a_entry_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'B_WAITING') as b_waiting_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'C_WAITING') as c_waiting_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'XA_CANCEL' OR se.status = 'canceled') as xa_cancel_count,
-                COUNT(se.*) as total_count,
-                COALESCE(
-                    json_agg(
-                        jsonb_build_object('id', s.id, 'name', s.name)
-                    ) FILTER (WHERE se.status = 'registered' OR se.status = 'A_ENTRY'),
-                    '[]'::json
-                ) as registered_participants
+                COALESCE(date_stats.event_dates, '[]'::json) as event_dates,
+                COALESCE(part_stats.registered_count, 0) as registered_count,
+                COALESCE(part_stats.attended_count, 0) as attended_count,
+                COALESCE(part_stats.canceled_count, 0) as canceled_count,
+                COALESCE(part_stats.a_entry_count, 0) as a_entry_count,
+                COALESCE(part_stats.b_waiting_count, 0) as b_waiting_count,
+                COALESCE(part_stats.c_waiting_count, 0) as c_waiting_count,
+                COALESCE(part_stats.xa_cancel_count, 0) as xa_cancel_count,
+                COALESCE(part_stats.total_count, 0) as total_count,
+                COALESCE(part_stats.registered_participants, '[]'::json) as registered_participants
             FROM events e
-            LEFT JOIN student_events se ON e.id = se.event_id
-            LEFT JOIN students s ON s.id = se.student_id
-            GROUP BY e.id
+            LEFT JOIN LATERAL (
+                SELECT
+                    json_agg(to_char(ed.event_date, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') ORDER BY ed.event_date ASC) as event_dates
+                FROM event_dates ed
+                WHERE ed.event_id = e.id
+            ) date_stats ON true
+            LEFT JOIN LATERAL (
+                SELECT
+                    COUNT(se.*) FILTER (WHERE se.status = 'registered' OR se.status = 'A_ENTRY') as registered_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'attended') as attended_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'canceled') as canceled_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'A_ENTRY' OR se.status = 'registered') as a_entry_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'B_WAITING') as b_waiting_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'C_WAITING') as c_waiting_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'XA_CANCEL' OR se.status = 'canceled') as xa_cancel_count,
+                    COUNT(se.*) as total_count,
+                    COALESCE(
+                        json_agg(
+                            jsonb_build_object('id', s.id, 'name', s.name)
+                        ) FILTER (WHERE se.status = 'registered' OR se.status = 'A_ENTRY'),
+                        '[]'::json
+                    ) as registered_participants
+                FROM student_events se
+                LEFT JOIN students s ON s.id = se.student_id
+                WHERE se.event_id = e.id
+            ) part_stats ON true
             ORDER BY e.event_date DESC
         `);
         res.json(result.rows);
@@ -53,8 +91,11 @@ const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.getEvents = getEvents;
 const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { title, description, event_date, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
     try {
+        yield ensureEventDatesTable();
+        const dates = normalizeEventDates(event_dates, event_date);
+        const primaryDate = dates.length > 0 ? dates[0] : null;
         const cols = yield getEventColumns();
         const insertCols = [];
         const insertVals = [];
@@ -66,7 +107,7 @@ const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         };
         push('title', title);
         push('description', description || null);
-        push('event_date', event_date || null);
+        push('event_date', primaryDate);
         push('location', location || null);
         push('lp_url', lp_url || null);
         push('capacity', capacity || null);
@@ -75,18 +116,31 @@ const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         push('target_sales', target_sales || null);
         push('current_sales', current_sales || 0);
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
+        yield db_1.default.query('BEGIN');
         const result = yield db_1.default.query(`INSERT INTO events (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`, insertVals);
-        res.json(result.rows[0]);
+        const created = result.rows[0];
+        for (const dt of dates) {
+            yield db_1.default.query('INSERT INTO event_dates (event_id, event_date) VALUES ($1, $2)', [created.id, dt]);
+        }
+        yield db_1.default.query('COMMIT');
+        res.json(Object.assign(Object.assign({}, created), { event_dates: dates }));
     }
     catch (err) {
+        try {
+            yield db_1.default.query('ROLLBACK');
+        }
+        catch (_a) { }
         res.status(500).json({ error: err.message });
     }
 });
 exports.createEvent = createEvent;
 const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { title, description, event_date, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
     try {
+        yield ensureEventDatesTable();
+        const dates = normalizeEventDates(event_dates, event_date);
+        const primaryDate = dates.length > 0 ? dates[0] : null;
         const cols = yield getEventColumns();
         const setParts = [];
         const values = [];
@@ -98,7 +152,7 @@ const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         };
         pushSet('title', title);
         pushSet('description', description || null);
-        pushSet('event_date', event_date || null);
+        pushSet('event_date', primaryDate);
         pushSet('location', location || null);
         pushSet('lp_url', lp_url || null);
         pushSet('capacity', capacity || null);
@@ -107,17 +161,28 @@ const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         pushSet('target_sales', target_sales || null);
         pushSet('current_sales', current_sales || 0);
         values.push(id);
+        yield db_1.default.query('BEGIN');
         const result = yield db_1.default.query(`UPDATE events
              SET ${setParts.join(', ')}
              WHERE id = $${values.length}
              RETURNING *`, values);
         if (result.rows.length === 0) {
+            yield db_1.default.query('ROLLBACK');
             res.status(404).json({ error: 'Event not found' });
             return;
         }
-        res.json(result.rows[0]);
+        yield db_1.default.query('DELETE FROM event_dates WHERE event_id = $1', [id]);
+        for (const dt of dates) {
+            yield db_1.default.query('INSERT INTO event_dates (event_id, event_date) VALUES ($1, $2)', [id, dt]);
+        }
+        yield db_1.default.query('COMMIT');
+        res.json(Object.assign(Object.assign({}, result.rows[0]), { event_dates: dates }));
     }
     catch (err) {
+        try {
+            yield db_1.default.query('ROLLBACK');
+        }
+        catch (_a) { }
         res.status(500).json({ error: err.message });
     }
 });
@@ -125,7 +190,9 @@ exports.updateEvent = updateEvent;
 const getEventDetail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
     try {
+        yield ensureEventDatesTable();
         const eventRes = yield db_1.default.query('SELECT * FROM events WHERE id = $1', [id]);
+        const eventDatesRes = yield db_1.default.query('SELECT event_date FROM event_dates WHERE event_id = $1 ORDER BY event_date ASC', [id]);
         const participantsRes = yield db_1.default.query(`
             SELECT 
                 se.student_id,
@@ -144,7 +211,7 @@ const getEventDetail = (req, res) => __awaiter(void 0, void 0, void 0, function*
             ORDER BY se.created_at DESC
         `, [id]);
         res.json({
-            event: eventRes.rows[0],
+            event: Object.assign(Object.assign({}, eventRes.rows[0]), { event_dates: eventDatesRes.rows.map((r) => r.event_date) }),
             participants: participantsRes.rows
         });
     }

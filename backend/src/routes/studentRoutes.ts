@@ -13,16 +13,24 @@ import {
     addStudentTask,
     deleteStudentTask,
     deleteStudent,
-    importStudents
+    importStudents,
+    createInterviewSchedule,
+    updateInterviewSchedule,
+    deleteInterviewSchedule,
+    getInterviewMetrics
 } from '../controllers/studentController';
 import { authenticate } from '../middlewares/auth';
 
 const router = express.Router();
 
 router.get('/', authenticate, getStudents);
+router.get('/metrics/interviews', authenticate, getInterviewMetrics);
 router.post('/', authenticate, createStudent);
 router.post('/import', authenticate, importStudents);
 router.get('/:id', authenticate, getStudentDetail);
+router.post('/:id/interview-schedules', authenticate, createInterviewSchedule);
+router.put('/interview-schedules/:scheduleId', authenticate, updateInterviewSchedule);
+router.delete('/interview-schedules/:scheduleId', authenticate, deleteInterviewSchedule);
 router.post('/:id/events', authenticate, linkEvent);
 router.post('/interview-logs', authenticate, addInterviewLog);
 router.delete('/interview-logs/:id', authenticate, deleteInterviewLog);

@@ -47,6 +47,16 @@ const selectedYomiEvent = ref<EventItem | null>(null);
 const yomiParticipants = ref<EventParticipant[]>([]);
 const yomiLoading = ref(false);
 type YomiKey = 'A' | 'B' | 'C' | 'XA';
+const interviewMetrics = ref({
+  first_lead_time_days_avg: null as number | null,
+  first_total: 0,
+  first_rescheduled: 0,
+  first_reschedule_rate: null as number | null,
+  followup_lead_time_days_avg: null as number | null,
+  followup_total: 0,
+  followup_rescheduled: 0,
+  followup_reschedule_rate: null as number | null
+});
 
 const fetchData = async () => {
   try {
@@ -57,6 +67,17 @@ const fetchData = async () => {
     ]);
     students.value = studentRes.data;
     events.value = eventRes.data;
+    const metricsRes = await api.get('/api/students/metrics/interviews', { headers: { Authorization: token } });
+    interviewMetrics.value = {
+      first_lead_time_days_avg: metricsRes.data?.first_lead_time_days_avg ?? null,
+      first_total: Number(metricsRes.data?.first_total || 0),
+      first_rescheduled: Number(metricsRes.data?.first_rescheduled || 0),
+      first_reschedule_rate: metricsRes.data?.first_reschedule_rate ?? null,
+      followup_lead_time_days_avg: metricsRes.data?.followup_lead_time_days_avg ?? null,
+      followup_total: Number(metricsRes.data?.followup_total || 0),
+      followup_rescheduled: Number(metricsRes.data?.followup_rescheduled || 0),
+      followup_reschedule_rate: metricsRes.data?.followup_reschedule_rate ?? null
+    };
   } catch (err) {
     console.error(err);
   }
@@ -313,6 +334,27 @@ onMounted(fetchData);
               <p class="text-2xl font-bold text-gray-900">{{ card.value }}</p>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">初回面談リードタイム平均</p>
+          <p class="text-2xl font-bold text-gray-900">{{ interviewMetrics.first_lead_time_days_avg ?? '-' }}<span class="text-sm font-medium text-gray-500">日</span></p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">初回面談リスケ</p>
+          <p class="text-2xl font-bold text-gray-900">{{ interviewMetrics.first_rescheduled }}<span class="text-sm font-medium text-gray-500">件</span></p>
+          <p class="text-xs text-gray-500 mt-1">率: {{ interviewMetrics.first_reschedule_rate ?? '-' }}% / 母数: {{ interviewMetrics.first_total }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">2回目以降リードタイム平均</p>
+          <p class="text-2xl font-bold text-gray-900">{{ interviewMetrics.followup_lead_time_days_avg ?? '-' }}<span class="text-sm font-medium text-gray-500">日</span></p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">2回目以降リスケ</p>
+          <p class="text-2xl font-bold text-gray-900">{{ interviewMetrics.followup_rescheduled }}<span class="text-sm font-medium text-gray-500">件</span></p>
+          <p class="text-xs text-gray-500 mt-1">率: {{ interviewMetrics.followup_reschedule_rate ?? '-' }}% / 母数: {{ interviewMetrics.followup_total }}</p>
         </div>
       </div>
 

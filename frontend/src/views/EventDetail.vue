@@ -29,6 +29,7 @@ interface EventDetail {
   title: string;
   description?: string;
   event_date?: string;
+  event_dates?: string[];
   location?: string;
   capacity?: number;
   target_seats?: number;
@@ -50,7 +51,7 @@ const saveMessage = ref('');
 const form = ref({
   title: '',
   description: '',
-  event_date: '',
+  event_dates: [''],
   location: '',
   lp_url: '',
   capacity: '',
@@ -68,7 +69,9 @@ const fetchDetail = async () => {
   form.value = {
     title: event.value?.title || '',
     description: event.value?.description || '',
-    event_date: event.value?.event_date ? new Date(event.value.event_date).toISOString().slice(0, 16) : '',
+    event_dates: Array.isArray(event.value?.event_dates) && event.value!.event_dates!.length > 0
+      ? event.value!.event_dates!.map((d: string) => new Date(d).toISOString().slice(0, 16))
+      : (event.value?.event_date ? [new Date(event.value.event_date).toISOString().slice(0, 16)] : ['']),
     location: event.value?.location || '',
     lp_url: event.value?.lp_url || '',
     capacity: event.value?.capacity ? String(event.value.capacity) : '',
@@ -94,7 +97,7 @@ const updateEvent = async () => {
   await api.put(`/api/events/${eventId}`, {
     title: form.value.title,
     description: form.value.description,
-    event_date: form.value.event_date || null,
+    event_dates: form.value.event_dates.filter(v => String(v || '').trim()),
     location: form.value.location || null,
     lp_url: form.value.lp_url || null,
     capacity: form.value.capacity ? Number(form.value.capacity) : null,
@@ -106,6 +109,26 @@ const updateEvent = async () => {
   isEditing.value = false;
   saveMessage.value = 'イベント情報を更新しました。';
   fetchDetail();
+};
+
+const addFormEventDate = () => {
+  form.value.event_dates.push('');
+};
+
+const removeFormEventDate = (index: number) => {
+  if (form.value.event_dates.length <= 1) {
+    form.value.event_dates = [''];
+    return;
+  }
+  form.value.event_dates.splice(index, 1);
+};
+
+const displayEventDates = (ev: EventDetail | null) => {
+  if (!ev) return [] as string[];
+  const list = Array.isArray(ev.event_dates) && ev.event_dates.length > 0
+    ? ev.event_dates
+    : (ev.event_date ? [ev.event_date] : []);
+  return list.map((d) => new Date(d).toLocaleString('ja-JP'));
 };
 
 const filteredParticipants = computed(() => {
@@ -187,7 +210,10 @@ onMounted(fetchDetail);
           <div class="space-y-3 mb-4">
             <div class="flex items-center gap-2 text-sm text-gray-600">
               <Calendar class="w-4 h-4" />
-              <span>{{ event.event_date ? new Date(event.event_date).toLocaleString('ja-JP') : '未定' }}</span>
+              <div>
+                <p v-for="(dt, idx) in displayEventDates(event)" :key="`detail-date-${idx}`">{{ dt }}</p>
+                <p v-if="displayEventDates(event).length === 0">未定</p>
+              </div>
             </div>
             <div class="flex items-center gap-2 text-sm text-gray-600">
               <MapPin class="w-4 h-4" />
@@ -226,8 +252,14 @@ onMounted(fetchDetail);
               <input v-model="form.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
             <div>
-              <label class="block text-xs text-gray-500 mb-1">開催日時</label>
-              <input v-model="form.event_date" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              <label class="block text-xs text-gray-500 mb-1">開催日時（複数可）</label>
+              <div class="space-y-2">
+                <div v-for="(_, idx) in form.event_dates" :key="`edit-event-date-${idx}`" class="flex gap-2">
+                  <input v-model="form.event_dates[idx]" type="datetime-local" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  <button type="button" class="px-3 py-2 border border-gray-300 rounded-lg text-xs hover:bg-gray-50" @click="removeFormEventDate(idx)">削除</button>
+                </div>
+                <button type="button" class="px-3 py-2 border border-blue-200 text-blue-700 rounded-lg text-xs hover:bg-blue-50" @click="addFormEventDate">日程追加</button>
+              </div>
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">場所（オンライン/会場）</label>

@@ -24,10 +24,13 @@ const student = ref<any>({});
 const studentEvents = ref<any[]>([]);
 const interviewLogs = ref<any[]>([]);
 const tasks = ref<any[]>([]);
+const interviewSchedules = ref<any[]>([]);
 const expandedLogId = ref<number | null>(null);
 const availableEvents = ref<any[]>([]);
 const newTaskDate = ref('');
 const newTaskContent = ref('');
+const newScheduleDate = ref('');
+const newScheduleType = ref<'流入日' | '面談' | 'リスケ'>('面談');
 
 const newLog = ref('');
 const newLogType = ref<'面談' | 'エントリー' | 'その他'>('面談');
@@ -85,6 +88,7 @@ const fetchDetail = async () => {
   studentEvents.value = res.data.events;
   interviewLogs.value = res.data.logs;
   tasks.value = res.data.tasks || [];
+  interviewSchedules.value = res.data.schedules || [];
   referralStatusDraft.value = student.value?.referral_status || '不明';
   progressStageDraft.value = student.value?.progress_stage || '面談調整中';
   resetBasicDraft();
@@ -134,6 +138,31 @@ const addTask = async () => {
   }, { headers: { Authorization: token } });
   newTaskDate.value = '';
   newTaskContent.value = '';
+  fetchDetail();
+};
+
+const addInterviewSchedule = async () => {
+  const token = localStorage.getItem('token');
+  await api.post(`/api/students/${studentId}/interview-schedules`, {
+    scheduled_at: newScheduleDate.value || null,
+    schedule_type: newScheduleType.value,
+    status: newScheduleType.value === 'リスケ' ? 'rescheduled' : 'scheduled'
+  }, { headers: { Authorization: token } });
+  newScheduleDate.value = '';
+  newScheduleType.value = '面談';
+  fetchDetail();
+};
+
+const updateInterviewSchedule = async (scheduleId: number, payload: { scheduled_at?: string | null; actual_at?: string | null; status?: string; schedule_type?: '流入日' | '面談' | 'リスケ' }) => {
+  const token = localStorage.getItem('token');
+  await api.put(`/api/students/interview-schedules/${scheduleId}`, payload, { headers: { Authorization: token } });
+  fetchDetail();
+};
+
+const deleteInterviewSchedule = async (scheduleId: number) => {
+  if (!confirm('この面談予定を削除しますか？')) return;
+  const token = localStorage.getItem('token');
+  await api.delete(`/api/students/interview-schedules/${scheduleId}`, { headers: { Authorization: token } });
   fetchDetail();
 };
 
@@ -479,6 +508,50 @@ onMounted(() => {
               <textarea v-model="newTaskContent" placeholder="やることを入力..." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm h-24"></textarea>
               <button class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700" @click="addTask">
                 タスクを追加
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4">面談スケジュール</h2>
+            <div class="space-y-2 mb-4">
+              <div v-for="sc in interviewSchedules" :key="sc.id" class="rounded-lg border border-gray-200 p-3">
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="text-sm font-semibold text-gray-900">第{{ sc.round_no }}回</div>
+                  <button class="text-gray-400 hover:text-red-600" @click="deleteInterviewSchedule(sc.id)">
+                    <Trash2 class="w-4 h-4" />
+                  </button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="date"
+                    :value="sc.scheduled_at ? new Date(sc.scheduled_at).toISOString().slice(0,10) : ''"
+                    @change="updateInterviewSchedule(sc.id, { scheduled_at: ($event.target as HTMLInputElement).value || null })"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                  <select
+                    :value="sc.schedule_type || '面談'"
+                    @change="updateInterviewSchedule(sc.id, { schedule_type: ($event.target as HTMLSelectElement).value as '流入日' | '面談' | 'リスケ' })"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="流入日">流入日</option>
+                    <option value="面談">面談</option>
+                    <option value="リスケ">リスケ</option>
+                  </select>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">リスケ回数: {{ sc.reschedule_count || 0 }}</p>
+              </div>
+              <p v-if="interviewSchedules.length === 0" class="text-sm text-gray-400">面談予定はまだありません</p>
+            </div>
+            <div class="pt-3 border-t border-gray-100 flex flex-col sm:flex-row gap-2">
+              <input v-model="newScheduleDate" type="date" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              <select v-model="newScheduleType" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="流入日">流入日</option>
+                <option value="面談">面談</option>
+                <option value="リスケ">リスケ</option>
+              </select>
+              <button class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700" @click="addInterviewSchedule">
+                追加
               </button>
             </div>
           </div>

@@ -1,6 +1,26 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 
+const ensureEventDatesTable = async () => {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS event_dates (
+            id SERIAL PRIMARY KEY,
+            event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            event_date TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+};
+
+const normalizeEventDates = (event_dates: any, event_date: any): string[] => {
+    const raw = Array.isArray(event_dates) ? event_dates : [];
+    const merged = raw.length > 0 ? raw : (event_date ? [event_date] : []);
+    const cleaned = merged
+        .map((v: any) => String(v || '').trim())
+        .filter((v: string) => !!v);
+    return Array.from(new Set(cleaned));
+};
+
 const getEventColumns = async () => {
     const result = await pool.query(
         `SELECT column_name
@@ -12,27 +32,47 @@ const getEventColumns = async () => {
 
 export const getEvents = async (req: Request, res: Response) => {
     try {
+        await ensureEventDatesTable();
         const result = await pool.query(`
             SELECT 
                 e.*,
-                COUNT(se.*) FILTER (WHERE se.status = 'registered' OR se.status = 'A_ENTRY') as registered_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'attended') as attended_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'canceled') as canceled_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'A_ENTRY' OR se.status = 'registered') as a_entry_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'B_WAITING') as b_waiting_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'C_WAITING') as c_waiting_count,
-                COUNT(se.*) FILTER (WHERE se.status = 'XA_CANCEL' OR se.status = 'canceled') as xa_cancel_count,
-                COUNT(se.*) as total_count,
-                COALESCE(
-                    json_agg(
-                        jsonb_build_object('id', s.id, 'name', s.name)
-                    ) FILTER (WHERE se.status = 'registered' OR se.status = 'A_ENTRY'),
-                    '[]'::json
-                ) as registered_participants
+                COALESCE(date_stats.event_dates, '[]'::json) as event_dates,
+                COALESCE(part_stats.registered_count, 0) as registered_count,
+                COALESCE(part_stats.attended_count, 0) as attended_count,
+                COALESCE(part_stats.canceled_count, 0) as canceled_count,
+                COALESCE(part_stats.a_entry_count, 0) as a_entry_count,
+                COALESCE(part_stats.b_waiting_count, 0) as b_waiting_count,
+                COALESCE(part_stats.c_waiting_count, 0) as c_waiting_count,
+                COALESCE(part_stats.xa_cancel_count, 0) as xa_cancel_count,
+                COALESCE(part_stats.total_count, 0) as total_count,
+                COALESCE(part_stats.registered_participants, '[]'::json) as registered_participants
             FROM events e
-            LEFT JOIN student_events se ON e.id = se.event_id
-            LEFT JOIN students s ON s.id = se.student_id
-            GROUP BY e.id
+            LEFT JOIN LATERAL (
+                SELECT
+                    json_agg(to_char(ed.event_date, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') ORDER BY ed.event_date ASC) as event_dates
+                FROM event_dates ed
+                WHERE ed.event_id = e.id
+            ) date_stats ON true
+            LEFT JOIN LATERAL (
+                SELECT
+                    COUNT(se.*) FILTER (WHERE se.status = 'registered' OR se.status = 'A_ENTRY') as registered_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'attended') as attended_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'canceled') as canceled_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'A_ENTRY' OR se.status = 'registered') as a_entry_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'B_WAITING') as b_waiting_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'C_WAITING') as c_waiting_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'XA_CANCEL' OR se.status = 'canceled') as xa_cancel_count,
+                    COUNT(se.*) as total_count,
+                    COALESCE(
+                        json_agg(
+                            jsonb_build_object('id', s.id, 'name', s.name)
+                        ) FILTER (WHERE se.status = 'registered' OR se.status = 'A_ENTRY'),
+                        '[]'::json
+                    ) as registered_participants
+                FROM student_events se
+                LEFT JOIN students s ON s.id = se.student_id
+                WHERE se.event_id = e.id
+            ) part_stats ON true
             ORDER BY e.event_date DESC
         `);
         res.json(result.rows);
@@ -42,8 +82,11 @@ export const getEvents = async (req: Request, res: Response) => {
 };
 
 export const createEvent = async (req: Request, res: Response) => {
-    const { title, description, event_date, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
     try {
+        await ensureEventDatesTable();
+        const dates = normalizeEventDates(event_dates, event_date);
+        const primaryDate = dates.length > 0 ? dates[0] : null;
         const cols = await getEventColumns();
         const insertCols: string[] = [];
         const insertVals: any[] = [];
@@ -54,7 +97,7 @@ export const createEvent = async (req: Request, res: Response) => {
         };
         push('title', title);
         push('description', description || null);
-        push('event_date', event_date || null);
+        push('event_date', primaryDate);
         push('location', location || null);
         push('lp_url', lp_url || null);
         push('capacity', capacity || null);
@@ -64,20 +107,33 @@ export const createEvent = async (req: Request, res: Response) => {
         push('current_sales', current_sales || 0);
 
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
+        await pool.query('BEGIN');
         const result = await pool.query(
             `INSERT INTO events (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`,
             insertVals
         );
-        res.json(result.rows[0]);
+        const created = result.rows[0];
+        for (const dt of dates) {
+            await pool.query(
+                'INSERT INTO event_dates (event_id, event_date) VALUES ($1, $2)',
+                [created.id, dt]
+            );
+        }
+        await pool.query('COMMIT');
+        res.json({ ...created, event_dates: dates });
     } catch (err: any) {
+        try { await pool.query('ROLLBACK'); } catch {}
         res.status(500).json({ error: err.message });
     }
 };
 
 export const updateEvent = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { title, description, event_date, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
     try {
+        await ensureEventDatesTable();
+        const dates = normalizeEventDates(event_dates, event_date);
+        const primaryDate = dates.length > 0 ? dates[0] : null;
         const cols = await getEventColumns();
         const setParts: string[] = [];
         const values: any[] = [];
@@ -88,7 +144,7 @@ export const updateEvent = async (req: Request, res: Response) => {
         };
         pushSet('title', title);
         pushSet('description', description || null);
-        pushSet('event_date', event_date || null);
+        pushSet('event_date', primaryDate);
         pushSet('location', location || null);
         pushSet('lp_url', lp_url || null);
         pushSet('capacity', capacity || null);
@@ -98,6 +154,7 @@ export const updateEvent = async (req: Request, res: Response) => {
         pushSet('current_sales', current_sales || 0);
         values.push(id);
 
+        await pool.query('BEGIN');
         const result = await pool.query(
             `UPDATE events
              SET ${setParts.join(', ')}
@@ -106,11 +163,21 @@ export const updateEvent = async (req: Request, res: Response) => {
             values
         );
         if (result.rows.length === 0) {
+            await pool.query('ROLLBACK');
             res.status(404).json({ error: 'Event not found' });
             return;
         }
-        res.json(result.rows[0]);
+        await pool.query('DELETE FROM event_dates WHERE event_id = $1', [id]);
+        for (const dt of dates) {
+            await pool.query(
+                'INSERT INTO event_dates (event_id, event_date) VALUES ($1, $2)',
+                [id, dt]
+            );
+        }
+        await pool.query('COMMIT');
+        res.json({ ...result.rows[0], event_dates: dates });
     } catch (err: any) {
+        try { await pool.query('ROLLBACK'); } catch {}
         res.status(500).json({ error: err.message });
     }
 };
@@ -118,7 +185,12 @@ export const updateEvent = async (req: Request, res: Response) => {
 export const getEventDetail = async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
+        await ensureEventDatesTable();
         const eventRes = await pool.query('SELECT * FROM events WHERE id = $1', [id]);
+        const eventDatesRes = await pool.query(
+            'SELECT event_date FROM event_dates WHERE event_id = $1 ORDER BY event_date ASC',
+            [id]
+        );
         const participantsRes = await pool.query(`
             SELECT 
                 se.student_id,
@@ -138,7 +210,10 @@ export const getEventDetail = async (req: Request, res: Response) => {
         `, [id]);
 
         res.json({
-            event: eventRes.rows[0],
+            event: {
+                ...eventRes.rows[0],
+                event_dates: eventDatesRes.rows.map((r: any) => r.event_date)
+            },
             participants: participantsRes.rows
         });
     } catch (err: any) {
