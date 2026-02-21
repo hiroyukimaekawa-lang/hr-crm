@@ -38,6 +38,8 @@ interface Student {
   staff_name?: string;
 }
 
+const INVALID_SOURCE_COMPANY_VALUES = new Set(['初回平均(日)', '氏名', '流入経路', 'source_company']);
+
 interface StaffUser {
   id: number;
   name: string;
@@ -175,6 +177,12 @@ const updateStudentMeta = async (studentId: number, payload: { referral_status?:
   }
 };
 
+const normalizeSourceCompany = (value?: string | null) => {
+  const v = String(value || '').trim();
+  if (!v) return '';
+  return INVALID_SOURCE_COMPANY_VALUES.has(v) ? '' : v;
+};
+
 const deleteStudent = async (studentId: number) => {
   if (!confirm('この学生を削除しますか？')) return;
   try {
@@ -296,7 +304,7 @@ const filteredStudents = computed(() => {
       String(s.staff_id || '') === af.staffFilter;
     const matchesSourceCompany =
       af.selectedSourceCompanies.length === 0 ||
-      af.selectedSourceCompanies.includes(s.source_company || '');
+      af.selectedSourceCompanies.includes(normalizeSourceCompany(s.source_company));
     const matchesPrefecture =
       af.selectedPrefectures.length === 0 ||
       af.selectedPrefectures.includes(s.prefecture || '');
@@ -336,7 +344,10 @@ const filteredStudents = computed(() => {
 
 const sourceCompanyOptions = computed(() => {
   const set = new Set<string>();
-  students.value.forEach(s => s.source_company && set.add(s.source_company));
+  students.value.forEach(s => {
+    const val = normalizeSourceCompany(s.source_company);
+    if (val) set.add(val);
+  });
   return Array.from(set);
 });
 
@@ -411,7 +422,7 @@ const downloadCsv = () => {
 
   const getValue = (s: Student, key: ExportColumnKey) => {
     switch (key) {
-      case 'source_company': return s.source_company || '';
+      case 'source_company': return normalizeSourceCompany(s.source_company) || '';
       case 'name': return s.name || '';
       case 'university': return s.university || '';
       case 'progress_stage': return s.progress_stage || '面談調整中';
@@ -800,7 +811,7 @@ onMounted(() => {
           <div class="grid grid-cols-2 gap-2 text-xs mb-3">
             <div>
               <p class="text-gray-400">流入経路</p>
-              <p class="text-gray-700">{{ s.source_company || '-' }}</p>
+              <p class="text-gray-700">{{ normalizeSourceCompany(s.source_company) || '-' }}</p>
             </div>
             <div>
               <p class="text-gray-400">所在地</p>
@@ -910,7 +921,7 @@ onMounted(() => {
           </thead>
           <tbody class="divide-y divide-gray-200 bg-white">
             <tr v-for="s in filteredStudents" :key="s.id" class="hover:bg-gray-50 transition-colors">
-              <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{{ s.source_company || '-' }}</td>
+              <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{{ normalizeSourceCompany(s.source_company) || '-' }}</td>
               <td class="px-4 py-3 text-xs font-medium text-gray-900 whitespace-nowrap">{{ s.name }}</td>
               <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.university }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">

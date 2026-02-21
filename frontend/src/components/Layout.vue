@@ -11,7 +11,8 @@ import {
   Menu,
   PanelLeftOpen,
   PanelLeftClose,
-  X
+  X,
+  ChartColumn
 } from 'lucide-vue-next';
 import {
   clearNotifications,
@@ -35,7 +36,8 @@ const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admi
 const menuItems = computed(() => [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard, path: '/dashboard' },
   { id: 'students', label: '学生一覧', icon: Users, path: '/students' },
-  { id: 'events', label: 'イベント一覧', icon: Calendar, path: '/events' }
+  { id: 'events', label: 'イベント一覧', icon: Calendar, path: '/events' },
+  { id: 'lead-time', label: 'リードタイム', icon: ChartColumn, path: '/lead-time' }
 ]);
 
 const logout = () => {

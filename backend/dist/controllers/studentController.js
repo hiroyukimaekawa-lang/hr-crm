@@ -317,23 +317,34 @@ const deleteInterviewSchedule = (req, res) => __awaiter(void 0, void 0, void 0, 
 exports.deleteInterviewSchedule = deleteInterviewSchedule;
 const getInterviewMetrics = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const authUser = req.user;
+    const sourceCompany = String(req.query.source_company || '').trim();
+    const groupBySource = String(req.query.group_by_source || '') === '1';
     try {
         yield ensureInterviewScheduleTables();
-        const whereClause = (authUser === null || authUser === void 0 ? void 0 : authUser.role) === 'admin'
-            ? ''
-            : 'WHERE s.staff_id = $1';
-        const params = (authUser === null || authUser === void 0 ? void 0 : authUser.role) === 'admin' ? [] : [Number((authUser === null || authUser === void 0 ? void 0 : authUser.sub) || 0)];
-        const sql = `
+        const conditions = [];
+        const params = [];
+        if ((authUser === null || authUser === void 0 ? void 0 : authUser.role) !== 'admin') {
+            params.push(Number((authUser === null || authUser === void 0 ? void 0 : authUser.sub) || 0));
+            conditions.push(`s.staff_id = $${params.length}`);
+        }
+        if (sourceCompany) {
+            params.push(sourceCompany);
+            conditions.push(`COALESCE(s.source_company, '') = $${params.length}`);
+        }
+        const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+        const commonCte = `
             WITH base AS (
-                SELECT sch.*, s.created_at AS inflow_at, s.staff_id
+                SELECT
+                    sch.*,
+                    s.created_at AS inflow_at,
+                    s.staff_id,
+                    COALESCE(s.source_company, '未設定') AS source_company
                 FROM interview_schedules sch
                 JOIN students s ON s.id = sch.student_id
                 ${whereClause}
             ),
             first_round AS (
-                SELECT *
-                FROM base
-                WHERE round_no = 1
+                SELECT * FROM base WHERE round_no = 1
             ),
             follow_round AS (
                 SELECT
@@ -342,27 +353,78 @@ const getInterviewMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
                 FROM base b
                 WHERE b.round_no >= 2
             )
+        `;
+        if (groupBySource) {
+            const groupedSql = `
+                ${commonCte}
+                , first_agg AS (
+                    SELECT
+                        source_company,
+                        ROUND(AVG(EXTRACT(EPOCH FROM (actual_at - inflow_at)) / 86400.0)::numeric, 2) AS first_lead_time_days_avg,
+                        COUNT(*) AS first_total,
+                        COUNT(*) FILTER (WHERE reschedule_count > 0) AS first_rescheduled,
+                        ROUND((COUNT(*) FILTER (WHERE reschedule_count > 0)::numeric / NULLIF(COUNT(*), 0)) * 100, 2) AS first_reschedule_rate
+                    FROM first_round
+                    GROUP BY source_company
+                ),
+                follow_agg AS (
+                    SELECT
+                        source_company,
+                        ROUND(AVG(EXTRACT(EPOCH FROM (actual_at - prev_actual_at)) / 86400.0)::numeric, 2) AS followup_lead_time_days_avg,
+                        COUNT(*) AS followup_total,
+                        COUNT(*) FILTER (WHERE reschedule_count > 0) AS followup_rescheduled,
+                        ROUND((COUNT(*) FILTER (WHERE reschedule_count > 0)::numeric / NULLIF(COUNT(*), 0)) * 100, 2) AS followup_reschedule_rate
+                    FROM follow_round
+                    GROUP BY source_company
+                )
+                SELECT
+                    src.source_company,
+                    fa.first_lead_time_days_avg,
+                    COALESCE(fa.first_total, 0) AS first_total,
+                    COALESCE(fa.first_rescheduled, 0) AS first_rescheduled,
+                    fa.first_reschedule_rate,
+                    fwa.followup_lead_time_days_avg,
+                    COALESCE(fwa.followup_total, 0) AS followup_total,
+                    COALESCE(fwa.followup_rescheduled, 0) AS followup_rescheduled,
+                    fwa.followup_reschedule_rate
+                FROM (SELECT DISTINCT source_company FROM base) src
+                LEFT JOIN first_agg fa ON fa.source_company = src.source_company
+                LEFT JOIN follow_agg fwa ON fwa.source_company = src.source_company
+                ORDER BY src.source_company ASC
+            `;
+            const grouped = yield db_1.default.query(groupedSql, params);
+            res.json(grouped.rows);
+            return;
+        }
+        const sql = `
+            ${commonCte}
+            , first_agg AS (
+                SELECT
+                    ROUND(AVG(EXTRACT(EPOCH FROM (actual_at - inflow_at)) / 86400.0)::numeric, 2) AS first_lead_time_days_avg,
+                    COUNT(*) AS first_total,
+                    COUNT(*) FILTER (WHERE reschedule_count > 0) AS first_rescheduled,
+                    ROUND((COUNT(*) FILTER (WHERE reschedule_count > 0)::numeric / NULLIF(COUNT(*), 0)) * 100, 2) AS first_reschedule_rate
+                FROM first_round
+            ),
+            follow_agg AS (
+                SELECT
+                    ROUND(AVG(EXTRACT(EPOCH FROM (actual_at - prev_actual_at)) / 86400.0)::numeric, 2) AS followup_lead_time_days_avg,
+                    COUNT(*) AS followup_total,
+                    COUNT(*) FILTER (WHERE reschedule_count > 0) AS followup_rescheduled,
+                    ROUND((COUNT(*) FILTER (WHERE reschedule_count > 0)::numeric / NULLIF(COUNT(*), 0)) * 100, 2) AS followup_reschedule_rate
+                FROM follow_round
+            )
             SELECT
-                ROUND(AVG(EXTRACT(EPOCH FROM (fr.actual_at - fr.inflow_at)) / 86400.0)::numeric, 2) AS first_lead_time_days_avg,
-                COUNT(*) FILTER (WHERE fr.round_no = 1) AS first_total,
-                COUNT(*) FILTER (WHERE fr.round_no = 1 AND fr.reschedule_count > 0) AS first_rescheduled,
-                ROUND(
-                    (
-                        COUNT(*) FILTER (WHERE fr.round_no = 1 AND fr.reschedule_count > 0)::numeric
-                        / NULLIF(COUNT(*) FILTER (WHERE fr.round_no = 1), 0)
-                    ) * 100
-                , 2) AS first_reschedule_rate,
-                ROUND(AVG(EXTRACT(EPOCH FROM (fw.actual_at - fw.prev_actual_at)) / 86400.0)::numeric, 2) AS followup_lead_time_days_avg,
-                COUNT(*) FILTER (WHERE fw.round_no >= 2) AS followup_total,
-                COUNT(*) FILTER (WHERE fw.round_no >= 2 AND fw.reschedule_count > 0) AS followup_rescheduled,
-                ROUND(
-                    (
-                        COUNT(*) FILTER (WHERE fw.round_no >= 2 AND fw.reschedule_count > 0)::numeric
-                        / NULLIF(COUNT(*) FILTER (WHERE fw.round_no >= 2), 0)
-                    ) * 100
-                , 2) AS followup_reschedule_rate
-            FROM first_round fr
-            FULL OUTER JOIN follow_round fw ON false
+                fa.first_lead_time_days_avg,
+                COALESCE(fa.first_total, 0) AS first_total,
+                COALESCE(fa.first_rescheduled, 0) AS first_rescheduled,
+                fa.first_reschedule_rate,
+                fwa.followup_lead_time_days_avg,
+                COALESCE(fwa.followup_total, 0) AS followup_total,
+                COALESCE(fwa.followup_rescheduled, 0) AS followup_rescheduled,
+                fwa.followup_reschedule_rate
+            FROM first_agg fa
+            CROSS JOIN follow_agg fwa
         `;
         const result = yield db_1.default.query(sql, params);
         res.json(result.rows[0] || {});
@@ -561,6 +623,7 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
     let updated = 0;
     let skipped = 0;
     const seen = new Set();
+    const headerLikeValues = new Set(['氏名', '流入経路', '初回平均(日)', 'source_company', 'name']);
     try {
         const cols = yield getStudentColumns();
         for (const s of students) {
@@ -568,9 +631,12 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
             const university = s.university || '';
             const prefecture = s.prefecture || '';
             const dedupeKey = `${name}__${university}__${prefecture}`;
-            if (!name) {
+            if (!name || headerLikeValues.has(String(name).trim())) {
                 skipped++;
                 continue;
+            }
+            if (headerLikeValues.has(String(s.source_company || '').trim())) {
+                s.source_company = null;
             }
             if (seen.has(dedupeKey)) {
                 skipped++;
