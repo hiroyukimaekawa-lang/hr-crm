@@ -298,7 +298,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
 
 <template>
   <Layout>
-    <div class="p-8">
+    <div class="p-4 md:p-6 lg:p-8">
       <div class="mb-8">
         <h1 class="text-3xl font-bold text-gray-900">ダッシュボード</h1>
         <p class="text-gray-500 mt-2">最新の統計と活動状況を確認できます。</p>
@@ -456,7 +456,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
 
     <div v-if="selectedYomiEvent" class="fixed inset-0 z-[90]">
       <div class="absolute inset-0 bg-black/30" @click="closeYomiEventDetail" />
-      <div class="absolute right-0 top-0 h-full w-full md:w-1/2 bg-white shadow-2xl border-l border-gray-200 p-6 overflow-y-auto">
+      <div class="absolute right-0 top-0 h-full w-full md:w-2/3 lg:w-1/2 bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <div>
             <h2 class="text-xl font-bold text-gray-900">イベント参加詳細</h2>

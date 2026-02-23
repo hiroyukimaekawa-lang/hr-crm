@@ -94,7 +94,7 @@ watch(sourceCompanyFilter, fetchMetrics);
 
 <template>
   <Layout>
-    <div class="p-4 md:p-8">
+    <div class="p-4 md:p-6 lg:p-8">
       <div class="mb-6">
         <h1 class="text-3xl font-bold text-gray-900">リードタイム</h1>
         <p class="text-gray-500 mt-2">流入経路ごとの面談リードタイムとリスケ率を確認できます。</p>

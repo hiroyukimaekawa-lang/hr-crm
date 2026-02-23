@@ -186,7 +186,7 @@ onMounted(fetchDetail);
 
 <template>
   <Layout>
-    <div class="p-8">
+    <div class="p-4 md:p-6 lg:p-8">
       <div class="flex items-center justify-between mb-6">
         <button @click="router.push('/events')" class="text-gray-600 hover:text-gray-900 flex items-center gap-2">
           <ArrowLeft class="w-4 h-4" />

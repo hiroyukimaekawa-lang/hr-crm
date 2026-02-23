@@ -581,7 +581,7 @@ onMounted(() => {
 
 <template>
   <Layout>
-    <div class="p-4 md:p-8">
+    <div class="p-4 md:p-6 lg:p-8">
       <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
         <div>
           <h1 class="text-3xl font-bold text-gray-900">学生一覧</h1>
@@ -799,7 +799,7 @@ onMounted(() => {
         {{ toastMessage }}
       </div>
 
-      <div class="md:hidden space-y-3">
+      <div class="lg:hidden space-y-3">
         <div v-for="s in filteredStudents" :key="`mobile-${s.id}`" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div class="flex items-start justify-between gap-3 mb-3">
             <div>
@@ -901,7 +901,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+      <div class="hidden lg:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
         <table class="w-full min-w-[1100px]">
           <thead class="bg-gray-50 border-b border-gray-200 text-xs">
             <tr>
@@ -990,7 +990,7 @@ onMounted(() => {
 
     <teleport to="body">
       <div v-if="showCreate" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[80]">
-        <div class="bg-white rounded-xl shadow-xl w-[80vw] max-w-4xl h-[80vh] overflow-y-auto p-6">
+        <div class="bg-white rounded-xl shadow-xl w-[95vw] md:w-[88vw] lg:w-[80vw] max-w-4xl h-[85vh] md:h-[80vh] overflow-y-auto p-4 md:p-6">
           <h2 class="text-xl font-bold mb-4 text-gray-900">新規学生登録</h2>
           <p v-if="createError" class="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
             {{ createError }}

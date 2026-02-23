@@ -192,7 +192,7 @@ onMounted(fetchEvents);
 
 <template>
   <Layout>
-    <div class="p-4 md:p-8">
+    <div class="p-4 md:p-6 lg:p-8">
       <div class="flex flex-col gap-4 md:flex-row md:justify-between md:items-center mb-8">
         <div>
           <h1 class="text-3xl font-bold text-gray-900">イベント一覧</h1>
@@ -372,10 +372,12 @@ onMounted(fetchEvents);
       </div>
     </div>
 
-    <div v-if="showCreate" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-        <h2 class="text-xl font-bold mb-4 text-gray-900">新規イベント作成</h2>
-        <div class="space-y-4">
+    <div v-if="showCreate" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-3 md:p-4 z-50">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div class="px-4 md:px-6 pt-4 md:pt-6 pb-3 border-b border-gray-100">
+          <h2 class="text-xl font-bold text-gray-900">新規イベント作成</h2>
+        </div>
+        <div class="px-4 md:px-6 py-4 overflow-y-auto space-y-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">イベント名</label>
             <input v-model="newEvent.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
@@ -423,7 +425,7 @@ onMounted(fetchEvents);
             <input v-model="newEvent.current_sales" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
         </div>
-        <div class="mt-6 flex justify-end gap-3">
+        <div class="px-4 md:px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-white">
           <button @click="showCreate = false" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">キャンセル</button>
           <button @click="createEvent" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">作成</button>
         </div>
@@ -432,7 +434,7 @@ onMounted(fetchEvents);
 
     <div v-if="selectedCalendarEvent" class="fixed inset-0 z-[90]">
       <div class="absolute inset-0 bg-black/20" @click="closeEventDetailPanel" />
-      <div class="absolute right-0 top-0 h-full w-full md:w-1/2 bg-white shadow-2xl border-l border-gray-200 p-6 overflow-y-auto">
+      <div class="absolute right-0 top-0 h-full w-full md:w-2/3 lg:w-1/2 bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-bold text-gray-900">イベント詳細</h2>
           <button class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50" @click="closeEventDetailPanel">閉じる</button>

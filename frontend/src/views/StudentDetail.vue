@@ -307,7 +307,7 @@ onMounted(() => {
 
 <template>
   <Layout>
-    <div class="p-8">
+    <div class="p-4 md:p-6 lg:p-8">
       <div class="mb-8 flex items-center gap-4">
         <button @click="router.push('/students')" class="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-600">
           <ArrowLeft class="w-6 h-6" />
@@ -318,7 +318,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
         <div class="lg:col-span-1 space-y-8">
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div class="flex items-start justify-between mb-4">
