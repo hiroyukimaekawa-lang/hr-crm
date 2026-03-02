@@ -14,31 +14,47 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.importStudents = exports.deleteStudent = exports.deleteStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
 const db_1 = __importDefault(require("../config/db"));
+let interviewScheduleTableReady = false;
+let interviewScheduleTablePromise = null;
+let cachedStudentColumns = null;
 const ensureInterviewScheduleTables = () => __awaiter(void 0, void 0, void 0, function* () {
-    yield db_1.default.query(`
-        CREATE TABLE IF NOT EXISTS interview_schedules (
-            id SERIAL PRIMARY KEY,
-            student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-            round_no INTEGER NOT NULL,
-            scheduled_at TIMESTAMP,
-            actual_at TIMESTAMP,
-            status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
-            reschedule_count INTEGER NOT NULL DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (student_id, round_no)
-        )
-    `);
-    yield db_1.default.query(`
-        ALTER TABLE interview_schedules
-        ADD COLUMN IF NOT EXISTS schedule_type VARCHAR(50) DEFAULT '面談'
-    `);
+    if (interviewScheduleTableReady)
+        return;
+    if (!interviewScheduleTablePromise) {
+        interviewScheduleTablePromise = (() => __awaiter(void 0, void 0, void 0, function* () {
+            yield db_1.default.query(`
+                CREATE TABLE IF NOT EXISTS interview_schedules (
+                    id SERIAL PRIMARY KEY,
+                    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                    round_no INTEGER NOT NULL,
+                    scheduled_at TIMESTAMP,
+                    actual_at TIMESTAMP,
+                    status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
+                    reschedule_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (student_id, round_no)
+                )
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE interview_schedules
+                ADD COLUMN IF NOT EXISTS schedule_type VARCHAR(50) DEFAULT '面談'
+            `);
+            interviewScheduleTableReady = true;
+        }))().finally(() => {
+            interviewScheduleTablePromise = null;
+        });
+    }
+    yield interviewScheduleTablePromise;
 });
 const getStudentColumns = () => __awaiter(void 0, void 0, void 0, function* () {
+    if (cachedStudentColumns)
+        return cachedStudentColumns;
     const result = yield db_1.default.query(`SELECT column_name
          FROM information_schema.columns
          WHERE table_schema = 'public' AND table_name = 'students'`);
-    return new Set(result.rows.map((r) => r.column_name));
+    cachedStudentColumns = new Set(result.rows.map((r) => r.column_name));
+    return cachedStudentColumns;
 });
 const normalizeGraduationYear = (value) => {
     if (value === null || value === undefined)

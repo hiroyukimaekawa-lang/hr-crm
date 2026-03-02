@@ -14,6 +14,10 @@ const pool = new pg_1.Pool({
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: Number(process.env.DB_PORT),
+    max: Number(process.env.DB_POOL_MAX || 10),
+    idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 10000),
+    keepAlive: true,
     ssl: {
         rejectUnauthorized: false,
         servername: process.env.DB_SSL_SERVERNAME || process.env.DB_HOST,

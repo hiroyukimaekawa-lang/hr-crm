@@ -1,4 +1,13 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -9,6 +18,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const studentRoutes_1 = __importDefault(require("./routes/studentRoutes"));
 const eventRoutes_1 = __importDefault(require("./routes/eventRoutes"));
+const performance_1 = require("./config/performance");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 // Middleware
@@ -24,6 +34,7 @@ app.post('/api/login', (req, res) => res.redirect(307, '/api/auth/login'));
 app.post('/api/interview-logs', (req, res) => res.redirect(307, '/api/students/interview-logs'));
 app.delete('/api/interview-logs/:id', (req, res) => res.redirect(307, `/api/students/interview-logs/${req.params.id}`));
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, () => __awaiter(void 0, void 0, void 0, function* () {
     console.log(`Server running on port ${PORT}`);
-});
+    yield (0, performance_1.applyPerformanceOptimizations)();
+}));

@@ -1,34 +1,49 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 
+let interviewScheduleTableReady = false;
+let interviewScheduleTablePromise: Promise<void> | null = null;
+let cachedStudentColumns: Set<string> | null = null;
+
 const ensureInterviewScheduleTables = async () => {
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS interview_schedules (
-            id SERIAL PRIMARY KEY,
-            student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-            round_no INTEGER NOT NULL,
-            scheduled_at TIMESTAMP,
-            actual_at TIMESTAMP,
-            status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
-            reschedule_count INTEGER NOT NULL DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (student_id, round_no)
-        )
-    `);
-    await pool.query(`
-        ALTER TABLE interview_schedules
-        ADD COLUMN IF NOT EXISTS schedule_type VARCHAR(50) DEFAULT '面談'
-    `);
+    if (interviewScheduleTableReady) return;
+    if (!interviewScheduleTablePromise) {
+        interviewScheduleTablePromise = (async () => {
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS interview_schedules (
+                    id SERIAL PRIMARY KEY,
+                    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                    round_no INTEGER NOT NULL,
+                    scheduled_at TIMESTAMP,
+                    actual_at TIMESTAMP,
+                    status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
+                    reschedule_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (student_id, round_no)
+                )
+            `);
+            await pool.query(`
+                ALTER TABLE interview_schedules
+                ADD COLUMN IF NOT EXISTS schedule_type VARCHAR(50) DEFAULT '面談'
+            `);
+            interviewScheduleTableReady = true;
+        })().finally(() => {
+            interviewScheduleTablePromise = null;
+        });
+    }
+    await interviewScheduleTablePromise;
 };
 
 const getStudentColumns = async () => {
+    if (cachedStudentColumns) return cachedStudentColumns;
     const result = await pool.query(
         `SELECT column_name
          FROM information_schema.columns
          WHERE table_schema = 'public' AND table_name = 'students'`
     );
-    return new Set(result.rows.map((r: any) => r.column_name));
+    cachedStudentColumns = new Set(result.rows.map((r: any) => r.column_name));
+    return cachedStudentColumns;
 };
 
 const normalizeGraduationYear = (value: any) => {

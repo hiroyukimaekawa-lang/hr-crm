@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import studentRoutes from './routes/studentRoutes';
 import eventRoutes from './routes/eventRoutes';
+import { applyPerformanceOptimizations } from './config/performance';
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.post('/api/interview-logs', (req, res) => res.redirect(307, '/api/students/i
 app.delete('/api/interview-logs/:id', (req, res) => res.redirect(307, `/api/students/interview-logs/${req.params.id}`));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
+    await applyPerformanceOptimizations();
 });

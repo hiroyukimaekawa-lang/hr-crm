@@ -14,15 +14,28 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteEvent = exports.updateParticipantStatus = exports.getEventDetail = exports.updateEvent = exports.createEvent = exports.getEvents = void 0;
 const db_1 = __importDefault(require("../config/db"));
+let eventDatesTableReady = false;
+let eventDatesTablePromise = null;
+let cachedEventColumns = null;
 const ensureEventDatesTable = () => __awaiter(void 0, void 0, void 0, function* () {
-    yield db_1.default.query(`
-        CREATE TABLE IF NOT EXISTS event_dates (
-            id SERIAL PRIMARY KEY,
-            event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-            event_date TIMESTAMP NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
+    if (eventDatesTableReady)
+        return;
+    if (!eventDatesTablePromise) {
+        eventDatesTablePromise = (() => __awaiter(void 0, void 0, void 0, function* () {
+            yield db_1.default.query(`
+                CREATE TABLE IF NOT EXISTS event_dates (
+                    id SERIAL PRIMARY KEY,
+                    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                    event_date TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            eventDatesTableReady = true;
+        }))().finally(() => {
+            eventDatesTablePromise = null;
+        });
+    }
+    yield eventDatesTablePromise;
 });
 const normalizeEventDates = (event_dates, event_date) => {
     const raw = Array.isArray(event_dates) ? event_dates : [];
@@ -33,10 +46,13 @@ const normalizeEventDates = (event_dates, event_date) => {
     return Array.from(new Set(cleaned));
 };
 const getEventColumns = () => __awaiter(void 0, void 0, void 0, function* () {
+    if (cachedEventColumns)
+        return cachedEventColumns;
     const result = yield db_1.default.query(`SELECT column_name
          FROM information_schema.columns
          WHERE table_schema = 'public' AND table_name = 'events'`);
-    return new Set(result.rows.map((r) => r.column_name));
+    cachedEventColumns = new Set(result.rows.map((r) => r.column_name));
+    return cachedEventColumns;
 });
 const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -52,8 +68,7 @@ const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 COALESCE(part_stats.b_waiting_count, 0) as b_waiting_count,
                 COALESCE(part_stats.c_waiting_count, 0) as c_waiting_count,
                 COALESCE(part_stats.xa_cancel_count, 0) as xa_cancel_count,
-                COALESCE(part_stats.total_count, 0) as total_count,
-                COALESCE(part_stats.registered_participants, '[]'::json) as registered_participants
+                COALESCE(part_stats.total_count, 0) as total_count
             FROM events e
             LEFT JOIN LATERAL (
                 SELECT
@@ -70,15 +85,8 @@ const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     COUNT(se.*) FILTER (WHERE se.status = 'B_WAITING') as b_waiting_count,
                     COUNT(se.*) FILTER (WHERE se.status = 'C_WAITING') as c_waiting_count,
                     COUNT(se.*) FILTER (WHERE se.status = 'XA_CANCEL' OR se.status = 'canceled') as xa_cancel_count,
-                    COUNT(se.*) as total_count,
-                    COALESCE(
-                        json_agg(
-                            jsonb_build_object('id', s.id, 'name', s.name)
-                        ) FILTER (WHERE se.status = 'registered' OR se.status = 'A_ENTRY'),
-                        '[]'::json
-                    ) as registered_participants
+                    COUNT(se.*) as total_count
                 FROM student_events se
-                LEFT JOIN students s ON s.id = se.student_id
                 WHERE se.event_id = e.id
             ) part_stats ON true
             ORDER BY e.event_date DESC

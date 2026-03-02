@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { api } from '../lib/api';
 import { useRouter } from 'vue-router';
 import Layout from '../components/Layout.vue';
@@ -97,6 +97,9 @@ const nextMeetingDateFrom = ref('');
 const nextMeetingDateTo = ref('');
 const taskDueDateFrom = ref('');
 const taskDueDateTo = ref('');
+const currentPage = ref(1);
+const pageSize = 50;
+const isDesktop = ref(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
 
 const appliedFilters = ref({
   selectedNames: [] as string[],
@@ -158,7 +161,12 @@ const updateStaff = async (studentId: number, staffId: number | null) => {
     await api.put(`/api/students/${studentId}/staff`, {
       staff_id: staffId
     }, { headers: { Authorization: token } });
-    fetchStudents();
+    const selected = staffUsers.value.find((u) => u.id === staffId);
+    students.value = students.value.map((s) => (
+      s.id === studentId
+        ? { ...s, staff_id: staffId, staff_name: selected?.name }
+        : s
+    ));
   } catch (err) {
     console.error(err);
   }
@@ -171,7 +179,9 @@ const updateStudentMeta = async (studentId: number, payload: { referral_status?:
   try {
     const token = localStorage.getItem('token');
     await api.put(`/api/students/${studentId}/meta`, payload, { headers: { Authorization: token } });
-    fetchStudents();
+    students.value = students.value.map((s) => (
+      s.id === studentId ? { ...s, ...payload } : s
+    ));
   } catch (err) {
     console.error(err);
   }
@@ -188,7 +198,7 @@ const deleteStudent = async (studentId: number) => {
   try {
     const token = localStorage.getItem('token');
     await api.delete(`/api/students/${studentId}`, { headers: { Authorization: token } });
-    fetchStudents();
+    students.value = students.value.filter((s) => s.id !== studentId);
   } catch (err) {
     console.error(err);
   }
@@ -342,6 +352,13 @@ const filteredStudents = computed(() => {
   });
 });
 
+const totalFilteredCount = computed(() => filteredStudents.value.length);
+const totalPages = computed(() => Math.max(1, Math.ceil(totalFilteredCount.value / pageSize)));
+const pagedStudents = computed(() => {
+  const start = (currentPage.value - 1) * pageSize;
+  return filteredStudents.value.slice(start, start + pageSize);
+});
+
 const sourceCompanyOptions = computed(() => {
   const set = new Set<string>();
   students.value.forEach(s => {
@@ -373,6 +390,7 @@ const applyFilters = () => {
     taskDueDateFrom: taskDueDateFrom.value,
     taskDueDateTo: taskDueDateTo.value
   };
+  currentPage.value = 1;
 };
 
 const clearFilters = () => {
@@ -392,6 +410,18 @@ const clearFilters = () => {
   taskDueDateFrom.value = '';
   taskDueDateTo.value = '';
   applyFilters();
+};
+
+const goPrevPage = () => {
+  if (currentPage.value > 1) currentPage.value -= 1;
+};
+
+const goNextPage = () => {
+  if (currentPage.value < totalPages.value) currentPage.value += 1;
+};
+
+const handleResize = () => {
+  isDesktop.value = window.innerWidth >= 1024;
 };
 
 const formatDate = (value?: string | null) => {
@@ -576,6 +606,15 @@ onMounted(() => {
   if (user.role === 'admin') {
     fetchStaffUsers();
   }
+  window.addEventListener('resize', handleResize, { passive: true });
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize);
+});
+
+watch(filteredStudents, () => {
+  if (currentPage.value > totalPages.value) currentPage.value = totalPages.value;
 });
 </script>
 
@@ -799,8 +838,8 @@ onMounted(() => {
         {{ toastMessage }}
       </div>
 
-      <div class="lg:hidden space-y-3">
-        <div v-for="s in filteredStudents" :key="`mobile-${s.id}`" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div v-if="!isDesktop" class="space-y-3">
+        <div v-for="s in pagedStudents" :key="`mobile-${s.id}`" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div class="flex items-start justify-between gap-3 mb-3">
             <div>
               <p class="text-sm font-semibold text-gray-900">{{ s.name }}</p>
@@ -896,12 +935,12 @@ onMounted(() => {
             </button>
           </div>
         </div>
-        <div v-if="filteredStudents.length === 0" class="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-10 text-center text-sm text-gray-400">
+        <div v-if="totalFilteredCount === 0" class="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-10 text-center text-sm text-gray-400">
           該当する学生が見つかりませんでした。
         </div>
       </div>
 
-      <div class="hidden lg:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+      <div v-else class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
         <table class="w-full min-w-[1100px]">
           <thead class="bg-gray-50 border-b border-gray-200 text-xs">
             <tr>
@@ -920,7 +959,7 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 bg-white">
-            <tr v-for="s in filteredStudents" :key="s.id" class="hover:bg-gray-50 transition-colors">
+            <tr v-for="s in pagedStudents" :key="s.id" class="hover:bg-gray-50 transition-colors">
               <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{{ normalizeSourceCompany(s.source_company) || '-' }}</td>
               <td class="px-4 py-3 text-xs font-medium text-gray-900 whitespace-nowrap">{{ s.name }}</td>
               <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.university }}</td>
@@ -978,13 +1017,33 @@ onMounted(() => {
                 </button>
               </td>
             </tr>
-            <tr v-if="filteredStudents.length === 0">
+            <tr v-if="totalFilteredCount === 0">
               <td colSpan="12" class="px-6 py-10 text-center text-sm text-gray-400">
                 該当する学生が見つかりませんでした。
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+      <div v-if="totalFilteredCount > 0" class="mt-3 flex items-center justify-between text-sm text-gray-600">
+        <p>{{ totalFilteredCount }}件中 {{ (currentPage - 1) * pageSize + 1 }}〜{{ Math.min(currentPage * pageSize, totalFilteredCount) }}件を表示</p>
+        <div class="flex items-center gap-2">
+          <button
+            class="px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            :disabled="currentPage <= 1"
+            @click="goPrevPage"
+          >
+            前へ
+          </button>
+          <span>{{ currentPage }} / {{ totalPages }}</span>
+          <button
+            class="px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            :disabled="currentPage >= totalPages"
+            @click="goNextPage"
+          >
+            次へ
+          </button>
+        </div>
       </div>
     </div>
 

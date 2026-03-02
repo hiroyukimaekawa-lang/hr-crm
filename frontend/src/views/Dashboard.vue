@@ -79,7 +79,7 @@ const fetchData = async () => {
     ]);
     students.value = studentRes.data;
     events.value = eventRes.data;
-    await fetchInterviewMetrics();
+    fetchInterviewMetrics().catch((err) => console.error(err));
   } catch (err) {
     console.error(err);
   }
