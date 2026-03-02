@@ -19,6 +19,7 @@ interface Participant {
   created_at: string;
   name: string;
   university?: string;
+  staff_name?: string;
   email?: string;
   phone?: string;
   graduation_year?: number | null;
@@ -30,6 +31,7 @@ interface EventDetail {
   description?: string;
   event_date?: string;
   event_dates?: string[];
+  entry_deadline?: string;
   location?: string;
   capacity?: number;
   target_seats?: number;
@@ -52,6 +54,7 @@ const form = ref({
   title: '',
   description: '',
   event_dates: [''],
+  entry_deadline: '',
   location: '',
   lp_url: '',
   capacity: '',
@@ -60,6 +63,19 @@ const form = ref({
   target_sales: '',
   current_sales: ''
 });
+
+const toDateTimeLocalValue = (value?: string) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const min = pad(d.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+};
 
 const fetchDetail = async () => {
   const token = localStorage.getItem('token');
@@ -70,8 +86,9 @@ const fetchDetail = async () => {
     title: event.value?.title || '',
     description: event.value?.description || '',
     event_dates: Array.isArray(event.value?.event_dates) && event.value!.event_dates!.length > 0
-      ? event.value!.event_dates!.map((d: string) => new Date(d).toISOString().slice(0, 16))
-      : (event.value?.event_date ? [new Date(event.value.event_date).toISOString().slice(0, 16)] : ['']),
+      ? event.value!.event_dates!.map((d: string) => toDateTimeLocalValue(d))
+      : (event.value?.event_date ? [toDateTimeLocalValue(event.value.event_date)] : ['']),
+    entry_deadline: toDateTimeLocalValue(event.value?.entry_deadline),
     location: event.value?.location || '',
     lp_url: event.value?.lp_url || '',
     capacity: event.value?.capacity ? String(event.value.capacity) : '',
@@ -98,6 +115,7 @@ const updateEvent = async () => {
     title: form.value.title,
     description: form.value.description,
     event_dates: form.value.event_dates.filter(v => String(v || '').trim()),
+    entry_deadline: form.value.entry_deadline || null,
     location: form.value.location || null,
     lp_url: form.value.lp_url || null,
     capacity: form.value.capacity ? Number(form.value.capacity) : null,
@@ -216,6 +234,10 @@ onMounted(fetchDetail);
               </div>
             </div>
             <div class="flex items-center gap-2 text-sm text-gray-600">
+              <Calendar class="w-4 h-4" />
+              <span>エントリー期日: {{ event.entry_deadline ? new Date(event.entry_deadline).toLocaleString('ja-JP') : '未設定' }}</span>
+            </div>
+            <div class="flex items-center gap-2 text-sm text-gray-600">
               <MapPin class="w-4 h-4" />
               <span>{{ event.location || '会場未設定' }}</span>
             </div>
@@ -260,6 +282,10 @@ onMounted(fetchDetail);
                 </div>
                 <button type="button" class="px-3 py-2 border border-blue-200 text-blue-700 rounded-lg text-xs hover:bg-blue-50" @click="addFormEventDate">日程追加</button>
               </div>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">エントリー期日</label>
+              <input v-model="form.entry_deadline" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">場所（オンライン/会場）</label>
@@ -326,6 +352,7 @@ onMounted(fetchDetail);
                 <tr>
                   <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">氏名</th>
                   <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">大学</th>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">担当</th>
                   <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">申込日</th>
                   <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ステータス</th>
                   <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
@@ -339,6 +366,7 @@ onMounted(fetchDetail);
                     </button>
                   </td>
                   <td class="px-4 py-3 text-gray-600">{{ p.university || '-' }}</td>
+                  <td class="px-4 py-3 text-gray-600">{{ p.staff_name || '-' }}</td>
                   <td class="px-4 py-3 text-gray-600">{{ new Date(p.created_at).toLocaleDateString('ja-JP') }}</td>
                   <td class="px-4 py-3">
                     <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="statusBadge(p.status)">
@@ -369,7 +397,7 @@ onMounted(fetchDetail);
                   </td>
                 </tr>
                 <tr v-if="filteredParticipants.length === 0">
-                  <td colSpan="5" class="px-4 py-10 text-center text-gray-400">参加者は見つかりませんでした。</td>
+                  <td colSpan="6" class="px-4 py-10 text-center text-gray-400">参加者は見つかりませんでした。</td>
                 </tr>
               </tbody>
             </table>

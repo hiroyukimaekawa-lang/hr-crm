@@ -10,6 +10,10 @@ const ensureEventDatesTable = async () => {
     if (!eventDatesTablePromise) {
         eventDatesTablePromise = (async () => {
             await pool.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS entry_deadline TIMESTAMP
+            `);
+            await pool.query(`
                 CREATE TABLE IF NOT EXISTS event_dates (
                     id SERIAL PRIMARY KEY,
                     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -89,7 +93,7 @@ export const getEvents = async (req: Request, res: Response) => {
 };
 
 export const createEvent = async (req: Request, res: Response) => {
-    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline } = req.body;
     try {
         await ensureEventDatesTable();
         const dates = normalizeEventDates(event_dates, event_date);
@@ -112,6 +116,7 @@ export const createEvent = async (req: Request, res: Response) => {
         push('unit_price', unit_price || null);
         push('target_sales', target_sales || null);
         push('current_sales', current_sales || 0);
+        push('entry_deadline', entry_deadline || null);
 
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         await pool.query('BEGIN');
@@ -136,7 +141,7 @@ export const createEvent = async (req: Request, res: Response) => {
 
 export const updateEvent = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline } = req.body;
     try {
         await ensureEventDatesTable();
         const dates = normalizeEventDates(event_dates, event_date);
@@ -159,6 +164,7 @@ export const updateEvent = async (req: Request, res: Response) => {
         pushSet('unit_price', unit_price || null);
         pushSet('target_sales', target_sales || null);
         pushSet('current_sales', current_sales || 0);
+        pushSet('entry_deadline', entry_deadline || null);
         values.push(id);
 
         await pool.query('BEGIN');

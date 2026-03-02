@@ -23,6 +23,10 @@ const ensureEventDatesTable = () => __awaiter(void 0, void 0, void 0, function* 
     if (!eventDatesTablePromise) {
         eventDatesTablePromise = (() => __awaiter(void 0, void 0, void 0, function* () {
             yield db_1.default.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS entry_deadline TIMESTAMP
+            `);
+            yield db_1.default.query(`
                 CREATE TABLE IF NOT EXISTS event_dates (
                     id SERIAL PRIMARY KEY,
                     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -99,7 +103,7 @@ const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.getEvents = getEvents;
 const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline } = req.body;
     try {
         yield ensureEventDatesTable();
         const dates = normalizeEventDates(event_dates, event_date);
@@ -123,6 +127,7 @@ const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         push('unit_price', unit_price || null);
         push('target_sales', target_sales || null);
         push('current_sales', current_sales || 0);
+        push('entry_deadline', entry_deadline || null);
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         yield db_1.default.query('BEGIN');
         const result = yield db_1.default.query(`INSERT INTO events (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`, insertVals);
@@ -144,7 +149,7 @@ const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 exports.createEvent = createEvent;
 const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales } = req.body;
+    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline } = req.body;
     try {
         yield ensureEventDatesTable();
         const dates = normalizeEventDates(event_dates, event_date);
@@ -168,6 +173,7 @@ const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         pushSet('unit_price', unit_price || null);
         pushSet('target_sales', target_sales || null);
         pushSet('current_sales', current_sales || 0);
+        pushSet('entry_deadline', entry_deadline || null);
         values.push(id);
         yield db_1.default.query('BEGIN');
         const result = yield db_1.default.query(`UPDATE events
