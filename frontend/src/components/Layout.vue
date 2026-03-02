@@ -12,7 +12,8 @@ import {
   PanelLeftOpen,
   PanelLeftClose,
   X,
-  ChartColumn
+  ChartColumn,
+  Calculator
 } from 'lucide-vue-next';
 import {
   clearNotifications,
@@ -37,6 +38,7 @@ const menuItems = computed(() => [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard, path: '/dashboard' },
   { id: 'students', label: '学生一覧', icon: Users, path: '/students' },
   { id: 'events', label: 'イベント一覧', icon: Calendar, path: '/events' },
+  { id: 'event-kpi', label: 'イベントKPI', icon: Calculator, path: '/event-kpi' },
   { id: 'lead-time', label: 'リードタイム', icon: ChartColumn, path: '/lead-time' }
 ]);
 

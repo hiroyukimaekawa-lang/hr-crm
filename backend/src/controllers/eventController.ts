@@ -14,6 +14,22 @@ const ensureEventDatesTable = async () => {
                 ADD COLUMN IF NOT EXISTS entry_deadline TIMESTAMP
             `);
             await pool.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS kpi_seat_to_entry_rate NUMERIC(5,2) DEFAULT 70
+            `);
+            await pool.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS kpi_entry_to_interview_rate NUMERIC(5,2) DEFAULT 60
+            `);
+            await pool.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS kpi_interview_to_inflow_rate NUMERIC(5,2) DEFAULT 50
+            `);
+            await pool.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS kpi_custom_steps TEXT DEFAULT '[]'
+            `);
+            await pool.query(`
                 CREATE TABLE IF NOT EXISTS event_dates (
                     id SERIAL PRIMARY KEY,
                     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -93,7 +109,11 @@ export const getEvents = async (req: Request, res: Response) => {
 };
 
 export const createEvent = async (req: Request, res: Response) => {
-    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline } = req.body;
+    const {
+        title, description, event_date, event_dates, location, lp_url,
+        capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline,
+        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps
+    } = req.body;
     try {
         await ensureEventDatesTable();
         const dates = normalizeEventDates(event_dates, event_date);
@@ -117,6 +137,10 @@ export const createEvent = async (req: Request, res: Response) => {
         push('target_sales', target_sales || null);
         push('current_sales', current_sales || 0);
         push('entry_deadline', entry_deadline || null);
+        push('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate ?? 70);
+        push('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate ?? 60);
+        push('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate ?? 50);
+        push('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
 
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         await pool.query('BEGIN');
@@ -141,7 +165,11 @@ export const createEvent = async (req: Request, res: Response) => {
 
 export const updateEvent = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline } = req.body;
+    const {
+        title, description, event_date, event_dates, location, lp_url,
+        capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline,
+        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps
+    } = req.body;
     try {
         await ensureEventDatesTable();
         const dates = normalizeEventDates(event_dates, event_date);
@@ -165,6 +193,10 @@ export const updateEvent = async (req: Request, res: Response) => {
         pushSet('target_sales', target_sales || null);
         pushSet('current_sales', current_sales || 0);
         pushSet('entry_deadline', entry_deadline || null);
+        pushSet('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate ?? 70);
+        pushSet('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate ?? 60);
+        pushSet('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate ?? 50);
+        pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
         values.push(id);
 
         await pool.query('BEGIN');
