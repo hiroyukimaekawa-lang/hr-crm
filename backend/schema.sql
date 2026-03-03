@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS students (
     faculty VARCHAR(255),
     referral_status VARCHAR(50) DEFAULT '不明',
     progress_stage VARCHAR(50) DEFAULT '初回面談',
+    meeting_decided_date DATE,
+    first_interview_date DATE,
     next_meeting_date DATE,
     next_action TEXT,
     desired_industry VARCHAR(255),
@@ -110,6 +112,12 @@ CREATE TABLE IF NOT EXISTS invites (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS source_categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_students_staff_id ON students(staff_id);
 CREATE INDEX IF NOT EXISTS idx_students_source_company ON students(source_company);
@@ -132,7 +140,6 @@ VALUES ('admin', '$2b$10$K9oIoHcgYoz98Gg.UVQ2AO9Vnk57KPVQ2ekdDPC4392sslwXrUSVy',
 -- Sample Data (Events)
 INSERT INTO events (id, title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales)
 VALUES
-    (1, '春季キャリアフォーラム', '各業界の企業が参加する大規模イベント', '2026-03-20 13:00:00', '東京ビッグサイト', 100, 80, 25000, 2000000, 1200000),
     (2, 'エンジニア向け座談会', '現場エンジニアとの座談会', '2026-04-15 18:00:00', 'オンライン', 50, 40, 20000, 800000, 300000),
     (3, '内定者懇親会', '内定者同士の交流イベント', '2026-06-01 17:00:00', '本社オフィス', 30, 25, 16000, 400000, 150000),
     (4, '業界研究セミナー', '複数業界の理解を深めるセミナー', '2026-02-20 19:00:00', 'オンライン', 200, 150, 3000, 500000, 220000)

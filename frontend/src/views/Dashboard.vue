@@ -55,7 +55,12 @@ const interviewMetrics = ref({
   followup_lead_time_days_avg: null as number | null,
   followup_total: 0,
   followup_rescheduled: 0,
-  followup_reschedule_rate: null as number | null
+  followup_reschedule_rate: null as number | null,
+  settings_by_date: [] as Array<{
+    setting_date: string;
+    source_company: string;
+    setting_count: number;
+  }>
 });
 const interviewMetricsBySource = ref<Array<{
   source_company: string;
@@ -101,7 +106,14 @@ const fetchInterviewMetrics = async () => {
     followup_lead_time_days_avg: metricsRes.data?.followup_lead_time_days_avg ?? null,
     followup_total: Number(metricsRes.data?.followup_total || 0),
     followup_rescheduled: Number(metricsRes.data?.followup_rescheduled || 0),
-    followup_reschedule_rate: metricsRes.data?.followup_reschedule_rate ?? null
+    followup_reschedule_rate: metricsRes.data?.followup_reschedule_rate ?? null,
+    settings_by_date: Array.isArray(metricsRes.data?.settings_by_date)
+      ? metricsRes.data.settings_by_date.map((r: any) => ({
+          setting_date: String(r.setting_date || ''),
+          source_company: String(r.source_company || '未設定'),
+          setting_count: Number(r.setting_count || 0)
+        }))
+      : []
   };
   interviewMetricsBySource.value = Array.isArray(bySourceRes.data) ? bySourceRes.data.map((r: any) => ({
     source_company: r.source_company || '未設定',
@@ -276,6 +288,10 @@ const recentStudents = computed(() => {
     .slice(0, 5);
 });
 
+const settingsByDateRows = computed(() =>
+  interviewMetrics.value.settings_by_date.slice(0, 30)
+);
+
 const sourceCompanyOptions = computed(() => {
   const set = new Set<string>();
   students.value.forEach((s: any) => {
@@ -433,6 +449,31 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
               </tr>
               <tr v-if="interviewMetricsBySource.length === 0">
                 <td colSpan="5" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">日別設定数（流入経路別）</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">日付</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">流入経路</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">設定数</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr v-for="row in settingsByDateRows" :key="`settings-${row.setting_date}-${row.source_company}`" class="hover:bg-gray-50">
+                <td class="px-3 py-2 text-gray-900">{{ row.setting_date ? new Date(row.setting_date).toLocaleDateString('ja-JP') : '-' }}</td>
+                <td class="px-3 py-2 text-gray-700">{{ row.source_company }}</td>
+                <td class="px-3 py-2 text-right font-semibold text-gray-900">{{ row.setting_count }}</td>
+              </tr>
+              <tr v-if="settingsByDateRows.length === 0">
+                <td colSpan="3" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
               </tr>
             </tbody>
           </table>

@@ -17,7 +17,10 @@ import {
     createInterviewSchedule,
     updateInterviewSchedule,
     deleteInterviewSchedule,
-    getInterviewMetrics
+    getInterviewMetrics,
+    getSourceCategories,
+    createSourceCategory,
+    deleteSourceCategory
 } from '../controllers/studentController';
 import { authenticate } from '../middlewares/auth';
 
@@ -25,6 +28,9 @@ const router = express.Router();
 
 router.get('/', authenticate, getStudents);
 router.get('/metrics/interviews', authenticate, getInterviewMetrics);
+router.get('/source-categories', authenticate, getSourceCategories);
+router.post('/source-categories', authenticate, createSourceCategory);
+router.delete('/source-categories/:id', authenticate, deleteSourceCategory);
 router.post('/', authenticate, createStudent);
 router.post('/import', authenticate, importStudents);
 router.get('/:id', authenticate, getStudentDetail);

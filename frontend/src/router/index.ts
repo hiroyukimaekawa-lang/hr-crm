@@ -8,6 +8,7 @@ import Login from '../views/Login.vue';
 import RegisterInvite from '../views/RegisterInvite.vue';
 import LeadTime from '../views/LeadTime.vue';
 import EventKpi from '../views/EventKpi.vue';
+import Settings from '../views/Settings.vue';
 
 const routes = [
   { path: '/', redirect: '/students' },
@@ -19,7 +20,8 @@ const routes = [
   { path: '/events', component: EventList },
   { path: '/events/:id', component: EventDetail },
   { path: '/lead-time', component: LeadTime },
-  { path: '/event-kpi', component: EventKpi }
+  { path: '/event-kpi', component: EventKpi },
+  { path: '/settings', component: Settings }
 ];
 
 const router = createRouter({

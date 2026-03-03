@@ -12,11 +12,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.importStudents = exports.deleteStudent = exports.deleteStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
+exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.deleteStudent = exports.deleteStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
 const db_1 = __importDefault(require("../config/db"));
 let interviewScheduleTableReady = false;
 let interviewScheduleTablePromise = null;
 let cachedStudentColumns = null;
+let studentExtendedColumnsReady = false;
+let studentExtendedColumnsPromise = null;
+let sourceCategoriesTableReady = false;
+let sourceCategoriesTablePromise = null;
 const ensureInterviewScheduleTables = () => __awaiter(void 0, void 0, void 0, function* () {
     if (interviewScheduleTableReady)
         return;
@@ -46,6 +50,46 @@ const ensureInterviewScheduleTables = () => __awaiter(void 0, void 0, void 0, fu
         });
     }
     yield interviewScheduleTablePromise;
+});
+const ensureStudentExtendedColumns = () => __awaiter(void 0, void 0, void 0, function* () {
+    if (studentExtendedColumnsReady)
+        return;
+    if (!studentExtendedColumnsPromise) {
+        studentExtendedColumnsPromise = (() => __awaiter(void 0, void 0, void 0, function* () {
+            yield db_1.default.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS meeting_decided_date DATE
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS first_interview_date DATE
+            `);
+            cachedStudentColumns = null;
+            studentExtendedColumnsReady = true;
+        }))().finally(() => {
+            studentExtendedColumnsPromise = null;
+        });
+    }
+    yield studentExtendedColumnsPromise;
+});
+const ensureSourceCategoriesTable = () => __awaiter(void 0, void 0, void 0, function* () {
+    if (sourceCategoriesTableReady)
+        return;
+    if (!sourceCategoriesTablePromise) {
+        sourceCategoriesTablePromise = (() => __awaiter(void 0, void 0, void 0, function* () {
+            yield db_1.default.query(`
+                CREATE TABLE IF NOT EXISTS source_categories (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(255) UNIQUE NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            sourceCategoriesTableReady = true;
+        }))().finally(() => {
+            sourceCategoriesTablePromise = null;
+        });
+    }
+    yield sourceCategoriesTablePromise;
 });
 const getStudentColumns = () => __awaiter(void 0, void 0, void 0, function* () {
     if (cachedStudentColumns)
@@ -128,6 +172,7 @@ const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     const staffId = req.query.staffId;
     const authUser = req.user;
     try {
+        yield ensureStudentExtendedColumns();
         let query = `
             SELECT
                 students.*,
@@ -163,8 +208,9 @@ const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 });
 exports.getStudents = getStudents;
 const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { name, university, prefecture, academic_track, faculty, referral_status, progress_stage, next_meeting_date, next_action, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason } = req.body;
+    const { name, university, prefecture, academic_track, faculty, referral_status, progress_stage, next_meeting_date, next_action, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason, meeting_decided_date, first_interview_date } = req.body;
     try {
+        yield ensureStudentExtendedColumns();
         const duplicateRes = yield db_1.default.query('SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') AND COALESCE(faculty, \'\') = COALESCE($3, \'\') LIMIT 1', [name, university || null, faculty || null]);
         if (duplicateRes.rows.length > 0) {
             res.status(409).json({ error: 'Student already exists' });
@@ -198,6 +244,8 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         pushCol('staff_id', staff_id || null);
         pushCol('source_company', source_company || null);
         pushCol('interview_reason', interview_reason || null);
+        pushCol('meeting_decided_date', meeting_decided_date || null);
+        pushCol('first_interview_date', first_interview_date || null);
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         const result = yield db_1.default.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`, insertVals);
         res.json(result.rows[0]);
@@ -210,6 +258,7 @@ exports.createStudent = createStudent;
 const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
     try {
+        yield ensureStudentExtendedColumns();
         yield ensureInterviewScheduleTables();
         const studentRes = yield db_1.default.query('SELECT * FROM students WHERE id = $1', [id]);
         const eventsRes = yield db_1.default.query(`
@@ -336,6 +385,7 @@ const getInterviewMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
     const sourceCompany = String(req.query.source_company || '').trim();
     const groupBySource = String(req.query.group_by_source || '') === '1';
     try {
+        yield ensureStudentExtendedColumns();
         yield ensureInterviewScheduleTables();
         const conditions = [];
         const params = [];
@@ -348,6 +398,16 @@ const getInterviewMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
             conditions.push(`COALESCE(s.source_company, '') = $${params.length}`);
         }
         const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+        const settingConditions = ['s.meeting_decided_date IS NOT NULL'];
+        const settingParams = [];
+        if ((authUser === null || authUser === void 0 ? void 0 : authUser.role) !== 'admin') {
+            settingParams.push(Number((authUser === null || authUser === void 0 ? void 0 : authUser.sub) || 0));
+            settingConditions.push(`s.staff_id = $${settingParams.length}`);
+        }
+        if (sourceCompany) {
+            settingParams.push(sourceCompany);
+            settingConditions.push(`COALESCE(s.source_company, '') = $${settingParams.length}`);
+        }
         const commonCte = `
             WITH base AS (
                 SELECT
@@ -443,7 +503,17 @@ const getInterviewMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
             CROSS JOIN follow_agg fwa
         `;
         const result = yield db_1.default.query(sql, params);
-        res.json(result.rows[0] || {});
+        const settingsByDateRes = yield db_1.default.query(`
+                SELECT
+                    s.meeting_decided_date::date AS setting_date,
+                    COALESCE(s.source_company, '未設定') AS source_company,
+                    COUNT(*)::int AS setting_count
+                FROM students s
+                WHERE ${settingConditions.join(' AND ')}
+                GROUP BY s.meeting_decided_date::date, COALESCE(s.source_company, '未設定')
+                ORDER BY s.meeting_decided_date::date DESC, source_company ASC
+            `, settingParams);
+        res.json(Object.assign(Object.assign({}, (result.rows[0] || {})), { settings_by_date: settingsByDateRes.rows }));
     }
     catch (err) {
         res.status(500).json({ error: err.message });
@@ -505,8 +575,9 @@ const updateStudentStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
 exports.updateStudentStatus = updateStudentStatus;
 const updateStudentBasic = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { name, university, prefecture, academic_track, faculty, email, phone, graduation_year, source_company, interview_reason, desired_industry, desired_role, next_meeting_date, next_action } = req.body;
+    const { name, university, prefecture, academic_track, faculty, email, phone, graduation_year, source_company, interview_reason, desired_industry, desired_role, next_meeting_date, next_action, meeting_decided_date, first_interview_date } = req.body;
     try {
+        yield ensureStudentExtendedColumns();
         const cols = yield getStudentColumns();
         const setParts = [];
         const values = [];
@@ -530,6 +601,8 @@ const updateStudentBasic = (req, res) => __awaiter(void 0, void 0, void 0, funct
         pushSet('desired_role', desired_role || null);
         pushSet('next_meeting_date', next_meeting_date || null);
         pushSet('next_action', next_action || null);
+        pushSet('meeting_decided_date', meeting_decided_date || null);
+        pushSet('first_interview_date', first_interview_date || null);
         if (cols.has('updated_at')) {
             setParts.push('updated_at = CURRENT_TIMESTAMP');
         }
@@ -641,6 +714,7 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
     const seen = new Set();
     const headerLikeValues = new Set(['氏名', '流入経路', '初回平均(日)', 'source_company', 'name']);
     try {
+        yield ensureStudentExtendedColumns();
         const cols = yield getStudentColumns();
         for (const s of students) {
             const name = s.name || '';
@@ -680,6 +754,8 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
             pushSet('next_meeting_date', s.next_meeting_date || null);
             pushSet('academic_track', normalizeAcademicTrack(s.academic_track));
             pushSet('prefecture', s.prefecture || null);
+            pushSet('meeting_decided_date', s.meeting_decided_date || null);
+            pushSet('first_interview_date', s.first_interview_date || null);
             if (cols.has('updated_at'))
                 updateParts.push('updated_at = CURRENT_TIMESTAMP');
             if (existsRes.rows.length > 0) {
@@ -718,6 +794,8 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
             pushInsert('referral_status', normalizeReferralStatus(s.referral_status));
             pushInsert('progress_stage', normalizeProgressStage(s.progress_stage));
             pushInsert('next_meeting_date', s.next_meeting_date || null);
+            pushInsert('meeting_decided_date', s.meeting_decided_date || null);
+            pushInsert('first_interview_date', s.first_interview_date || null);
             const placeholders = insertCols.map((_, idx) => `$${idx + 1}`).join(', ');
             const insertedRes = yield db_1.default.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING id`, insertVals);
             if (s.task_due_date && ((_a = insertedRes.rows[0]) === null || _a === void 0 ? void 0 : _a.id)) {
@@ -732,3 +810,62 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.importStudents = importStudents;
+const getSourceCategories = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield ensureSourceCategoriesTable();
+        const result = yield db_1.default.query('SELECT id, name, created_at FROM source_categories ORDER BY name ASC');
+        res.json(result.rows);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.getSourceCategories = getSourceCategories;
+const createSourceCategory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const authUser = req.user;
+    if ((authUser === null || authUser === void 0 ? void 0 : authUser.role) !== 'admin') {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+    }
+    const name = String(((_a = req.body) === null || _a === void 0 ? void 0 : _a.name) || '').trim();
+    if (!name) {
+        res.status(400).json({ error: 'name is required' });
+        return;
+    }
+    try {
+        yield ensureSourceCategoriesTable();
+        const result = yield db_1.default.query('INSERT INTO source_categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING id, name, created_at', [name]);
+        if (result.rows.length === 0) {
+            const existing = yield db_1.default.query('SELECT id, name, created_at FROM source_categories WHERE name = $1', [name]);
+            res.json(existing.rows[0]);
+            return;
+        }
+        res.status(201).json(result.rows[0]);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.createSourceCategory = createSourceCategory;
+const deleteSourceCategory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authUser = req.user;
+    if ((authUser === null || authUser === void 0 ? void 0 : authUser.role) !== 'admin') {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+    }
+    const { id } = req.params;
+    try {
+        yield ensureSourceCategoriesTable();
+        const result = yield db_1.default.query('DELETE FROM source_categories WHERE id = $1 RETURNING id', [id]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Category not found' });
+            return;
+        }
+        res.json({ success: true });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.deleteSourceCategory = deleteSourceCategory;

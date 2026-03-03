@@ -4,6 +4,10 @@ import pool from '../config/db';
 let interviewScheduleTableReady = false;
 let interviewScheduleTablePromise: Promise<void> | null = null;
 let cachedStudentColumns: Set<string> | null = null;
+let studentExtendedColumnsReady = false;
+let studentExtendedColumnsPromise: Promise<void> | null = null;
+let sourceCategoriesTableReady = false;
+let sourceCategoriesTablePromise: Promise<void> | null = null;
 
 const ensureInterviewScheduleTables = async () => {
     if (interviewScheduleTableReady) return;
@@ -33,6 +37,46 @@ const ensureInterviewScheduleTables = async () => {
         });
     }
     await interviewScheduleTablePromise;
+};
+
+const ensureStudentExtendedColumns = async () => {
+    if (studentExtendedColumnsReady) return;
+    if (!studentExtendedColumnsPromise) {
+        studentExtendedColumnsPromise = (async () => {
+            await pool.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS meeting_decided_date DATE
+            `);
+            await pool.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS first_interview_date DATE
+            `);
+            cachedStudentColumns = null;
+            studentExtendedColumnsReady = true;
+        })().finally(() => {
+            studentExtendedColumnsPromise = null;
+        });
+    }
+    await studentExtendedColumnsPromise;
+};
+
+const ensureSourceCategoriesTable = async () => {
+    if (sourceCategoriesTableReady) return;
+    if (!sourceCategoriesTablePromise) {
+        sourceCategoriesTablePromise = (async () => {
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS source_categories (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(255) UNIQUE NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            sourceCategoriesTableReady = true;
+        })().finally(() => {
+            sourceCategoriesTablePromise = null;
+        });
+    }
+    await sourceCategoriesTablePromise;
 };
 
 const getStudentColumns = async () => {
@@ -109,6 +153,7 @@ export const getStudents = async (req: Request, res: Response) => {
     const staffId = req.query.staffId;
     const authUser = (req as any).user as { sub?: string; role?: string } | undefined;
     try {
+        await ensureStudentExtendedColumns();
         let query = `
             SELECT
                 students.*,
@@ -162,9 +207,12 @@ export const createStudent = async (req: Request, res: Response) => {
         tags,
         staff_id,
         source_company,
-        interview_reason
+        interview_reason,
+        meeting_decided_date,
+        first_interview_date
     } = req.body;
     try {
+        await ensureStudentExtendedColumns();
         const duplicateRes = await pool.query(
             'SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') AND COALESCE(faculty, \'\') = COALESCE($3, \'\') LIMIT 1',
             [name, university || null, faculty || null]
@@ -203,6 +251,8 @@ export const createStudent = async (req: Request, res: Response) => {
         pushCol('staff_id', staff_id || null);
         pushCol('source_company', source_company || null);
         pushCol('interview_reason', interview_reason || null);
+        pushCol('meeting_decided_date', meeting_decided_date || null);
+        pushCol('first_interview_date', first_interview_date || null);
 
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         const result = await pool.query(
@@ -218,6 +268,7 @@ export const createStudent = async (req: Request, res: Response) => {
 export const getStudentDetail = async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
+        await ensureStudentExtendedColumns();
         await ensureInterviewScheduleTables();
         const studentRes = await pool.query('SELECT * FROM students WHERE id = $1', [id]);
         const eventsRes = await pool.query(`
@@ -350,6 +401,7 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
     const sourceCompany = String(req.query.source_company || '').trim();
     const groupBySource = String(req.query.group_by_source || '') === '1';
     try {
+        await ensureStudentExtendedColumns();
         await ensureInterviewScheduleTables();
 
         const conditions: string[] = [];
@@ -363,6 +415,17 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
             conditions.push(`COALESCE(s.source_company, '') = $${params.length}`);
         }
         const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        const settingConditions: string[] = ['s.meeting_decided_date IS NOT NULL'];
+        const settingParams: any[] = [];
+        if (authUser?.role !== 'admin') {
+            settingParams.push(Number(authUser?.sub || 0));
+            settingConditions.push(`s.staff_id = $${settingParams.length}`);
+        }
+        if (sourceCompany) {
+            settingParams.push(sourceCompany);
+            settingConditions.push(`COALESCE(s.source_company, '') = $${settingParams.length}`);
+        }
 
         const commonCte = `
             WITH base AS (
@@ -462,7 +525,23 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
         `;
 
         const result = await pool.query(sql, params);
-        res.json(result.rows[0] || {});
+        const settingsByDateRes = await pool.query(
+            `
+                SELECT
+                    s.meeting_decided_date::date AS setting_date,
+                    COALESCE(s.source_company, '未設定') AS source_company,
+                    COUNT(*)::int AS setting_count
+                FROM students s
+                WHERE ${settingConditions.join(' AND ')}
+                GROUP BY s.meeting_decided_date::date, COALESCE(s.source_company, '未設定')
+                ORDER BY s.meeting_decided_date::date DESC, source_company ASC
+            `,
+            settingParams
+        );
+        res.json({
+            ...(result.rows[0] || {}),
+            settings_by_date: settingsByDateRes.rows
+        });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
@@ -542,9 +621,12 @@ export const updateStudentBasic = async (req: Request, res: Response) => {
         desired_industry,
         desired_role,
         next_meeting_date,
-        next_action
+        next_action,
+        meeting_decided_date,
+        first_interview_date
     } = req.body;
     try {
+        await ensureStudentExtendedColumns();
         const cols = await getStudentColumns();
         const setParts: string[] = [];
         const values: any[] = [];
@@ -569,6 +651,8 @@ export const updateStudentBasic = async (req: Request, res: Response) => {
         pushSet('desired_role', desired_role || null);
         pushSet('next_meeting_date', next_meeting_date || null);
         pushSet('next_action', next_action || null);
+        pushSet('meeting_decided_date', meeting_decided_date || null);
+        pushSet('first_interview_date', first_interview_date || null);
         if (cols.has('updated_at')) {
             setParts.push('updated_at = CURRENT_TIMESTAMP');
         }
@@ -688,6 +772,7 @@ export const importStudents = async (req: Request, res: Response) => {
     const headerLikeValues = new Set(['氏名', '流入経路', '初回平均(日)', 'source_company', 'name']);
 
     try {
+        await ensureStudentExtendedColumns();
         const cols = await getStudentColumns();
         for (const s of students) {
             const name = s.name || '';
@@ -732,6 +817,8 @@ export const importStudents = async (req: Request, res: Response) => {
             pushSet('next_meeting_date', s.next_meeting_date || null);
             pushSet('academic_track', normalizeAcademicTrack(s.academic_track));
             pushSet('prefecture', s.prefecture || null);
+            pushSet('meeting_decided_date', s.meeting_decided_date || null);
+            pushSet('first_interview_date', s.first_interview_date || null);
             if (cols.has('updated_at')) updateParts.push('updated_at = CURRENT_TIMESTAMP');
 
             if (existsRes.rows.length > 0) {
@@ -783,6 +870,8 @@ export const importStudents = async (req: Request, res: Response) => {
             pushInsert('referral_status', normalizeReferralStatus(s.referral_status));
             pushInsert('progress_stage', normalizeProgressStage(s.progress_stage));
             pushInsert('next_meeting_date', s.next_meeting_date || null);
+            pushInsert('meeting_decided_date', s.meeting_decided_date || null);
+            pushInsert('first_interview_date', s.first_interview_date || null);
 
             const placeholders = insertCols.map((_: any, idx: number) => `$${idx + 1}`).join(', ');
             const insertedRes = await pool.query(
@@ -800,6 +889,64 @@ export const importStudents = async (req: Request, res: Response) => {
         }
 
         res.json({ inserted, updated, skipped });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const getSourceCategories = async (_req: Request, res: Response) => {
+    try {
+        await ensureSourceCategoriesTable();
+        const result = await pool.query('SELECT id, name, created_at FROM source_categories ORDER BY name ASC');
+        res.json(result.rows);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const createSourceCategory = async (req: Request, res: Response) => {
+    const authUser = (req as any).user as { role?: string } | undefined;
+    if (authUser?.role !== 'admin') {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+    }
+    const name = String(req.body?.name || '').trim();
+    if (!name) {
+        res.status(400).json({ error: 'name is required' });
+        return;
+    }
+    try {
+        await ensureSourceCategoriesTable();
+        const result = await pool.query(
+            'INSERT INTO source_categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING id, name, created_at',
+            [name]
+        );
+        if (result.rows.length === 0) {
+            const existing = await pool.query('SELECT id, name, created_at FROM source_categories WHERE name = $1', [name]);
+            res.json(existing.rows[0]);
+            return;
+        }
+        res.status(201).json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const deleteSourceCategory = async (req: Request, res: Response) => {
+    const authUser = (req as any).user as { role?: string } | undefined;
+    if (authUser?.role !== 'admin') {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+    }
+    const { id } = req.params;
+    try {
+        await ensureSourceCategoriesTable();
+        const result = await pool.query('DELETE FROM source_categories WHERE id = $1 RETURNING id', [id]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Category not found' });
+            return;
+        }
+        res.json({ success: true });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

@@ -45,6 +45,11 @@ interface StaffUser {
   name: string;
 }
 
+interface SourceCategory {
+  id: number;
+  name: string;
+}
+
 type ExportColumnKey =
   | 'source_company'
   | 'name'
@@ -74,6 +79,7 @@ const exportColumnOptions: Array<{ key: ExportColumnKey; label: string }> = [
 
 const students = ref<Student[]>([]);
 const staffUsers = ref<StaffUser[]>([]);
+const sourceCategories = ref<SourceCategory[]>([]);
 const router = useRouter();
 const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
 const showAll = ref(user.role === 'admin');
@@ -100,6 +106,8 @@ const taskDueDateTo = ref('');
 const currentPage = ref(1);
 const pageSize = 50;
 const isDesktop = ref(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
+const isTablet = ref(typeof window !== 'undefined' ? (window.innerWidth >= 768 && window.innerWidth < 1024) : false);
+const filterPanelOpen = ref(!isTablet.value);
 
 const appliedFilters = ref({
   selectedNames: [] as string[],
@@ -126,6 +134,8 @@ const newStudent = ref({
   university: '',
   faculty: '',
   interview_reason: '',
+  meeting_decided_date: '',
+  first_interview_date: '',
   prefecture: '',
   academic_track: '',
   graduation_year: ''
@@ -150,6 +160,16 @@ const fetchStaffUsers = async () => {
     const token = localStorage.getItem('token');
     const res = await api.get('/api/auth/users', { headers: { Authorization: token } });
     staffUsers.value = res.data;
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+const fetchSourceCategories = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    const res = await api.get('/api/students/source-categories', { headers: { Authorization: token } });
+    sourceCategories.value = Array.isArray(res.data) ? res.data : [];
   } catch (err) {
     console.error(err);
   }
@@ -226,6 +246,8 @@ const createStudent = async () => {
       university: newStudent.value.university,
       faculty: newStudent.value.faculty || null,
       interview_reason: newStudent.value.interview_reason || null,
+      meeting_decided_date: newStudent.value.meeting_decided_date || null,
+      first_interview_date: newStudent.value.first_interview_date || null,
       prefecture: newStudent.value.prefecture || null,
       academic_track: newStudent.value.academic_track || null,
       graduation_year: newStudent.value.graduation_year ? Number(newStudent.value.graduation_year) : null,
@@ -239,6 +261,8 @@ const createStudent = async () => {
       university: '',
       faculty: '',
       interview_reason: '',
+      meeting_decided_date: '',
+      first_interview_date: '',
       prefecture: '',
       academic_track: '',
       graduation_year: ''
@@ -422,6 +446,10 @@ const goNextPage = () => {
 
 const handleResize = () => {
   isDesktop.value = window.innerWidth >= 1024;
+  isTablet.value = window.innerWidth >= 768 && window.innerWidth < 1024;
+  if (!isTablet.value) {
+    filterPanelOpen.value = true;
+  }
 };
 
 const formatDate = (value?: string | null) => {
@@ -603,6 +631,7 @@ const onCsvFileChange = async (event: Event) => {
 
 onMounted(() => {
   fetchStudents();
+  fetchSourceCategories();
   if (user.role === 'admin') {
     fetchStaffUsers();
   }
@@ -670,6 +699,16 @@ watch(filteredStudents, () => {
       </div>
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6 flex flex-col gap-4">
+        <div class="hidden md:flex lg:hidden items-center justify-between">
+          <p class="text-sm font-medium text-gray-700">フィルタ</p>
+          <button
+            class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
+            @click="filterPanelOpen = !filterPanelOpen"
+          >
+            {{ filterPanelOpen ? '閉じる' : '開く' }}
+          </button>
+        </div>
+        <template v-if="!isTablet || filterPanelOpen">
         <div class="flex flex-wrap items-center gap-2">
             <div class="flex flex-wrap items-center gap-2">
               <Filter class="w-4 h-4 text-gray-400" />
@@ -828,6 +867,7 @@ watch(filteredStudents, () => {
             フィルタクリア
           </button>
         </div>
+        </template>
       </div>
 
       <div
@@ -1055,9 +1095,18 @@ watch(filteredStudents, () => {
             {{ createError }}
           </p>
           <div class="space-y-4">
-            <div>
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">流入経路</label>
-            <input v-model="newStudent.source_company" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <input
+              v-model="newStudent.source_company"
+              list="source-category-options"
+              type="text"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              placeholder="流入経路を選択/入力"
+            >
+            <datalist id="source-category-options">
+              <option v-for="c in sourceCategories" :key="`source-cat-${c.id}`" :value="c.name" />
+            </datalist>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">氏名</label>
@@ -1079,6 +1128,14 @@ watch(filteredStudents, () => {
               <option value="就活相談">就活相談</option>
               <option value="面接対策">面接対策</option>
             </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">面談決定日</label>
+            <input v-model="newStudent.meeting_decided_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">初回面談日</label>
+            <input v-model="newStudent.first_interview_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">所在地（都道府県）</label>
