@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { api } from '../lib/api';
 import {
   LayoutDashboard,
   Users,
@@ -22,6 +23,12 @@ import {
   markAllNotificationsRead,
   type AppNotification
 } from '../lib/notifications';
+import {
+  clearPinnedStudent,
+  getPinnedStudent,
+  pinnedStudentEventName,
+  type PinnedStudent
+} from '../lib/pinnedStudent';
 
 const route = useRoute();
 const router = useRouter();
@@ -30,6 +37,9 @@ const mobileSidebarOpen = ref(false);
 const notifications = ref<AppNotification[]>([]);
 const notificationOpen = ref(false);
 const popupNotification = ref<AppNotification | null>(null);
+const pinnedStudent = ref<PinnedStudent | null>(null);
+const pinnedStudentDetail = ref<any | null>(null);
+const pinnedPanelOpen = ref(false);
 const initializedNotification = ref(false);
 let popupTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -67,6 +77,27 @@ const refreshNotifications = () => {
   initializedNotification.value = true;
 };
 
+const refreshPinnedStudent = () => {
+  pinnedStudent.value = getPinnedStudent();
+};
+
+const fetchPinnedStudentDetail = async () => {
+  if (!pinnedStudent.value) {
+    pinnedStudentDetail.value = null;
+    return;
+  }
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const res = await api.get(`/api/students/${pinnedStudent.value.id}`, {
+      headers: { Authorization: token }
+    });
+    pinnedStudentDetail.value = res.data?.student || null;
+  } catch (e) {
+    console.error(e);
+  }
+};
+
 const toggleNotifications = () => {
   notificationOpen.value = !notificationOpen.value;
   if (notificationOpen.value && unreadCount.value > 0) {
@@ -85,15 +116,27 @@ watch(
 
 onMounted(() => {
   refreshNotifications();
+  refreshPinnedStudent();
   window.addEventListener('storage', refreshNotifications);
   window.addEventListener('app-notification-updated', refreshNotifications);
+  window.addEventListener('storage', refreshPinnedStudent);
+  window.addEventListener(pinnedStudentEventName, refreshPinnedStudent as EventListener);
 });
 
 onUnmounted(() => {
   window.removeEventListener('storage', refreshNotifications);
   window.removeEventListener('app-notification-updated', refreshNotifications);
+  window.removeEventListener('storage', refreshPinnedStudent);
+  window.removeEventListener(pinnedStudentEventName, refreshPinnedStudent as EventListener);
   if (popupTimer) clearTimeout(popupTimer);
 });
+
+watch(
+  () => pinnedPanelOpen.value,
+  (open) => {
+    if (open) fetchPinnedStudentDetail();
+  }
+);
 </script>
 
 <template>
@@ -249,6 +292,37 @@ onUnmounted(() => {
         class="fixed right-4 top-20 z-[110] max-w-sm rounded-lg shadow-lg border px-4 py-3 text-sm bg-white border-gray-200"
       >
         <p class="text-gray-800">{{ popupNotification.message }}</p>
+      </div>
+
+      <div v-if="pinnedStudent" class="fixed right-4 bottom-4 z-[110] flex items-center gap-2">
+        <button
+          class="px-3 py-2 bg-white border border-gray-200 rounded-lg shadow text-sm text-gray-700 hover:bg-gray-50"
+          @click="pinnedPanelOpen = !pinnedPanelOpen"
+        >
+          {{ pinnedPanelOpen ? '学生パネルを閉じる' : `学生: ${pinnedStudent.name || '固定中'} を表示` }}
+        </button>
+        <button
+          class="px-2 py-2 bg-white border border-gray-200 rounded-lg shadow text-sm text-red-600 hover:bg-red-50"
+          @click="clearPinnedStudent(); pinnedPanelOpen = false; pinnedStudentDetail = null"
+        >
+          解除
+        </button>
+      </div>
+
+      <div v-if="pinnedStudent && pinnedPanelOpen" class="fixed right-4 bottom-20 z-[110] w-[92vw] max-w-[420px] bg-white border border-gray-200 rounded-xl shadow-xl">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <p class="text-sm font-semibold text-gray-900">固定した学生</p>
+          <button class="text-xs text-blue-600 hover:text-blue-700" @click="router.push(`/students/${pinnedStudent.id}`)">詳細へ</button>
+        </div>
+        <div class="p-4 text-sm space-y-2">
+          <p class="text-gray-900 font-semibold">{{ pinnedStudentDetail?.name || pinnedStudent.name }}</p>
+          <p class="text-gray-600">大学: {{ pinnedStudentDetail?.university || '-' }}</p>
+          <p class="text-gray-600">流入経路: {{ pinnedStudentDetail?.source_company || '-' }}</p>
+          <p class="text-gray-600">面談決定日: {{ pinnedStudentDetail?.meeting_decided_date || '-' }}</p>
+          <p class="text-gray-600">初回面談日: {{ pinnedStudentDetail?.first_interview_date || '-' }}</p>
+          <p class="text-gray-600">次回面談日: {{ pinnedStudentDetail?.next_meeting_date || '-' }}</p>
+          <p class="text-gray-600">ネクストアクション: {{ pinnedStudentDetail?.next_action || '-' }}</p>
+        </div>
       </div>
     </div>
   </div>

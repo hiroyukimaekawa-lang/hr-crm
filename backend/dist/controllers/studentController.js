@@ -827,6 +827,14 @@ exports.importStudents = importStudents;
 const getSourceCategories = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield ensureSourceCategoriesTable();
+        yield db_1.default.query(`
+            INSERT INTO source_categories (name)
+            SELECT DISTINCT TRIM(COALESCE(source_company, '')) AS name
+            FROM students
+            WHERE TRIM(COALESCE(source_company, '')) <> ''
+              AND TRIM(COALESCE(source_company, '')) NOT IN ('流入経路', 'source_company', '氏名', '初回平均(日)')
+            ON CONFLICT (name) DO NOTHING
+        `);
         const result = yield db_1.default.query('SELECT id, name, created_at FROM source_categories ORDER BY name ASC');
         res.json(result.rows);
     }

@@ -913,6 +913,14 @@ export const importStudents = async (req: Request, res: Response) => {
 export const getSourceCategories = async (_req: Request, res: Response) => {
     try {
         await ensureSourceCategoriesTable();
+        await pool.query(`
+            INSERT INTO source_categories (name)
+            SELECT DISTINCT TRIM(COALESCE(source_company, '')) AS name
+            FROM students
+            WHERE TRIM(COALESCE(source_company, '')) <> ''
+              AND TRIM(COALESCE(source_company, '')) NOT IN ('流入経路', 'source_company', '氏名', '初回平均(日)')
+            ON CONFLICT (name) DO NOTHING
+        `);
         const result = await pool.query('SELECT id, name, created_at FROM source_categories ORDER BY name ASC');
         res.json(result.rows);
     } catch (err: any) {

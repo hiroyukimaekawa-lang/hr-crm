@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { api } from '../lib/api';
 import Layout from '../components/Layout.vue';
+import { getPinnedStudent, setPinnedStudent, clearPinnedStudent } from '../lib/pinnedStudent';
 import {
   ArrowLeft,
   Mail,
@@ -64,6 +65,64 @@ const basicDraft = ref({
   next_action: ''
 });
 
+const draftStorageKey = computed(() => `student-detail-draft:${String(studentId)}`);
+
+const restoreDraft = () => {
+  try {
+    const raw = sessionStorage.getItem(draftStorageKey.value);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d.newTaskDate !== undefined) newTaskDate.value = d.newTaskDate || '';
+    if (d.newTaskContent !== undefined) newTaskContent.value = d.newTaskContent || '';
+    if (d.newScheduleDate !== undefined) newScheduleDate.value = d.newScheduleDate || '';
+    if (d.newScheduleType !== undefined) newScheduleType.value = d.newScheduleType || '面談';
+    if (d.newLog !== undefined) newLog.value = d.newLog || '';
+    if (d.newLogType !== undefined) newLogType.value = d.newLogType || '面談';
+    if (d.newLogEventId !== undefined) newLogEventId.value = d.newLogEventId || '';
+    if (d.selectedEventId !== undefined) selectedEventId.value = d.selectedEventId || '';
+    if (d.selectedEventStatus !== undefined) selectedEventStatus.value = d.selectedEventStatus || 'A_ENTRY';
+    if (d.editingStatus !== undefined) editingStatus.value = !!d.editingStatus;
+    if (d.referralStatusDraft !== undefined) referralStatusDraft.value = d.referralStatusDraft || '不明';
+    if (d.progressStageDraft !== undefined) progressStageDraft.value = d.progressStageDraft || '面談調整中';
+    if (d.editingBasic !== undefined) editingBasic.value = !!d.editingBasic;
+    if (d.basicDraft && typeof d.basicDraft === 'object') {
+      basicDraft.value = {
+        ...basicDraft.value,
+        ...d.basicDraft
+      };
+    }
+  } catch (e) {
+    console.error('draft restore failed', e);
+  }
+};
+
+const persistDraft = () => {
+  try {
+    sessionStorage.setItem(draftStorageKey.value, JSON.stringify({
+      newTaskDate: newTaskDate.value,
+      newTaskContent: newTaskContent.value,
+      newScheduleDate: newScheduleDate.value,
+      newScheduleType: newScheduleType.value,
+      newLog: newLog.value,
+      newLogType: newLogType.value,
+      newLogEventId: newLogEventId.value,
+      selectedEventId: selectedEventId.value,
+      selectedEventStatus: selectedEventStatus.value,
+      editingStatus: editingStatus.value,
+      referralStatusDraft: referralStatusDraft.value,
+      progressStageDraft: progressStageDraft.value,
+      editingBasic: editingBasic.value,
+      basicDraft: basicDraft.value
+    }));
+  } catch (e) {
+    console.error('draft persist failed', e);
+  }
+};
+
+const clearDraft = () => {
+  sessionStorage.removeItem(draftStorageKey.value);
+};
+
 const resetBasicDraft = () => {
   basicDraft.value = {
     name: student.value?.name || '',
@@ -119,6 +178,7 @@ const addLog = async () => {
   newLog.value = '';
   newLogEventId.value = '';
   newLogType.value = '面談';
+  persistDraft();
   fetchDetail();
 };
 
@@ -142,6 +202,7 @@ const addTask = async () => {
   }, { headers: { Authorization: token } });
   newTaskDate.value = '';
   newTaskContent.value = '';
+  persistDraft();
   fetchDetail();
 };
 
@@ -154,6 +215,7 @@ const addInterviewSchedule = async () => {
   }, { headers: { Authorization: token } });
   newScheduleDate.value = '';
   newScheduleType.value = '面談';
+  persistDraft();
   fetchDetail();
 };
 
@@ -186,6 +248,7 @@ const linkEvent = async () => {
   }, { headers: { Authorization: token } });
   selectedEventId.value = '';
   selectedEventStatus.value = 'A_ENTRY';
+  persistDraft();
   fetchDetail();
 };
 
@@ -279,6 +342,7 @@ const cancelEditBasic = () => {
   basicSaveError.value = '';
   basicSaveMessage.value = '';
   editingBasic.value = false;
+  persistDraft();
 };
 
 const statusClass = (status?: string) => {
@@ -304,11 +368,72 @@ const formatDateTime = (value?: string | null) => {
 };
 
 const tags = computed(() => Array.isArray(student.value?.tags) ? student.value.tags : []);
+const isPinned = computed(() => getPinnedStudent()?.id === Number(studentId));
+
+const pinCurrentStudent = () => {
+  if (!student.value?.id) return;
+  setPinnedStudent({ id: Number(student.value.id), name: String(student.value.name || '') });
+};
+
+const unpinCurrentStudent = () => {
+  if (getPinnedStudent()?.id === Number(studentId)) {
+    clearPinnedStudent();
+  }
+};
+
+const hasUnsavedDraft = computed(() => {
+  return Boolean(
+    newLog.value.trim()
+    || newTaskContent.value.trim()
+    || newTaskDate.value
+    || newScheduleDate.value
+    || editingBasic.value
+  );
+});
+
+const onBeforeUnload = (e: BeforeUnloadEvent) => {
+  if (!hasUnsavedDraft.value) return;
+  e.preventDefault();
+  e.returnValue = '';
+};
 
 onMounted(() => {
-  fetchDetail();
+  fetchDetail().then(restoreDraft);
   fetchAllEvents();
+  window.addEventListener('beforeunload', onBeforeUnload);
 });
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', onBeforeUnload);
+});
+
+onBeforeRouteLeave((_to, _from, next) => {
+  persistDraft();
+  next();
+});
+
+watch(
+  [
+    newTaskDate,
+    newTaskContent,
+    newScheduleDate,
+    newScheduleType,
+    newLog,
+    newLogType,
+    newLogEventId,
+    selectedEventId,
+    selectedEventStatus,
+    editingStatus,
+    referralStatusDraft,
+    progressStageDraft,
+    editingBasic,
+    basicDraft
+  ],
+  () => {
+    persistDraft();
+  },
+  { deep: true }
+);
 </script>
 
 <template>
@@ -321,6 +446,22 @@ onMounted(() => {
         <div>
           <h1 class="text-3xl font-bold text-gray-900">{{ student.name }}</h1>
           <p class="text-gray-500">学生詳細情報・面談履歴</p>
+        </div>
+        <div class="ml-auto flex items-center gap-2">
+          <button
+            v-if="!isPinned"
+            class="px-3 py-2 text-sm border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50"
+            @click="pinCurrentStudent"
+          >
+            この学生を固定表示
+          </button>
+          <button
+            v-else
+            class="px-3 py-2 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50"
+            @click="unpinCurrentStudent"
+          >
+            固定を解除
+          </button>
         </div>
       </div>
 
