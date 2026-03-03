@@ -149,6 +149,14 @@ const normalizeAcademicTrack = (value: any) => {
     return raw;
 };
 
+const oneDayBefore = (dateText?: string | null) => {
+    if (!dateText) return null;
+    const d = new Date(dateText);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+};
+
 export const getStudents = async (req: Request, res: Response) => {
     const staffId = req.query.staffId;
     const authUser = (req as any).user as { sub?: string; role?: string } | undefined;
@@ -239,7 +247,7 @@ export const createStudent = async (req: Request, res: Response) => {
         pushCol('faculty', faculty || null);
         pushCol('referral_status', normalizeReferralStatus(referral_status));
         pushCol('progress_stage', normalizeProgressStage(progress_stage));
-        pushCol('next_meeting_date', next_meeting_date || null);
+        pushCol('next_meeting_date', next_meeting_date || first_interview_date || null);
         pushCol('next_action', next_action || null);
         pushCol('desired_industry', desired_industry || null);
         pushCol('desired_role', desired_role || null);
@@ -259,7 +267,15 @@ export const createStudent = async (req: Request, res: Response) => {
             `INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`,
             insertVals
         );
-        res.json(result.rows[0]);
+        const created = result.rows[0];
+        const preContactDate = oneDayBefore(first_interview_date || null);
+        if (created?.id && preContactDate) {
+            await pool.query(
+                'INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)',
+                [created.id, preContactDate, '事前連絡']
+            );
+        }
+        res.json(created);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

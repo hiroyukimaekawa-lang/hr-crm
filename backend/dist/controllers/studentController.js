@@ -168,6 +168,15 @@ const normalizeAcademicTrack = (value) => {
         return '理系';
     return raw;
 };
+const oneDayBefore = (dateText) => {
+    if (!dateText)
+        return null;
+    const d = new Date(dateText);
+    if (Number.isNaN(d.getTime()))
+        return null;
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+};
 const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const staffId = req.query.staffId;
     const authUser = req.user;
@@ -232,7 +241,7 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         pushCol('faculty', faculty || null);
         pushCol('referral_status', normalizeReferralStatus(referral_status));
         pushCol('progress_stage', normalizeProgressStage(progress_stage));
-        pushCol('next_meeting_date', next_meeting_date || null);
+        pushCol('next_meeting_date', next_meeting_date || first_interview_date || null);
         pushCol('next_action', next_action || null);
         pushCol('desired_industry', desired_industry || null);
         pushCol('desired_role', desired_role || null);
@@ -248,7 +257,12 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         pushCol('first_interview_date', first_interview_date || null);
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         const result = yield db_1.default.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`, insertVals);
-        res.json(result.rows[0]);
+        const created = result.rows[0];
+        const preContactDate = oneDayBefore(first_interview_date || null);
+        if ((created === null || created === void 0 ? void 0 : created.id) && preContactDate) {
+            yield db_1.default.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)', [created.id, preContactDate, '事前連絡']);
+        }
+        res.json(created);
     }
     catch (err) {
         res.status(500).json({ error: err.message });

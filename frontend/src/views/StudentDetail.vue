@@ -58,6 +58,8 @@ const basicDraft = ref({
   phone: '',
   source_company: '',
   interview_reason: '',
+  meeting_decided_date: '',
+  first_interview_date: '',
   next_meeting_date: '',
   next_action: ''
 });
@@ -76,6 +78,8 @@ const resetBasicDraft = () => {
     phone: student.value?.phone || '',
     source_company: student.value?.source_company || '',
     interview_reason: student.value?.interview_reason || '',
+    meeting_decided_date: student.value?.meeting_decided_date || '',
+    first_interview_date: student.value?.first_interview_date || '',
     next_meeting_date: student.value?.next_meeting_date || '',
     next_action: student.value?.next_action || ''
   };
@@ -248,6 +252,8 @@ const saveBasic = async () => {
     await api.put(`/api/students/${studentId}`, {
       ...basicDraft.value,
       graduation_year: basicDraft.value.graduation_year ? Number(basicDraft.value.graduation_year) : null,
+      meeting_decided_date: basicDraft.value.meeting_decided_date || null,
+      first_interview_date: basicDraft.value.first_interview_date || null,
       next_meeting_date: basicDraft.value.next_meeting_date || null,
       next_action: basicDraft.value.next_action || null
     }, { headers: { Authorization: token } });
@@ -437,6 +443,20 @@ onMounted(() => {
                 <div>
                   <p class="text-xs text-gray-500">電話番号</p>
                   <p class="text-sm font-medium">{{ student.phone }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <Calendar class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">面談決定日</p>
+                  <p class="text-sm font-medium">{{ student.meeting_decided_date || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <Calendar class="w-5 h-5" />
+                <div>
+                  <p class="text-xs text-gray-500">初回面談日</p>
+                  <p class="text-sm font-medium">{{ student.first_interview_date || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
@@ -723,6 +743,8 @@ onMounted(() => {
               <option value="企業相談">企業相談</option>
               <option value="面接対策">面接対策</option>
             </select>
+            <input v-model="basicDraft.meeting_decided_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            <input v-model="basicDraft.first_interview_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             <input v-model="basicDraft.desired_industry" type="text" placeholder="志望業界" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             <input v-model="basicDraft.desired_role" type="text" placeholder="志望職種" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             <input v-model="basicDraft.next_meeting_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
