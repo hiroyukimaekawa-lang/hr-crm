@@ -72,7 +72,9 @@ const interviewMetrics = ref({
     first_interviews_count: 0,
     second_interviews_count: 0,
     interviews_count: 0,
-    setting_to_first_interview_lead_time_days_avg: null as number | null
+    setting_to_first_interview_lead_time_days_avg: null as number | null,
+    first_interview_executed_count: 0,
+    first_interview_execution_rate: null as number | null
   }
 });
 const interviewMetricsBySource = ref<Array<{
@@ -90,6 +92,15 @@ const interviewMetricsBySource = ref<Array<{
   second_interviews_count?: number;
   interviews_count?: number;
   setting_to_first_interview_lead_time_days_avg?: number | null;
+  first_interview_executed_count?: number;
+  first_interview_execution_rate?: number | null;
+}>>([]);
+const interviewExecutionByStaff = ref<Array<{
+  staff_id: number | null;
+  staff_name: string;
+  settings_count: number;
+  first_interview_executed_count: number;
+  first_interview_execution_rate: number | null;
 }>>([]);
 const sourceCompanyFilter = ref('ALL');
 
@@ -112,9 +123,10 @@ const fetchInterviewMetrics = async () => {
   const token = localStorage.getItem('token');
   const params: Record<string, string> = {};
   if (sourceCompanyFilter.value !== 'ALL') params.source_company = sourceCompanyFilter.value;
-  const [metricsRes, bySourceRes] = await Promise.all([
+  const [metricsRes, bySourceRes, byStaffRes] = await Promise.all([
     api.get('/api/students/metrics/interviews', { headers: { Authorization: token }, params }),
-    api.get('/api/students/metrics/interviews', { headers: { Authorization: token }, params: { group_by_source: '1' } })
+    api.get('/api/students/metrics/interviews', { headers: { Authorization: token }, params: { group_by_source: '1', ...(sourceCompanyFilter.value !== 'ALL' ? { source_company: sourceCompanyFilter.value } : {}) } }),
+    api.get('/api/students/metrics/interviews', { headers: { Authorization: token }, params: { group_by_staff: '1', ...(sourceCompanyFilter.value !== 'ALL' ? { source_company: sourceCompanyFilter.value } : {}) } })
   ]);
   interviewMetrics.value = {
     first_lead_time_days_avg: metricsRes.data?.first_lead_time_days_avg ?? null,
@@ -145,7 +157,9 @@ const fetchInterviewMetrics = async () => {
       first_interviews_count: Number(metricsRes.data?.account_summary?.first_interviews_count || 0),
       second_interviews_count: Number(metricsRes.data?.account_summary?.second_interviews_count || 0),
       interviews_count: Number(metricsRes.data?.account_summary?.interviews_count || 0),
-      setting_to_first_interview_lead_time_days_avg: metricsRes.data?.account_summary?.setting_to_first_interview_lead_time_days_avg ?? null
+      setting_to_first_interview_lead_time_days_avg: metricsRes.data?.account_summary?.setting_to_first_interview_lead_time_days_avg ?? null,
+      first_interview_executed_count: Number(metricsRes.data?.account_summary?.first_interview_executed_count || 0),
+      first_interview_execution_rate: metricsRes.data?.account_summary?.first_interview_execution_rate ?? null
     }
   };
   interviewMetricsBySource.value = Array.isArray(bySourceRes.data) ? bySourceRes.data.map((r: any) => ({
@@ -162,8 +176,19 @@ const fetchInterviewMetrics = async () => {
     first_interviews_count: Number(r.first_interviews_count || 0),
     second_interviews_count: Number(r.second_interviews_count || 0),
     interviews_count: Number(r.interviews_count || 0),
-    setting_to_first_interview_lead_time_days_avg: r.setting_to_first_interview_lead_time_days_avg ?? null
+    setting_to_first_interview_lead_time_days_avg: r.setting_to_first_interview_lead_time_days_avg ?? null,
+    first_interview_executed_count: Number(r.first_interview_executed_count || 0),
+    first_interview_execution_rate: r.first_interview_execution_rate ?? null
   })) : [];
+  interviewExecutionByStaff.value = Array.isArray(byStaffRes.data)
+    ? byStaffRes.data.map((r: any) => ({
+        staff_id: r.staff_id ?? null,
+        staff_name: String(r.staff_name || '未割当'),
+        settings_count: Number(r.settings_count || 0),
+        first_interview_executed_count: Number(r.first_interview_executed_count || 0),
+        first_interview_execution_rate: r.first_interview_execution_rate ?? null
+      }))
+    : [];
 };
 
 const createInvite = async () => {
@@ -542,6 +567,11 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
           <p class="text-2xl font-bold text-gray-900">{{ interviewMetrics.followup_rescheduled }}<span class="text-sm font-medium text-gray-500">件</span></p>
           <p class="text-xs text-gray-500 mt-1">率: {{ interviewMetrics.followup_reschedule_rate ?? '-' }}% / 母数: {{ interviewMetrics.followup_total }}</p>
         </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">初回面談実施率</p>
+          <p class="text-2xl font-bold text-gray-900">{{ interviewMetrics.account_summary.first_interview_execution_rate ?? '-' }}<span class="text-sm font-medium text-gray-500">%</span></p>
+          <p class="text-xs text-gray-500 mt-1">実施: {{ interviewMetrics.account_summary.first_interview_executed_count }} / 設定: {{ interviewMetrics.account_summary.settings_count }}</p>
+        </div>
       </div>
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
@@ -555,6 +585,8 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談数</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">2回目面談数</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">面談数</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談実施数</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談実施率(%)</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">設定→初回面談平均(日)</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回平均(日)</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回リスケ率(%)</th>
@@ -569,6 +601,8 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                 <td class="px-3 py-2 text-right text-gray-700">{{ row.first_interviews_count ?? 0 }}</td>
                 <td class="px-3 py-2 text-right text-gray-700">{{ row.second_interviews_count ?? 0 }}</td>
                 <td class="px-3 py-2 text-right text-gray-700">{{ row.interviews_count ?? 0 }}</td>
+                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_interview_executed_count ?? 0 }}</td>
+                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_interview_execution_rate ?? '-' }}</td>
                 <td class="px-3 py-2 text-right text-gray-700">{{ row.setting_to_first_interview_lead_time_days_avg ?? '-' }}</td>
                 <td class="px-3 py-2 text-right text-gray-700">{{ row.first_lead_time_days_avg ?? '-' }}</td>
                 <td class="px-3 py-2 text-right text-gray-700">{{ row.first_reschedule_rate ?? '-' }}</td>
@@ -576,7 +610,34 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                 <td class="px-3 py-2 text-right text-gray-700">{{ row.followup_reschedule_rate ?? '-' }}</td>
               </tr>
               <tr v-if="interviewMetricsBySource.length === 0">
-                <td colSpan="10" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
+                <td colSpan="12" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">担当者別 初回面談実施率</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">担当者</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">設定数</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談実施数</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談実施率(%)</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr v-for="row in interviewExecutionByStaff" :key="`staff-exec-${row.staff_id ?? 'none'}-${row.staff_name}`" class="hover:bg-gray-50">
+                <td class="px-3 py-2 text-gray-900">{{ row.staff_name || '未割当' }}</td>
+                <td class="px-3 py-2 text-right text-gray-700">{{ row.settings_count }}</td>
+                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_interview_executed_count }}</td>
+                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_interview_execution_rate ?? '-' }}</td>
+              </tr>
+              <tr v-if="interviewExecutionByStaff.length === 0">
+                <td colSpan="4" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
               </tr>
             </tbody>
           </table>

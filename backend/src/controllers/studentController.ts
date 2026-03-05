@@ -443,6 +443,7 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
     const authUser = (req as any).user as { sub?: string; role?: string } | undefined;
     const sourceCompany = String(req.query.source_company || '').trim();
     const groupBySource = String(req.query.group_by_source || '') === '1';
+    const groupByStaff = String(req.query.group_by_staff || '') === '1';
     try {
         await ensureStudentExtendedColumns();
         await ensureInterviewScheduleTables();
@@ -485,6 +486,47 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
             )
         `;
 
+        if (groupByStaff) {
+            const byStaffSql = `
+                WITH student_base AS (
+                    SELECT
+                        s.id AS student_id,
+                        s.staff_id,
+                        COALESCE(u.name, '未割当') AS staff_name,
+                        s.meeting_decided_date
+                    FROM students s
+                    LEFT JOIN users u ON u.id = s.staff_id
+                    ${whereClause}
+                ),
+                first_executed AS (
+                    SELECT DISTINCT sch.student_id
+                    FROM interview_schedules sch
+                    WHERE sch.round_no = 1
+                      AND sch.status = 'completed'
+                      AND sch.actual_at IS NOT NULL
+                )
+                SELECT
+                    sb.staff_id,
+                    sb.staff_name,
+                    COUNT(*) FILTER (WHERE sb.meeting_decided_date IS NOT NULL)::int AS settings_count,
+                    COUNT(*) FILTER (WHERE sb.meeting_decided_date IS NOT NULL AND fe.student_id IS NOT NULL)::int AS first_interview_executed_count,
+                    ROUND(
+                        (
+                            COUNT(*) FILTER (WHERE sb.meeting_decided_date IS NOT NULL AND fe.student_id IS NOT NULL)::numeric
+                            / NULLIF(COUNT(*) FILTER (WHERE sb.meeting_decided_date IS NOT NULL), 0)
+                        ) * 100,
+                        2
+                    ) AS first_interview_execution_rate
+                FROM student_base sb
+                LEFT JOIN first_executed fe ON fe.student_id = sb.student_id
+                GROUP BY sb.staff_id, sb.staff_name
+                ORDER BY sb.staff_name ASC
+            `;
+            const byStaff = await pool.query(byStaffSql, params);
+            res.json(byStaff.rows);
+            return;
+        }
+
         if (groupBySource) {
             const groupedSql = `
                 ${commonCte}
@@ -522,7 +564,18 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
                             AVG((s.first_interview_date::date - s.meeting_decided_date::date)::numeric)
                             FILTER (WHERE s.meeting_decided_date IS NOT NULL AND s.first_interview_date IS NOT NULL),
                             2
-                        ) AS setting_to_first_interview_lead_time_days_avg
+                        ) AS setting_to_first_interview_lead_time_days_avg,
+                        COUNT(*) FILTER (
+                            WHERE s.meeting_decided_date IS NOT NULL
+                              AND EXISTS (
+                                  SELECT 1
+                                  FROM interview_schedules sch
+                                  WHERE sch.student_id = s.id
+                                    AND sch.round_no = 1
+                                    AND sch.status = 'completed'
+                                    AND sch.actual_at IS NOT NULL
+                              )
+                        )::int AS first_interview_executed_count
                     FROM students s
                     ${whereClause}
                     GROUP BY COALESCE(s.source_company, '未設定')
@@ -541,7 +594,15 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
                     COALESCE(sa.first_interviews_count, 0) AS first_interviews_count,
                     COALESCE(sa.second_interviews_count, 0) AS second_interviews_count,
                     COALESCE(sa.interviews_count, 0) AS interviews_count,
-                    sa.setting_to_first_interview_lead_time_days_avg
+                    sa.setting_to_first_interview_lead_time_days_avg,
+                    COALESCE(sa.first_interview_executed_count, 0) AS first_interview_executed_count,
+                    ROUND(
+                        (
+                            COALESCE(sa.first_interview_executed_count, 0)::numeric
+                            / NULLIF(COALESCE(sa.settings_count, 0), 0)
+                        ) * 100,
+                        2
+                    ) AS first_interview_execution_rate
                 FROM (
                     SELECT DISTINCT source_company FROM base
                     UNION
@@ -639,22 +700,42 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
                         AVG((s.first_interview_date::date - s.meeting_decided_date::date)::numeric)
                         FILTER (WHERE s.meeting_decided_date IS NOT NULL AND s.first_interview_date IS NOT NULL),
                         2
-                    ) AS setting_to_first_interview_lead_time_days_avg
+                    ) AS setting_to_first_interview_lead_time_days_avg,
+                    COUNT(*) FILTER (
+                        WHERE s.meeting_decided_date IS NOT NULL
+                          AND EXISTS (
+                              SELECT 1
+                              FROM interview_schedules sch
+                              WHERE sch.student_id = s.id
+                                AND sch.round_no = 1
+                                AND sch.status = 'completed'
+                                AND sch.actual_at IS NOT NULL
+                          )
+                    )::int AS first_interview_executed_count
                 FROM students s
                 ${whereClause}
             `,
             params
         );
+        const summary = summaryRes.rows[0] || {
+            settings_count: 0,
+            first_interviews_count: 0,
+            second_interviews_count: 0,
+            interviews_count: 0,
+            setting_to_first_interview_lead_time_days_avg: null,
+            first_interview_executed_count: 0
+        };
+        const settingsCount = Number(summary.settings_count || 0);
+        const executedCount = Number(summary.first_interview_executed_count || 0);
         res.json({
             ...(result.rows[0] || {}),
             settings_by_date: settingsByDateRes.rows,
             interviews_by_date: interviewsByDateRes.rows,
-            account_summary: summaryRes.rows[0] || {
-                settings_count: 0,
-                first_interviews_count: 0,
-                second_interviews_count: 0,
-                interviews_count: 0,
-                setting_to_first_interview_lead_time_days_avg: null
+            account_summary: {
+                ...summary,
+                first_interview_execution_rate: settingsCount > 0
+                    ? Number(((executedCount / settingsCount) * 100).toFixed(2))
+                    : null
             }
         });
     } catch (err: any) {

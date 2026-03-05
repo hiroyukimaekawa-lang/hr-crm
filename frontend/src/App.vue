@@ -2,7 +2,9 @@
 </script>
 
 <template>
-  <router-view></router-view>
+  <div class="notranslate" translate="no">
+    <router-view />
+  </div>
 </template>
 
 <style>

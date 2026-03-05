@@ -134,6 +134,7 @@ const newStudent = ref({
   university: '',
   faculty: '',
   interview_reason: '',
+  staff_id: '',
   meeting_decided_date: '',
   first_interview_date: '',
   prefecture: '',
@@ -237,7 +238,7 @@ const createStudent = async () => {
     showToast('学生登録を受け付けました。', 'success');
     const token = localStorage.getItem('token');
     const assignedStaffId = user.role === 'admin'
-      ? (!showAll.value ? Number(user.id) : null)
+      ? (newStudent.value.staff_id ? Number(newStudent.value.staff_id) : null)
       : Number(user.id);
 
     await api.post('/api/students', {
@@ -261,6 +262,7 @@ const createStudent = async () => {
       university: '',
       faculty: '',
       interview_reason: '',
+      staff_id: '',
       meeting_decided_date: '',
       first_interview_date: '',
       prefecture: '',
@@ -1127,6 +1129,13 @@ watch(filteredStudents, () => {
               <option value="企業相談">企業相談</option>
               <option value="就活相談">就活相談</option>
               <option value="面接対策">面接対策</option>
+            </select>
+          </div>
+          <div v-if="user.role === 'admin'">
+            <label class="block text-sm font-medium text-gray-700 mb-1">担当</label>
+            <select v-model="newStudent.staff_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">未割当</option>
+              <option v-for="u in staffUsers" :key="`create-staff-${u.id}`" :value="String(u.id)">{{ u.name }}</option>
             </select>
           </div>
           <div>
