@@ -199,6 +199,23 @@ const oneDayBefore = (dateText) => {
     d.setDate(d.getDate() - 1);
     return d.toISOString().slice(0, 10);
 };
+const normalizeNullableText = (value) => {
+    if (value === undefined)
+        return undefined;
+    if (value === null)
+        return null;
+    const text = String(value).trim();
+    return text ? text : null;
+};
+const ensureSourceCategoryFromStudent = (sourceCompany_1, ...args_1) => __awaiter(void 0, [sourceCompany_1, ...args_1], void 0, function* (sourceCompany, queryable = db_1.default) {
+    const normalized = normalizeNullableText(sourceCompany);
+    if (!normalized)
+        return;
+    if (['流入経路', 'source_company', '氏名', '初回平均(日)'].includes(normalized))
+        return;
+    yield ensureSourceCategoriesTable();
+    yield queryable.query('INSERT INTO source_categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING', [normalized]);
+});
 const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const staffId = req.query.staffId;
     const authUser = req.user;
@@ -281,8 +298,10 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         pushCol('first_interview_date', first_interview_date || null);
         pushCol('second_interview_date', second_interview_date || null);
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
+        const normalizedSourceCompany = normalizeNullableText(source_company);
         const result = yield db_1.default.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`, insertVals);
         const created = result.rows[0];
+        yield ensureSourceCategoryFromStudent(normalizedSourceCompany);
         const preContactDate = oneDayBefore(first_interview_date || null);
         if ((created === null || created === void 0 ? void 0 : created.id) && preContactDate) {
             yield db_1.default.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)', [created.id, preContactDate, '事前連絡']);
@@ -374,8 +393,9 @@ const updateInterviewSchedule = (req, res) => __awaiter(void 0, void 0, void 0, 
             return;
         }
         const current = currentRes.rows[0];
-        const scheduledChanged = (current.scheduled_at ? new Date(current.scheduled_at).toISOString() : null)
-            !== (scheduled_at ? new Date(scheduled_at).toISOString() : null);
+        const scheduledChanged = current.scheduled_at !== null &&
+            (current.scheduled_at ? new Date(current.scheduled_at).toISOString() : null) !==
+                (scheduled_at ? new Date(scheduled_at).toISOString() : null);
         const safeType = ['流入日', '面談', 'リスケ'].includes(schedule_type) ? schedule_type : (current.schedule_type || '面談');
         const typeChangedToReschedule = safeType === 'リスケ' && current.schedule_type !== 'リスケ';
         const nextRescheduleCount = (scheduledChanged || typeChangedToReschedule)
@@ -816,20 +836,51 @@ const updateStudentStaff = (req, res) => __awaiter(void 0, void 0, void 0, funct
 exports.updateStudentStaff = updateStudentStaff;
 const updateStudentMeta = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { referral_status, progress_stage, source_company, next_meeting_date, next_action } = req.body;
     try {
+        const cols = yield getStudentColumns();
+        const setParts = [];
+        const values = [];
+        const appendSet = (column, value) => {
+            if (!cols.has(column))
+                return;
+            values.push(value);
+            setParts.push(`${column} = $${values.length}`);
+        };
+        if (Object.prototype.hasOwnProperty.call(req.body, 'referral_status')) {
+            const v = req.body.referral_status;
+            appendSet('referral_status', v === null || v === '' ? null : normalizeReferralStatus(v));
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body, 'progress_stage')) {
+            const v = req.body.progress_stage;
+            appendSet('progress_stage', v === null || v === '' ? null : normalizeProgressStage(v));
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body, 'source_company')) {
+            appendSet('source_company', normalizeNullableText(req.body.source_company));
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body, 'next_meeting_date')) {
+            appendSet('next_meeting_date', normalizeNullableText(req.body.next_meeting_date));
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body, 'next_action')) {
+            appendSet('next_action', normalizeNullableText(req.body.next_action));
+        }
+        if (setParts.length === 0) {
+            res.status(400).json({ error: 'No updatable fields provided' });
+            return;
+        }
+        if (cols.has('updated_at')) {
+            setParts.push('updated_at = CURRENT_TIMESTAMP');
+        }
+        values.push(id);
         const result = yield db_1.default.query(`UPDATE students
-             SET referral_status = COALESCE($1, referral_status),
-                 progress_stage = COALESCE($2, progress_stage),
-                 source_company = COALESCE($3, source_company),
-                 next_meeting_date = COALESCE($4, next_meeting_date),
-                 next_action = COALESCE($5, next_action),
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $6
-             RETURNING *`, [referral_status, progress_stage, source_company, next_meeting_date, next_action, id]);
+             SET ${setParts.join(', ')}
+             WHERE id = $${values.length}
+             RETURNING *`, values);
         if (result.rows.length === 0) {
             res.status(404).json({ error: 'Student not found' });
             return;
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body, 'source_company')) {
+            yield ensureSourceCategoryFromStudent(req.body.source_company);
         }
         res.json(result.rows[0]);
     }
@@ -913,8 +964,11 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
     let skipped = 0;
     const seen = new Set();
     const headerLikeValues = new Set(['氏名', '流入経路', '初回平均(日)', 'source_company', 'name']);
+    let client = null;
     try {
         yield ensureStudentExtendedColumns();
+        client = yield db_1.default.connect();
+        yield client.query('BEGIN');
         const cols = yield getStudentColumns();
         for (const s of students) {
             const name = s.name || '';
@@ -933,7 +987,7 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 continue;
             }
             seen.add(dedupeKey);
-            const existsRes = yield db_1.default.query(cols.has('prefecture')
+            const existsRes = yield client.query(cols.has('prefecture')
                 ? 'SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') AND COALESCE(prefecture, \'\') = COALESCE($3, \'\') LIMIT 1'
                 : 'SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') LIMIT 1', cols.has('prefecture')
                 ? [name, university || null, prefecture || null]
@@ -963,15 +1017,16 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 const id = existsRes.rows[0].id;
                 if (updateParts.length > 0) {
                     values.push(id);
-                    yield db_1.default.query(`UPDATE students SET ${updateParts.join(', ')} WHERE id = $${values.length}`, values);
+                    yield client.query(`UPDATE students SET ${updateParts.join(', ')} WHERE id = $${values.length}`, values);
                 }
+                yield ensureSourceCategoryFromStudent(s.source_company, client);
                 if (s.task_due_date) {
-                    const lastTask = yield db_1.default.query('SELECT id FROM student_tasks WHERE student_id = $1 ORDER BY created_at DESC LIMIT 1', [id]);
+                    const lastTask = yield client.query('SELECT id FROM student_tasks WHERE student_id = $1 ORDER BY created_at DESC LIMIT 1', [id]);
                     if (lastTask.rows.length > 0) {
-                        yield db_1.default.query('UPDATE student_tasks SET due_date = $1 WHERE id = $2', [s.task_due_date, lastTask.rows[0].id]);
+                        yield client.query('UPDATE student_tasks SET due_date = $1 WHERE id = $2', [s.task_due_date, lastTask.rows[0].id]);
                     }
                     else {
-                        yield db_1.default.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)', [id, s.task_due_date, 'CSV更新タスク']);
+                        yield client.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)', [id, s.task_due_date, 'CSV更新タスク']);
                     }
                 }
                 updated++;
@@ -999,30 +1054,35 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
             pushInsert('first_interview_date', s.first_interview_date || null);
             pushInsert('second_interview_date', s.second_interview_date || null);
             const placeholders = insertCols.map((_, idx) => `$${idx + 1}`).join(', ');
-            const insertedRes = yield db_1.default.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING id`, insertVals);
+            const insertedRes = yield client.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING id`, insertVals);
+            yield ensureSourceCategoryFromStudent(s.source_company, client);
             if (s.task_due_date && ((_a = insertedRes.rows[0]) === null || _a === void 0 ? void 0 : _a.id)) {
-                yield db_1.default.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)', [insertedRes.rows[0].id, s.task_due_date, 'CSV更新タスク']);
+                yield client.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)', [insertedRes.rows[0].id, s.task_due_date, 'CSV更新タスク']);
             }
             inserted++;
         }
+        yield client.query('COMMIT');
         res.json({ inserted, updated, skipped });
     }
     catch (err) {
-        res.status(500).json({ error: err.message });
+        if (client) {
+            try {
+                yield client.query('ROLLBACK');
+            }
+            catch (_b) {
+                // ignore rollback failure
+            }
+        }
+        res.status(500).json({ inserted: 0, updated: 0, skipped: 0, error: err.message });
+    }
+    finally {
+        client === null || client === void 0 ? void 0 : client.release();
     }
 });
 exports.importStudents = importStudents;
 const getSourceCategories = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield ensureSourceCategoriesTable();
-        yield db_1.default.query(`
-            INSERT INTO source_categories (name)
-            SELECT DISTINCT TRIM(COALESCE(source_company, '')) AS name
-            FROM students
-            WHERE TRIM(COALESCE(source_company, '')) <> ''
-              AND TRIM(COALESCE(source_company, '')) NOT IN ('流入経路', 'source_company', '氏名', '初回平均(日)')
-            ON CONFLICT (name) DO NOTHING
-        `);
         const result = yield db_1.default.query('SELECT id, name, created_at FROM source_categories ORDER BY name ASC');
         res.json(result.rows);
     }

@@ -21,8 +21,21 @@ const eventRoutes_1 = __importDefault(require("./routes/eventRoutes"));
 const performance_1 = require("./config/performance");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 // Middleware
-app.use((0, cors_1.default)());
+app.use((0, cors_1.default)({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+            return;
+        }
+        callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true
+}));
 app.use(express_1.default.json());
 // Routes
 // これにより、例えば /api/auth/login や /api/students などに分岐されます
@@ -33,8 +46,13 @@ app.use('/api/events', eventRoutes_1.default);
 app.post('/api/login', (req, res) => res.redirect(307, '/api/auth/login'));
 app.post('/api/interview-logs', (req, res) => res.redirect(307, '/api/students/interview-logs'));
 app.delete('/api/interview-logs/:id', (req, res) => res.redirect(307, `/api/students/interview-logs/${req.params.id}`));
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log(`Server running on port ${PORT}`);
-    yield (0, performance_1.applyPerformanceOptimizations)();
-}));
+module.exports = app;
+exports.default = app;
+// ローカル開発用
+if (require.main === module) {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => __awaiter(void 0, void 0, void 0, function* () {
+        console.log(`Server running on port ${PORT}`);
+        yield (0, performance_1.applyPerformanceOptimizations)();
+    }));
+}

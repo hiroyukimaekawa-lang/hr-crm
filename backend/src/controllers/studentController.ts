@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import type { PoolClient } from 'pg';
 import pool from '../config/db';
 
 let interviewScheduleTableReady = false;
@@ -179,6 +180,27 @@ const oneDayBefore = (dateText?: string | null) => {
     return d.toISOString().slice(0, 10);
 };
 
+const normalizeNullableText = (value: any) => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const text = String(value).trim();
+    return text ? text : null;
+};
+
+const ensureSourceCategoryFromStudent = async (
+    sourceCompany: any,
+    queryable: Pick<PoolClient, 'query'> | typeof pool = pool
+) => {
+    const normalized = normalizeNullableText(sourceCompany);
+    if (!normalized) return;
+    if (['流入経路', 'source_company', '氏名', '初回平均(日)'].includes(normalized)) return;
+    await ensureSourceCategoriesTable();
+    await queryable.query(
+        'INSERT INTO source_categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING',
+        [normalized]
+    );
+};
+
 export const getStudents = async (req: Request, res: Response) => {
     const staffId = req.query.staffId;
     const authUser = (req as any).user as { sub?: string; role?: string } | undefined;
@@ -289,11 +311,13 @@ export const createStudent = async (req: Request, res: Response) => {
         pushCol('second_interview_date', second_interview_date || null);
 
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
+        const normalizedSourceCompany = normalizeNullableText(source_company);
         const result = await pool.query(
             `INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`,
             insertVals
         );
         const created = result.rows[0];
+        await ensureSourceCategoryFromStudent(normalizedSourceCompany);
         const preContactDate = oneDayBefore(first_interview_date || null);
         if (created?.id && preContactDate) {
             await pool.query(
@@ -394,8 +418,10 @@ export const updateInterviewSchedule = async (req: Request, res: Response) => {
             return;
         }
         const current = currentRes.rows[0];
-        const scheduledChanged = (current.scheduled_at ? new Date(current.scheduled_at).toISOString() : null)
-            !== (scheduled_at ? new Date(scheduled_at).toISOString() : null);
+        const scheduledChanged =
+            current.scheduled_at !== null &&
+            (current.scheduled_at ? new Date(current.scheduled_at).toISOString() : null) !==
+            (scheduled_at ? new Date(scheduled_at).toISOString() : null);
         const safeType = ['流入日', '面談', 'リスケ'].includes(schedule_type) ? schedule_type : (current.schedule_type || '面談');
         const typeChangedToReschedule = safeType === 'リスケ' && current.schedule_type !== 'リスケ';
         const nextRescheduleCount = (scheduledChanged || typeChangedToReschedule)
@@ -886,23 +912,58 @@ export const updateStudentStaff = async (req: Request, res: Response) => {
 
 export const updateStudentMeta = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { referral_status, progress_stage, source_company, next_meeting_date, next_action } = req.body;
     try {
+        const cols = await getStudentColumns();
+        const setParts: string[] = [];
+        const values: any[] = [];
+
+        const appendSet = (column: string, value: any) => {
+            if (!cols.has(column)) return;
+            values.push(value);
+            setParts.push(`${column} = $${values.length}`);
+        };
+
+        if (Object.prototype.hasOwnProperty.call(req.body, 'referral_status')) {
+            const v = req.body.referral_status;
+            appendSet('referral_status', v === null || v === '' ? null : normalizeReferralStatus(v));
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body, 'progress_stage')) {
+            const v = req.body.progress_stage;
+            appendSet('progress_stage', v === null || v === '' ? null : normalizeProgressStage(v));
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body, 'source_company')) {
+            appendSet('source_company', normalizeNullableText(req.body.source_company));
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body, 'next_meeting_date')) {
+            appendSet('next_meeting_date', normalizeNullableText(req.body.next_meeting_date));
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body, 'next_action')) {
+            appendSet('next_action', normalizeNullableText(req.body.next_action));
+        }
+
+        if (setParts.length === 0) {
+            res.status(400).json({ error: 'No updatable fields provided' });
+            return;
+        }
+
+        if (cols.has('updated_at')) {
+            setParts.push('updated_at = CURRENT_TIMESTAMP');
+        }
+
+        values.push(id);
         const result = await pool.query(
             `UPDATE students
-             SET referral_status = COALESCE($1, referral_status),
-                 progress_stage = COALESCE($2, progress_stage),
-                 source_company = COALESCE($3, source_company),
-                 next_meeting_date = COALESCE($4, next_meeting_date),
-                 next_action = COALESCE($5, next_action),
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $6
+             SET ${setParts.join(', ')}
+             WHERE id = $${values.length}
              RETURNING *`,
-            [referral_status, progress_stage, source_company, next_meeting_date, next_action, id]
+            values
         );
         if (result.rows.length === 0) {
             res.status(404).json({ error: 'Student not found' });
             return;
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body, 'source_company')) {
+            await ensureSourceCategoryFromStudent(req.body.source_company);
         }
         res.json(result.rows[0]);
     } catch (err: any) {
@@ -988,8 +1049,11 @@ export const importStudents = async (req: Request, res: Response) => {
     const seen = new Set<string>();
     const headerLikeValues = new Set(['氏名', '流入経路', '初回平均(日)', 'source_company', 'name']);
 
+    let client: PoolClient | null = null;
     try {
         await ensureStudentExtendedColumns();
+        client = await pool.connect();
+        await client.query('BEGIN');
         const cols = await getStudentColumns();
         for (const s of students) {
             const name = s.name || '';
@@ -1009,7 +1073,7 @@ export const importStudents = async (req: Request, res: Response) => {
             }
             seen.add(dedupeKey);
 
-            const existsRes = await pool.query(
+            const existsRes = await client.query(
                 cols.has('prefecture')
                     ? 'SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') AND COALESCE(prefecture, \'\') = COALESCE($3, \'\') LIMIT 1'
                     : 'SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') LIMIT 1',
@@ -1043,24 +1107,25 @@ export const importStudents = async (req: Request, res: Response) => {
                 const id = existsRes.rows[0].id;
                 if (updateParts.length > 0) {
                     values.push(id);
-                    await pool.query(
+                    await client.query(
                         `UPDATE students SET ${updateParts.join(', ')} WHERE id = $${values.length}`,
                         values
                     );
                 }
+                await ensureSourceCategoryFromStudent(s.source_company, client);
 
                 if (s.task_due_date) {
-                    const lastTask = await pool.query(
+                    const lastTask = await client.query(
                         'SELECT id FROM student_tasks WHERE student_id = $1 ORDER BY created_at DESC LIMIT 1',
                         [id]
                     );
                     if (lastTask.rows.length > 0) {
-                        await pool.query(
+                        await client.query(
                             'UPDATE student_tasks SET due_date = $1 WHERE id = $2',
                             [s.task_due_date, lastTask.rows[0].id]
                         );
                     } else {
-                        await pool.query(
+                        await client.query(
                             'INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)',
                             [id, s.task_due_date, 'CSV更新タスク']
                         );
@@ -1093,13 +1158,14 @@ export const importStudents = async (req: Request, res: Response) => {
             pushInsert('second_interview_date', s.second_interview_date || null);
 
             const placeholders = insertCols.map((_: any, idx: number) => `$${idx + 1}`).join(', ');
-            const insertedRes = await pool.query(
+            const insertedRes = await client.query(
                 `INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING id`,
                 insertVals
             );
+            await ensureSourceCategoryFromStudent(s.source_company, client);
 
             if (s.task_due_date && insertedRes.rows[0]?.id) {
-                await pool.query(
+                await client.query(
                     'INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)',
                     [insertedRes.rows[0].id, s.task_due_date, 'CSV更新タスク']
                 );
@@ -1107,23 +1173,25 @@ export const importStudents = async (req: Request, res: Response) => {
             inserted++;
         }
 
+        await client.query('COMMIT');
         res.json({ inserted, updated, skipped });
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        if (client) {
+            try {
+                await client.query('ROLLBACK');
+            } catch {
+                // ignore rollback failure
+            }
+        }
+        res.status(500).json({ inserted: 0, updated: 0, skipped: 0, error: err.message });
+    } finally {
+        client?.release();
     }
 };
 
 export const getSourceCategories = async (_req: Request, res: Response) => {
     try {
         await ensureSourceCategoriesTable();
-        await pool.query(`
-            INSERT INTO source_categories (name)
-            SELECT DISTINCT TRIM(COALESCE(source_company, '')) AS name
-            FROM students
-            WHERE TRIM(COALESCE(source_company, '')) <> ''
-              AND TRIM(COALESCE(source_company, '')) NOT IN ('流入経路', 'source_company', '氏名', '初回平均(日)')
-            ON CONFLICT (name) DO NOTHING
-        `);
         const result = await pool.query('SELECT id, name, created_at FROM source_categories ORDER BY name ASC');
         res.json(result.rows);
     } catch (err: any) {

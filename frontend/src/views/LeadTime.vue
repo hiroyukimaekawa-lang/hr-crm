@@ -3,7 +3,6 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { api } from '../lib/api';
 import Layout from '../components/Layout.vue';
 
-const students = ref<any[]>([]);
 const sourceCompanyFilter = ref('ALL');
 const metrics = ref({
   first_lead_time_days_avg: null as number | null,
@@ -28,12 +27,11 @@ const metricsBySource = ref<Array<{
 }>>([]);
 
 const sourceCompanyOptions = computed(() => {
-  const set = new Set<string>();
-  students.value.forEach((s: any) => {
-    const key = String(s.source_company || '').trim();
-    if (key) set.add(key);
-  });
-  return ['ALL', ...Array.from(set).sort()];
+  const companies = Array.from(new Set(metricsBySource.value
+    .map((r) => String(r.source_company || '').trim())
+    .filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b, 'ja'));
+  return ['ALL', ...companies];
 });
 
 const displayedMetricsBySource = computed(() => {
@@ -46,12 +44,6 @@ const displayedMetricsBySource = computed(() => {
     return a.source_company.localeCompare(b.source_company, 'ja');
   });
 });
-
-const fetchStudents = async () => {
-  const token = localStorage.getItem('token');
-  const res = await api.get('/api/students', { headers: { Authorization: token } });
-  students.value = res.data;
-};
 
 const fetchMetrics = async () => {
   const token = localStorage.getItem('token');
@@ -85,7 +77,6 @@ const fetchMetrics = async () => {
 };
 
 onMounted(async () => {
-  await fetchStudents();
   await fetchMetrics();
 });
 
