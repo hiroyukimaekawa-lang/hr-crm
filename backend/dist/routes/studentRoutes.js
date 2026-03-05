@@ -26,6 +26,7 @@ router.put('/:id/status', auth_1.authenticate, studentController_1.updateStudent
 router.put('/:id/staff', auth_1.authenticate, studentController_1.updateStudentStaff);
 router.put('/:id/meta', auth_1.authenticate, studentController_1.updateStudentMeta);
 router.post('/:id/tasks', auth_1.authenticate, studentController_1.addStudentTask);
+router.put('/tasks/:taskId/complete', auth_1.authenticate, studentController_1.completeStudentTask);
 router.delete('/tasks/:taskId', auth_1.authenticate, studentController_1.deleteStudentTask);
 router.delete('/:id', auth_1.authenticate, studentController_1.deleteStudent);
 exports.default = router;

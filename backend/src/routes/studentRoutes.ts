@@ -11,6 +11,7 @@ import {
     updateStudentStaff,
     updateStudentMeta,
     addStudentTask,
+    completeStudentTask,
     deleteStudentTask,
     deleteStudent,
     importStudents,
@@ -45,6 +46,7 @@ router.put('/:id/status', authenticate, updateStudentStatus);
 router.put('/:id/staff', authenticate, updateStudentStaff);
 router.put('/:id/meta', authenticate, updateStudentMeta);
 router.post('/:id/tasks', authenticate, addStudentTask);
+router.put('/tasks/:taskId/complete', authenticate, completeStudentTask);
 router.delete('/tasks/:taskId', authenticate, deleteStudentTask);
 router.delete('/:id', authenticate, deleteStudent);
 

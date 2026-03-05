@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.deleteStudent = exports.deleteStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
+exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
 const db_1 = __importDefault(require("../config/db"));
 let interviewScheduleTableReady = false;
 let interviewScheduleTablePromise = null;
@@ -21,6 +21,8 @@ let studentExtendedColumnsReady = false;
 let studentExtendedColumnsPromise = null;
 let sourceCategoriesTableReady = false;
 let sourceCategoriesTablePromise = null;
+let studentTaskColumnsReady = false;
+let studentTaskColumnsPromise = null;
 const ensureInterviewScheduleTables = () => __awaiter(void 0, void 0, void 0, function* () {
     if (interviewScheduleTableReady)
         return;
@@ -64,6 +66,10 @@ const ensureStudentExtendedColumns = () => __awaiter(void 0, void 0, void 0, fun
                 ALTER TABLE students
                 ADD COLUMN IF NOT EXISTS first_interview_date DATE
             `);
+            yield db_1.default.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS second_interview_date DATE
+            `);
             cachedStudentColumns = null;
             studentExtendedColumnsReady = true;
         }))().finally(() => {
@@ -90,6 +96,22 @@ const ensureSourceCategoriesTable = () => __awaiter(void 0, void 0, void 0, func
         });
     }
     yield sourceCategoriesTablePromise;
+});
+const ensureStudentTaskColumns = () => __awaiter(void 0, void 0, void 0, function* () {
+    if (studentTaskColumnsReady)
+        return;
+    if (!studentTaskColumnsPromise) {
+        studentTaskColumnsPromise = (() => __awaiter(void 0, void 0, void 0, function* () {
+            yield db_1.default.query(`
+                ALTER TABLE student_tasks
+                ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT FALSE
+            `);
+            studentTaskColumnsReady = true;
+        }))().finally(() => {
+            studentTaskColumnsPromise = null;
+        });
+    }
+    yield studentTaskColumnsPromise;
 });
 const getStudentColumns = () => __awaiter(void 0, void 0, void 0, function* () {
     if (cachedStudentColumns)
@@ -182,6 +204,7 @@ const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     const authUser = req.user;
     try {
         yield ensureStudentExtendedColumns();
+        yield ensureStudentTaskColumns();
         let query = `
             SELECT
                 students.*,
@@ -194,6 +217,7 @@ const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 SELECT content, due_date
                 FROM student_tasks
                 WHERE student_id = students.id
+                  AND COALESCE(completed, FALSE) = FALSE
                 ORDER BY created_at DESC
                 LIMIT 1
             ) st ON true
@@ -217,7 +241,7 @@ const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 });
 exports.getStudents = getStudents;
 const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { name, university, prefecture, academic_track, faculty, referral_status, progress_stage, next_meeting_date, next_action, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason, meeting_decided_date, first_interview_date } = req.body;
+    const { name, university, prefecture, academic_track, faculty, referral_status, progress_stage, next_meeting_date, next_action, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason, meeting_decided_date, first_interview_date, second_interview_date } = req.body;
     try {
         yield ensureStudentExtendedColumns();
         const duplicateRes = yield db_1.default.query('SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') AND COALESCE(faculty, \'\') = COALESCE($3, \'\') LIMIT 1', [name, university || null, faculty || null]);
@@ -255,6 +279,7 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         pushCol('interview_reason', interview_reason || null);
         pushCol('meeting_decided_date', meeting_decided_date || null);
         pushCol('first_interview_date', first_interview_date || null);
+        pushCol('second_interview_date', second_interview_date || null);
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         const result = yield db_1.default.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`, insertVals);
         const created = result.rows[0];
@@ -274,6 +299,7 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
     try {
         yield ensureStudentExtendedColumns();
         yield ensureInterviewScheduleTables();
+        yield ensureStudentTaskColumns();
         const studentRes = yield db_1.default.query('SELECT * FROM students WHERE id = $1', [id]);
         const eventsRes = yield db_1.default.query(`
             SELECT e.*, se.status as participation_status, se.created_at as participation_created_at
@@ -293,7 +319,7 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
             WHERE il.student_id = $1
             ORDER BY il.created_at DESC
         `, [id]);
-        const tasksRes = yield db_1.default.query('SELECT * FROM student_tasks WHERE student_id = $1 ORDER BY due_date NULLS LAST, created_at DESC', [id]);
+        const tasksRes = yield db_1.default.query('SELECT * FROM student_tasks WHERE student_id = $1 AND COALESCE(completed, FALSE) = FALSE ORDER BY due_date NULLS LAST, created_at DESC', [id]);
         const schedulesRes = yield db_1.default.query('SELECT * FROM interview_schedules WHERE student_id = $1 ORDER BY round_no ASC', [id]);
         res.json({
             student: studentRes.rows[0],
@@ -403,25 +429,18 @@ const getInterviewMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
         yield ensureInterviewScheduleTables();
         const conditions = [];
         const params = [];
-        if ((authUser === null || authUser === void 0 ? void 0 : authUser.role) !== 'admin') {
-            params.push(Number((authUser === null || authUser === void 0 ? void 0 : authUser.sub) || 0));
-            conditions.push(`s.staff_id = $${params.length}`);
-        }
-        if (sourceCompany) {
-            params.push(sourceCompany);
-            conditions.push(`COALESCE(s.source_company, '') = $${params.length}`);
-        }
+        const pushAuthFilters = (alias) => {
+            if ((authUser === null || authUser === void 0 ? void 0 : authUser.role) !== 'admin') {
+                params.push(Number((authUser === null || authUser === void 0 ? void 0 : authUser.sub) || 0));
+                conditions.push(`${alias}.staff_id = $${params.length}`);
+            }
+            if (sourceCompany) {
+                params.push(sourceCompany);
+                conditions.push(`COALESCE(${alias}.source_company, '') = $${params.length}`);
+            }
+        };
+        pushAuthFilters('s');
         const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-        const settingConditions = ['s.meeting_decided_date IS NOT NULL'];
-        const settingParams = [];
-        if ((authUser === null || authUser === void 0 ? void 0 : authUser.role) !== 'admin') {
-            settingParams.push(Number((authUser === null || authUser === void 0 ? void 0 : authUser.sub) || 0));
-            settingConditions.push(`s.staff_id = $${settingParams.length}`);
-        }
-        if (sourceCompany) {
-            settingParams.push(sourceCompany);
-            settingConditions.push(`COALESCE(s.source_company, '') = $${settingParams.length}`);
-        }
         const commonCte = `
             WITH base AS (
                 SELECT
@@ -466,6 +485,25 @@ const getInterviewMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
                         ROUND((COUNT(*) FILTER (WHERE reschedule_count > 0)::numeric / NULLIF(COUNT(*), 0)) * 100, 2) AS followup_reschedule_rate
                     FROM follow_round
                     GROUP BY source_company
+                ),
+                student_agg AS (
+                    SELECT
+                        COALESCE(s.source_company, '未設定') AS source_company,
+                        COUNT(*) FILTER (WHERE s.meeting_decided_date IS NOT NULL)::int AS settings_count,
+                        COUNT(*) FILTER (WHERE s.first_interview_date IS NOT NULL)::int AS first_interviews_count,
+                        COUNT(*) FILTER (WHERE s.second_interview_date IS NOT NULL)::int AS second_interviews_count,
+                        (
+                            COUNT(*) FILTER (WHERE s.first_interview_date IS NOT NULL)
+                            + COUNT(*) FILTER (WHERE s.second_interview_date IS NOT NULL)
+                        )::int AS interviews_count,
+                        ROUND(
+                            AVG((s.first_interview_date::date - s.meeting_decided_date::date)::numeric)
+                            FILTER (WHERE s.meeting_decided_date IS NOT NULL AND s.first_interview_date IS NOT NULL),
+                            2
+                        ) AS setting_to_first_interview_lead_time_days_avg
+                    FROM students s
+                    ${whereClause}
+                    GROUP BY COALESCE(s.source_company, '未設定')
                 )
                 SELECT
                     src.source_company,
@@ -476,10 +514,20 @@ const getInterviewMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
                     fwa.followup_lead_time_days_avg,
                     COALESCE(fwa.followup_total, 0) AS followup_total,
                     COALESCE(fwa.followup_rescheduled, 0) AS followup_rescheduled,
-                    fwa.followup_reschedule_rate
-                FROM (SELECT DISTINCT source_company FROM base) src
+                    fwa.followup_reschedule_rate,
+                    COALESCE(sa.settings_count, 0) AS settings_count,
+                    COALESCE(sa.first_interviews_count, 0) AS first_interviews_count,
+                    COALESCE(sa.second_interviews_count, 0) AS second_interviews_count,
+                    COALESCE(sa.interviews_count, 0) AS interviews_count,
+                    sa.setting_to_first_interview_lead_time_days_avg
+                FROM (
+                    SELECT DISTINCT source_company FROM base
+                    UNION
+                    SELECT source_company FROM student_agg
+                ) src
                 LEFT JOIN first_agg fa ON fa.source_company = src.source_company
                 LEFT JOIN follow_agg fwa ON fwa.source_company = src.source_company
+                LEFT JOIN student_agg sa ON sa.source_company = src.source_company
                 ORDER BY src.source_company ASC
             `;
             const grouped = yield db_1.default.query(groupedSql, params);
@@ -523,11 +571,54 @@ const getInterviewMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
                     COALESCE(s.source_company, '未設定') AS source_company,
                     COUNT(*)::int AS setting_count
                 FROM students s
-                WHERE ${settingConditions.join(' AND ')}
+                ${whereClause ? `${whereClause} AND s.meeting_decided_date IS NOT NULL` : 'WHERE s.meeting_decided_date IS NOT NULL'}
                 GROUP BY s.meeting_decided_date::date, COALESCE(s.source_company, '未設定')
                 ORDER BY s.meeting_decided_date::date DESC, source_company ASC
-            `, settingParams);
-        res.json(Object.assign(Object.assign({}, (result.rows[0] || {})), { settings_by_date: settingsByDateRes.rows }));
+            `, params);
+        const interviewsByDateRes = yield db_1.default.query(`
+                SELECT
+                    s.first_interview_date::date AS interview_date,
+                    COALESCE(s.source_company, '未設定') AS source_company,
+                    'first'::text AS interview_round,
+                    COUNT(*)::int AS interview_count
+                FROM students s
+                ${whereClause ? `${whereClause} AND s.first_interview_date IS NOT NULL` : 'WHERE s.first_interview_date IS NOT NULL'}
+                GROUP BY s.first_interview_date::date, COALESCE(s.source_company, '未設定')
+                UNION ALL
+                SELECT
+                    s.second_interview_date::date AS interview_date,
+                    COALESCE(s.source_company, '未設定') AS source_company,
+                    'second'::text AS interview_round,
+                    COUNT(*)::int AS interview_count
+                FROM students s
+                ${whereClause ? `${whereClause} AND s.second_interview_date IS NOT NULL` : 'WHERE s.second_interview_date IS NOT NULL'}
+                GROUP BY s.second_interview_date::date, COALESCE(s.source_company, '未設定')
+                ORDER BY interview_date DESC, source_company ASC
+            `, params);
+        const summaryRes = yield db_1.default.query(`
+                SELECT
+                    COUNT(*) FILTER (WHERE s.meeting_decided_date IS NOT NULL)::int AS settings_count,
+                    COUNT(*) FILTER (WHERE s.first_interview_date IS NOT NULL)::int AS first_interviews_count,
+                    COUNT(*) FILTER (WHERE s.second_interview_date IS NOT NULL)::int AS second_interviews_count,
+                    (
+                        COUNT(*) FILTER (WHERE s.first_interview_date IS NOT NULL)
+                        + COUNT(*) FILTER (WHERE s.second_interview_date IS NOT NULL)
+                    )::int AS interviews_count,
+                    ROUND(
+                        AVG((s.first_interview_date::date - s.meeting_decided_date::date)::numeric)
+                        FILTER (WHERE s.meeting_decided_date IS NOT NULL AND s.first_interview_date IS NOT NULL),
+                        2
+                    ) AS setting_to_first_interview_lead_time_days_avg
+                FROM students s
+                ${whereClause}
+            `, params);
+        res.json(Object.assign(Object.assign({}, (result.rows[0] || {})), { settings_by_date: settingsByDateRes.rows, interviews_by_date: interviewsByDateRes.rows, account_summary: summaryRes.rows[0] || {
+                settings_count: 0,
+                first_interviews_count: 0,
+                second_interviews_count: 0,
+                interviews_count: 0,
+                setting_to_first_interview_lead_time_days_avg: null
+            } }));
     }
     catch (err) {
         res.status(500).json({ error: err.message });
@@ -589,7 +680,7 @@ const updateStudentStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
 exports.updateStudentStatus = updateStudentStatus;
 const updateStudentBasic = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { name, university, prefecture, academic_track, faculty, email, phone, graduation_year, source_company, interview_reason, desired_industry, desired_role, next_meeting_date, next_action, meeting_decided_date, first_interview_date } = req.body;
+    const { name, university, prefecture, academic_track, faculty, email, phone, graduation_year, source_company, interview_reason, desired_industry, desired_role, next_meeting_date, next_action, meeting_decided_date, first_interview_date, second_interview_date } = req.body;
     try {
         yield ensureStudentExtendedColumns();
         const cols = yield getStudentColumns();
@@ -617,6 +708,7 @@ const updateStudentBasic = (req, res) => __awaiter(void 0, void 0, void 0, funct
         pushSet('next_action', next_action || null);
         pushSet('meeting_decided_date', meeting_decided_date || null);
         pushSet('first_interview_date', first_interview_date || null);
+        pushSet('second_interview_date', second_interview_date || null);
         if (cols.has('updated_at')) {
             setParts.push('updated_at = CURRENT_TIMESTAMP');
         }
@@ -677,6 +769,7 @@ const addStudentTask = (req, res) => __awaiter(void 0, void 0, void 0, function*
         return;
     }
     try {
+        yield ensureStudentTaskColumns();
         const result = yield db_1.default.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3) RETURNING *', [id, due_date || null, content]);
         res.status(201).json(result.rows[0]);
     }
@@ -685,6 +778,22 @@ const addStudentTask = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.addStudentTask = addStudentTask;
+const completeStudentTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { taskId } = req.params;
+    try {
+        yield ensureStudentTaskColumns();
+        const result = yield db_1.default.query('UPDATE student_tasks SET completed = TRUE WHERE id = $1 RETURNING id', [taskId]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Task not found' });
+            return;
+        }
+        res.json({ success: true });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.completeStudentTask = completeStudentTask;
 const deleteStudentTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { taskId } = req.params;
     try {
@@ -770,6 +879,7 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
             pushSet('prefecture', s.prefecture || null);
             pushSet('meeting_decided_date', s.meeting_decided_date || null);
             pushSet('first_interview_date', s.first_interview_date || null);
+            pushSet('second_interview_date', s.second_interview_date || null);
             if (cols.has('updated_at'))
                 updateParts.push('updated_at = CURRENT_TIMESTAMP');
             if (existsRes.rows.length > 0) {
@@ -810,6 +920,7 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
             pushInsert('next_meeting_date', s.next_meeting_date || null);
             pushInsert('meeting_decided_date', s.meeting_decided_date || null);
             pushInsert('first_interview_date', s.first_interview_date || null);
+            pushInsert('second_interview_date', s.second_interview_date || null);
             const placeholders = insertCols.map((_, idx) => `$${idx + 1}`).join(', ');
             const insertedRes = yield db_1.default.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING id`, insertVals);
             if (s.task_due_date && ((_a = insertedRes.rows[0]) === null || _a === void 0 ? void 0 : _a.id)) {

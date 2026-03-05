@@ -8,6 +8,8 @@ let studentExtendedColumnsReady = false;
 let studentExtendedColumnsPromise: Promise<void> | null = null;
 let sourceCategoriesTableReady = false;
 let sourceCategoriesTablePromise: Promise<void> | null = null;
+let studentTaskColumnsReady = false;
+let studentTaskColumnsPromise: Promise<void> | null = null;
 
 const ensureInterviewScheduleTables = async () => {
     if (interviewScheduleTableReady) return;
@@ -51,6 +53,10 @@ const ensureStudentExtendedColumns = async () => {
                 ALTER TABLE students
                 ADD COLUMN IF NOT EXISTS first_interview_date DATE
             `);
+            await pool.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS second_interview_date DATE
+            `);
             cachedStudentColumns = null;
             studentExtendedColumnsReady = true;
         })().finally(() => {
@@ -77,6 +83,22 @@ const ensureSourceCategoriesTable = async () => {
         });
     }
     await sourceCategoriesTablePromise;
+};
+
+const ensureStudentTaskColumns = async () => {
+    if (studentTaskColumnsReady) return;
+    if (!studentTaskColumnsPromise) {
+        studentTaskColumnsPromise = (async () => {
+            await pool.query(`
+                ALTER TABLE student_tasks
+                ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT FALSE
+            `);
+            studentTaskColumnsReady = true;
+        })().finally(() => {
+            studentTaskColumnsPromise = null;
+        });
+    }
+    await studentTaskColumnsPromise;
 };
 
 const getStudentColumns = async () => {
@@ -162,6 +184,7 @@ export const getStudents = async (req: Request, res: Response) => {
     const authUser = (req as any).user as { sub?: string; role?: string } | undefined;
     try {
         await ensureStudentExtendedColumns();
+        await ensureStudentTaskColumns();
         let query = `
             SELECT
                 students.*,
@@ -174,6 +197,7 @@ export const getStudents = async (req: Request, res: Response) => {
                 SELECT content, due_date
                 FROM student_tasks
                 WHERE student_id = students.id
+                  AND COALESCE(completed, FALSE) = FALSE
                 ORDER BY created_at DESC
                 LIMIT 1
             ) st ON true
@@ -217,7 +241,8 @@ export const createStudent = async (req: Request, res: Response) => {
         source_company,
         interview_reason,
         meeting_decided_date,
-        first_interview_date
+        first_interview_date,
+        second_interview_date
     } = req.body;
     try {
         await ensureStudentExtendedColumns();
@@ -261,6 +286,7 @@ export const createStudent = async (req: Request, res: Response) => {
         pushCol('interview_reason', interview_reason || null);
         pushCol('meeting_decided_date', meeting_decided_date || null);
         pushCol('first_interview_date', first_interview_date || null);
+        pushCol('second_interview_date', second_interview_date || null);
 
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         const result = await pool.query(
@@ -286,6 +312,7 @@ export const getStudentDetail = async (req: Request, res: Response) => {
     try {
         await ensureStudentExtendedColumns();
         await ensureInterviewScheduleTables();
+        await ensureStudentTaskColumns();
         const studentRes = await pool.query('SELECT * FROM students WHERE id = $1', [id]);
         const eventsRes = await pool.query(`
             SELECT e.*, se.status as participation_status, se.created_at as participation_created_at
@@ -306,7 +333,7 @@ export const getStudentDetail = async (req: Request, res: Response) => {
             ORDER BY il.created_at DESC
         `, [id]);
         const tasksRes = await pool.query(
-            'SELECT * FROM student_tasks WHERE student_id = $1 ORDER BY due_date NULLS LAST, created_at DESC',
+            'SELECT * FROM student_tasks WHERE student_id = $1 AND COALESCE(completed, FALSE) = FALSE ORDER BY due_date NULLS LAST, created_at DESC',
             [id]
         );
         const schedulesRes = await pool.query(
@@ -422,26 +449,18 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
 
         const conditions: string[] = [];
         const params: any[] = [];
-        if (authUser?.role !== 'admin') {
-            params.push(Number(authUser?.sub || 0));
-            conditions.push(`s.staff_id = $${params.length}`);
-        }
-        if (sourceCompany) {
-            params.push(sourceCompany);
-            conditions.push(`COALESCE(s.source_company, '') = $${params.length}`);
-        }
+        const pushAuthFilters = (alias: string) => {
+            if (authUser?.role !== 'admin') {
+                params.push(Number(authUser?.sub || 0));
+                conditions.push(`${alias}.staff_id = $${params.length}`);
+            }
+            if (sourceCompany) {
+                params.push(sourceCompany);
+                conditions.push(`COALESCE(${alias}.source_company, '') = $${params.length}`);
+            }
+        };
+        pushAuthFilters('s');
         const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-
-        const settingConditions: string[] = ['s.meeting_decided_date IS NOT NULL'];
-        const settingParams: any[] = [];
-        if (authUser?.role !== 'admin') {
-            settingParams.push(Number(authUser?.sub || 0));
-            settingConditions.push(`s.staff_id = $${settingParams.length}`);
-        }
-        if (sourceCompany) {
-            settingParams.push(sourceCompany);
-            settingConditions.push(`COALESCE(s.source_company, '') = $${settingParams.length}`);
-        }
 
         const commonCte = `
             WITH base AS (
@@ -488,6 +507,25 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
                         ROUND((COUNT(*) FILTER (WHERE reschedule_count > 0)::numeric / NULLIF(COUNT(*), 0)) * 100, 2) AS followup_reschedule_rate
                     FROM follow_round
                     GROUP BY source_company
+                ),
+                student_agg AS (
+                    SELECT
+                        COALESCE(s.source_company, '未設定') AS source_company,
+                        COUNT(*) FILTER (WHERE s.meeting_decided_date IS NOT NULL)::int AS settings_count,
+                        COUNT(*) FILTER (WHERE s.first_interview_date IS NOT NULL)::int AS first_interviews_count,
+                        COUNT(*) FILTER (WHERE s.second_interview_date IS NOT NULL)::int AS second_interviews_count,
+                        (
+                            COUNT(*) FILTER (WHERE s.first_interview_date IS NOT NULL)
+                            + COUNT(*) FILTER (WHERE s.second_interview_date IS NOT NULL)
+                        )::int AS interviews_count,
+                        ROUND(
+                            AVG((s.first_interview_date::date - s.meeting_decided_date::date)::numeric)
+                            FILTER (WHERE s.meeting_decided_date IS NOT NULL AND s.first_interview_date IS NOT NULL),
+                            2
+                        ) AS setting_to_first_interview_lead_time_days_avg
+                    FROM students s
+                    ${whereClause}
+                    GROUP BY COALESCE(s.source_company, '未設定')
                 )
                 SELECT
                     src.source_company,
@@ -498,10 +536,20 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
                     fwa.followup_lead_time_days_avg,
                     COALESCE(fwa.followup_total, 0) AS followup_total,
                     COALESCE(fwa.followup_rescheduled, 0) AS followup_rescheduled,
-                    fwa.followup_reschedule_rate
-                FROM (SELECT DISTINCT source_company FROM base) src
+                    fwa.followup_reschedule_rate,
+                    COALESCE(sa.settings_count, 0) AS settings_count,
+                    COALESCE(sa.first_interviews_count, 0) AS first_interviews_count,
+                    COALESCE(sa.second_interviews_count, 0) AS second_interviews_count,
+                    COALESCE(sa.interviews_count, 0) AS interviews_count,
+                    sa.setting_to_first_interview_lead_time_days_avg
+                FROM (
+                    SELECT DISTINCT source_company FROM base
+                    UNION
+                    SELECT source_company FROM student_agg
+                ) src
                 LEFT JOIN first_agg fa ON fa.source_company = src.source_company
                 LEFT JOIN follow_agg fwa ON fwa.source_company = src.source_company
+                LEFT JOIN student_agg sa ON sa.source_company = src.source_company
                 ORDER BY src.source_company ASC
             `;
             const grouped = await pool.query(groupedSql, params);
@@ -548,15 +596,66 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
                     COALESCE(s.source_company, '未設定') AS source_company,
                     COUNT(*)::int AS setting_count
                 FROM students s
-                WHERE ${settingConditions.join(' AND ')}
+                ${whereClause ? `${whereClause} AND s.meeting_decided_date IS NOT NULL` : 'WHERE s.meeting_decided_date IS NOT NULL'}
                 GROUP BY s.meeting_decided_date::date, COALESCE(s.source_company, '未設定')
                 ORDER BY s.meeting_decided_date::date DESC, source_company ASC
             `,
-            settingParams
+            params
+        );
+        const interviewsByDateRes = await pool.query(
+            `
+                SELECT
+                    s.first_interview_date::date AS interview_date,
+                    COALESCE(s.source_company, '未設定') AS source_company,
+                    'first'::text AS interview_round,
+                    COUNT(*)::int AS interview_count
+                FROM students s
+                ${whereClause ? `${whereClause} AND s.first_interview_date IS NOT NULL` : 'WHERE s.first_interview_date IS NOT NULL'}
+                GROUP BY s.first_interview_date::date, COALESCE(s.source_company, '未設定')
+                UNION ALL
+                SELECT
+                    s.second_interview_date::date AS interview_date,
+                    COALESCE(s.source_company, '未設定') AS source_company,
+                    'second'::text AS interview_round,
+                    COUNT(*)::int AS interview_count
+                FROM students s
+                ${whereClause ? `${whereClause} AND s.second_interview_date IS NOT NULL` : 'WHERE s.second_interview_date IS NOT NULL'}
+                GROUP BY s.second_interview_date::date, COALESCE(s.source_company, '未設定')
+                ORDER BY interview_date DESC, source_company ASC
+            `,
+            params
+        );
+        const summaryRes = await pool.query(
+            `
+                SELECT
+                    COUNT(*) FILTER (WHERE s.meeting_decided_date IS NOT NULL)::int AS settings_count,
+                    COUNT(*) FILTER (WHERE s.first_interview_date IS NOT NULL)::int AS first_interviews_count,
+                    COUNT(*) FILTER (WHERE s.second_interview_date IS NOT NULL)::int AS second_interviews_count,
+                    (
+                        COUNT(*) FILTER (WHERE s.first_interview_date IS NOT NULL)
+                        + COUNT(*) FILTER (WHERE s.second_interview_date IS NOT NULL)
+                    )::int AS interviews_count,
+                    ROUND(
+                        AVG((s.first_interview_date::date - s.meeting_decided_date::date)::numeric)
+                        FILTER (WHERE s.meeting_decided_date IS NOT NULL AND s.first_interview_date IS NOT NULL),
+                        2
+                    ) AS setting_to_first_interview_lead_time_days_avg
+                FROM students s
+                ${whereClause}
+            `,
+            params
         );
         res.json({
             ...(result.rows[0] || {}),
-            settings_by_date: settingsByDateRes.rows
+            settings_by_date: settingsByDateRes.rows,
+            interviews_by_date: interviewsByDateRes.rows,
+            account_summary: summaryRes.rows[0] || {
+                settings_count: 0,
+                first_interviews_count: 0,
+                second_interviews_count: 0,
+                interviews_count: 0,
+                setting_to_first_interview_lead_time_days_avg: null
+            }
         });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -639,7 +738,8 @@ export const updateStudentBasic = async (req: Request, res: Response) => {
         next_meeting_date,
         next_action,
         meeting_decided_date,
-        first_interview_date
+        first_interview_date,
+        second_interview_date
     } = req.body;
     try {
         await ensureStudentExtendedColumns();
@@ -669,6 +769,7 @@ export const updateStudentBasic = async (req: Request, res: Response) => {
         pushSet('next_action', next_action || null);
         pushSet('meeting_decided_date', meeting_decided_date || null);
         pushSet('first_interview_date', first_interview_date || null);
+        pushSet('second_interview_date', second_interview_date || null);
         if (cols.has('updated_at')) {
             setParts.push('updated_at = CURRENT_TIMESTAMP');
         }
@@ -736,11 +837,30 @@ export const addStudentTask = async (req: Request, res: Response) => {
         return;
     }
     try {
+        await ensureStudentTaskColumns();
         const result = await pool.query(
             'INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3) RETURNING *',
             [id, due_date || null, content]
         );
         res.status(201).json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const completeStudentTask = async (req: Request, res: Response) => {
+    const { taskId } = req.params;
+    try {
+        await ensureStudentTaskColumns();
+        const result = await pool.query(
+            'UPDATE student_tasks SET completed = TRUE WHERE id = $1 RETURNING id',
+            [taskId]
+        );
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Task not found' });
+            return;
+        }
+        res.json({ success: true });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
@@ -835,6 +955,7 @@ export const importStudents = async (req: Request, res: Response) => {
             pushSet('prefecture', s.prefecture || null);
             pushSet('meeting_decided_date', s.meeting_decided_date || null);
             pushSet('first_interview_date', s.first_interview_date || null);
+            pushSet('second_interview_date', s.second_interview_date || null);
             if (cols.has('updated_at')) updateParts.push('updated_at = CURRENT_TIMESTAMP');
 
             if (existsRes.rows.length > 0) {
@@ -888,6 +1009,7 @@ export const importStudents = async (req: Request, res: Response) => {
             pushInsert('next_meeting_date', s.next_meeting_date || null);
             pushInsert('meeting_decided_date', s.meeting_decided_date || null);
             pushInsert('first_interview_date', s.first_interview_date || null);
+            pushInsert('second_interview_date', s.second_interview_date || null);
 
             const placeholders = insertCols.map((_: any, idx: number) => `$${idx + 1}`).join(', ');
             const insertedRes = await pool.query(

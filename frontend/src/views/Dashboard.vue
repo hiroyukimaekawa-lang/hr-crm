@@ -60,7 +60,20 @@ const interviewMetrics = ref({
     setting_date: string;
     source_company: string;
     setting_count: number;
-  }>
+  }>,
+  interviews_by_date: [] as Array<{
+    interview_date: string;
+    source_company: string;
+    interview_round: 'first' | 'second' | string;
+    interview_count: number;
+  }>,
+  account_summary: {
+    settings_count: 0,
+    first_interviews_count: 0,
+    second_interviews_count: 0,
+    interviews_count: 0,
+    setting_to_first_interview_lead_time_days_avg: null as number | null
+  }
 });
 const interviewMetricsBySource = ref<Array<{
   source_company: string;
@@ -72,6 +85,11 @@ const interviewMetricsBySource = ref<Array<{
   followup_total: number;
   followup_rescheduled: number;
   followup_reschedule_rate: number | null;
+  settings_count?: number;
+  first_interviews_count?: number;
+  second_interviews_count?: number;
+  interviews_count?: number;
+  setting_to_first_interview_lead_time_days_avg?: number | null;
 }>>([]);
 const sourceCompanyFilter = ref('ALL');
 
@@ -113,7 +131,22 @@ const fetchInterviewMetrics = async () => {
           source_company: String(r.source_company || '未設定'),
           setting_count: Number(r.setting_count || 0)
         }))
-      : []
+      : [],
+    interviews_by_date: Array.isArray(metricsRes.data?.interviews_by_date)
+      ? metricsRes.data.interviews_by_date.map((r: any) => ({
+          interview_date: String(r.interview_date || ''),
+          source_company: String(r.source_company || '未設定'),
+          interview_round: String(r.interview_round || 'first'),
+          interview_count: Number(r.interview_count || 0)
+        }))
+      : [],
+    account_summary: {
+      settings_count: Number(metricsRes.data?.account_summary?.settings_count || 0),
+      first_interviews_count: Number(metricsRes.data?.account_summary?.first_interviews_count || 0),
+      second_interviews_count: Number(metricsRes.data?.account_summary?.second_interviews_count || 0),
+      interviews_count: Number(metricsRes.data?.account_summary?.interviews_count || 0),
+      setting_to_first_interview_lead_time_days_avg: metricsRes.data?.account_summary?.setting_to_first_interview_lead_time_days_avg ?? null
+    }
   };
   interviewMetricsBySource.value = Array.isArray(bySourceRes.data) ? bySourceRes.data.map((r: any) => ({
     source_company: r.source_company || '未設定',
@@ -124,7 +157,12 @@ const fetchInterviewMetrics = async () => {
     followup_lead_time_days_avg: r.followup_lead_time_days_avg ?? null,
     followup_total: Number(r.followup_total || 0),
     followup_rescheduled: Number(r.followup_rescheduled || 0),
-    followup_reschedule_rate: r.followup_reschedule_rate ?? null
+    followup_reschedule_rate: r.followup_reschedule_rate ?? null,
+    settings_count: Number(r.settings_count || 0),
+    first_interviews_count: Number(r.first_interviews_count || 0),
+    second_interviews_count: Number(r.second_interviews_count || 0),
+    interviews_count: Number(r.interviews_count || 0),
+    setting_to_first_interview_lead_time_days_avg: r.setting_to_first_interview_lead_time_days_avg ?? null
   })) : [];
 };
 
@@ -288,8 +326,82 @@ const recentStudents = computed(() => {
     .slice(0, 5);
 });
 
-const settingsByDateRows = computed(() =>
-  interviewMetrics.value.settings_by_date.slice(0, 30)
+const calendarBaseMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+
+const calendarTitle = computed(() =>
+  `${calendarBaseMonth.value.getFullYear()}年${calendarBaseMonth.value.getMonth() + 1}月`
+);
+
+const settingCountByDate = computed(() => {
+  const m: Record<string, number> = {};
+  interviewMetrics.value.settings_by_date.forEach((r) => {
+    const key = String(r.setting_date || '').slice(0, 10);
+    m[key] = (m[key] || 0) + Number(r.setting_count || 0);
+  });
+  return m;
+});
+
+const interviewCountByDate = computed(() => {
+  const m: Record<string, number> = {};
+  interviewMetrics.value.interviews_by_date.forEach((r) => {
+    const key = String(r.interview_date || '').slice(0, 10);
+    m[key] = (m[key] || 0) + Number(r.interview_count || 0);
+  });
+  return m;
+});
+
+const calendarCells = computed(() => {
+  const base = calendarBaseMonth.value;
+  const year = base.getFullYear();
+  const month = base.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: Array<{ key: string; day: number | null; date: string | null }> = [];
+
+  for (let i = 0; i < firstDay; i++) cells.push({ key: `empty-${i}`, day: null, date: null });
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month, d);
+    const key = date.toISOString().slice(0, 10);
+    cells.push({ key, day: d, date: key });
+  }
+  while (cells.length % 7 !== 0) cells.push({ key: `tail-${cells.length}`, day: null, date: null });
+  return cells;
+});
+
+const prevMonth = () => {
+  calendarBaseMonth.value = new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth() - 1, 1);
+};
+
+const nextMonth = () => {
+  calendarBaseMonth.value = new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth() + 1, 1);
+};
+
+const selectedMonthKey = computed(() => {
+  const y = calendarBaseMonth.value.getFullYear();
+  const m = String(calendarBaseMonth.value.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+});
+
+const monthlyInterviewBySource = computed(() => {
+  const map: Record<string, { first: number; second: number; total: number }> = {};
+  interviewMetrics.value.interviews_by_date.forEach((r) => {
+    const key = String(r.interview_date || '').slice(0, 7);
+    if (key !== selectedMonthKey.value) return;
+    const source = String(r.source_company || '未設定');
+    if (!map[source]) map[source] = { first: 0, second: 0, total: 0 };
+    const count = Number(r.interview_count || 0);
+    if (r.interview_round === 'second') map[source].second += count;
+    else map[source].first += count;
+    map[source].total += count;
+  });
+  return Object.entries(map)
+    .map(([source_company, counts]) => ({ source_company, ...counts }))
+    .sort((a, b) => b.total - a.total);
+});
+
+const monthlyInterviewTotal = computed(() =>
+  monthlyInterviewBySource.value.reduce((sum, r) => sum + r.total, 0)
 );
 
 const sourceCompanyOptions = computed(() => {
@@ -396,13 +508,19 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
         </div>
       </div>
 
-      <div class="flex items-center gap-3 mb-4">
-        <label class="text-sm text-gray-600">流入経路フィルタ</label>
-        <select v-model="sourceCompanyFilter" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
-          <option v-for="opt in sourceCompanyOptions" :key="`source-filter-${opt}`" :value="opt">
+      <div class="mb-4">
+        <p class="text-sm text-gray-600 mb-2">流入経路タブ</p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="opt in sourceCompanyOptions"
+            :key="`source-filter-${opt}`"
+            class="px-3 py-1.5 rounded-lg text-sm border"
+            :class="sourceCompanyFilter === opt ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+            @click="sourceCompanyFilter = opt"
+          >
             {{ opt === 'ALL' ? 'すべて' : opt }}
-          </option>
-        </select>
+          </button>
+        </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -433,6 +551,11 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">流入経路</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">設定数</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談数</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">2回目面談数</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">面談数</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">設定→初回面談平均(日)</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回平均(日)</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回リスケ率(%)</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">2回目以降平均(日)</th>
@@ -442,13 +565,18 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
             <tbody class="divide-y divide-gray-200">
               <tr v-for="row in interviewMetricsBySource" :key="`metric-row-${row.source_company}`" class="hover:bg-gray-50">
                 <td class="px-3 py-2 text-gray-900">{{ row.source_company }}</td>
+                <td class="px-3 py-2 text-right text-gray-700">{{ row.settings_count ?? 0 }}</td>
+                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_interviews_count ?? 0 }}</td>
+                <td class="px-3 py-2 text-right text-gray-700">{{ row.second_interviews_count ?? 0 }}</td>
+                <td class="px-3 py-2 text-right text-gray-700">{{ row.interviews_count ?? 0 }}</td>
+                <td class="px-3 py-2 text-right text-gray-700">{{ row.setting_to_first_interview_lead_time_days_avg ?? '-' }}</td>
                 <td class="px-3 py-2 text-right text-gray-700">{{ row.first_lead_time_days_avg ?? '-' }}</td>
                 <td class="px-3 py-2 text-right text-gray-700">{{ row.first_reschedule_rate ?? '-' }}</td>
                 <td class="px-3 py-2 text-right text-gray-700">{{ row.followup_lead_time_days_avg ?? '-' }}</td>
                 <td class="px-3 py-2 text-right text-gray-700">{{ row.followup_reschedule_rate ?? '-' }}</td>
               </tr>
               <tr v-if="interviewMetricsBySource.length === 0">
-                <td colSpan="5" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
+                <td colSpan="10" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
               </tr>
             </tbody>
           </table>
@@ -456,27 +584,79 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
       </div>
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-        <h2 class="text-lg font-bold text-gray-900 mb-4">日別設定数（流入経路別）</h2>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">日付</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">流入経路</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">設定数</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              <tr v-for="row in settingsByDateRows" :key="`settings-${row.setting_date}-${row.source_company}`" class="hover:bg-gray-50">
-                <td class="px-3 py-2 text-gray-900">{{ row.setting_date ? new Date(row.setting_date).toLocaleDateString('ja-JP') : '-' }}</td>
-                <td class="px-3 py-2 text-gray-700">{{ row.source_company }}</td>
-                <td class="px-3 py-2 text-right font-semibold text-gray-900">{{ row.setting_count }}</td>
-              </tr>
-              <tr v-if="settingsByDateRows.length === 0">
-                <td colSpan="3" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
+          <h2 class="text-lg font-bold text-gray-900">日別設定/面談カレンダー</h2>
+          <div class="flex items-center gap-2">
+            <button class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="prevMonth">前月</button>
+            <p class="text-sm font-semibold text-gray-700 min-w-[120px] text-center">{{ calendarTitle }}</p>
+            <button class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="nextMonth">次月</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+            <p class="text-xs text-gray-500">設定数（面談決定）</p>
+            <p class="text-xl font-bold text-gray-900">{{ interviewMetrics.account_summary.settings_count }}</p>
+          </div>
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+            <p class="text-xs text-gray-500">面談数（初回面談）</p>
+            <p class="text-xl font-bold text-gray-900">{{ interviewMetrics.account_summary.first_interviews_count }}</p>
+          </div>
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+            <p class="text-xs text-gray-500">面談数（2回目面談）</p>
+            <p class="text-xl font-bold text-gray-900">{{ interviewMetrics.account_summary.second_interviews_count }}</p>
+          </div>
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+            <p class="text-xs text-gray-500">設定→初回面談 リードタイム平均</p>
+            <p class="text-xl font-bold text-gray-900">{{ interviewMetrics.account_summary.setting_to_first_interview_lead_time_days_avg ?? '-' }}<span class="text-sm text-gray-500">日</span></p>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 p-3 mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-sm font-semibold text-gray-800">{{ calendarTitle }} の面談数</p>
+            <p class="text-sm font-bold text-emerald-700">合計: {{ monthlyInterviewTotal }}件</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">流入経路</th>
+                  <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談</th>
+                  <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">2回目面談</th>
+                  <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">合計</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr v-for="row in monthlyInterviewBySource" :key="`monthly-int-${row.source_company}`" class="hover:bg-gray-50">
+                  <td class="px-3 py-2 text-gray-900">{{ row.source_company }}</td>
+                  <td class="px-3 py-2 text-right font-semibold text-gray-900">{{ row.first }}</td>
+                  <td class="px-3 py-2 text-right font-semibold text-gray-900">{{ row.second }}</td>
+                  <td class="px-3 py-2 text-right font-semibold text-gray-900">{{ row.total }}</td>
+                </tr>
+                <tr v-if="monthlyInterviewBySource.length === 0">
+                  <td colSpan="4" class="px-3 py-6 text-center text-gray-400">対象月の面談データはありません。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-7 border border-gray-200 rounded-lg overflow-hidden text-xs">
+          <div v-for="w in weekdays" :key="`weekday-${w}`" class="px-2 py-2 bg-gray-50 border-b border-gray-200 text-center font-semibold text-gray-500">
+            {{ w }}
+          </div>
+          <div
+            v-for="cell in calendarCells"
+            :key="cell.key"
+            class="min-h-[88px] border-r border-b border-gray-200 p-2"
+            :class="{ 'bg-gray-50': !cell.date }"
+          >
+            <p v-if="cell.day" class="text-gray-700 font-semibold mb-1">{{ cell.day }}</p>
+            <template v-if="cell.date">
+              <p class="text-[11px] text-blue-700">設定: {{ settingCountByDate[cell.date] || 0 }}</p>
+              <p class="text-[11px] text-emerald-700">面談: {{ interviewCountByDate[cell.date] || 0 }}</p>
+            </template>
+          </div>
         </div>
       </div>
 

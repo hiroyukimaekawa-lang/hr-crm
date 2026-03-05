@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS students (
     progress_stage VARCHAR(50) DEFAULT '初回面談',
     meeting_decided_date DATE,
     first_interview_date DATE,
+    second_interview_date DATE,
     next_meeting_date DATE,
     next_action TEXT,
     desired_industry VARCHAR(255),
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS student_tasks (
     student_id INTEGER REFERENCES students(id) ON DELETE CASCADE,
     due_date DATE,
     content TEXT NOT NULL,
+    completed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 -- Events
@@ -133,14 +135,3 @@ CREATE INDEX IF NOT EXISTS idx_event_dates_event_id_date ON event_dates(event_id
 CREATE INDEX IF NOT EXISTS idx_interview_logs_student_created ON interview_logs(student_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_interview_schedules_student_round ON interview_schedules(student_id, round_no);
 CREATE INDEX IF NOT EXISTS idx_interview_schedules_student_type ON interview_schedules(student_id, schedule_type);
--- Seed Data
-INSERT INTO users (username, password, name, role)
-VALUES ('admin', '$2b$10$K9oIoHcgYoz98Gg.UVQ2AO9Vnk57KPVQ2ekdDPC4392sslwXrUSVy', 'Admin User', 'admin') ON CONFLICT (username) DO NOTHING;
-
--- Sample Data (Events)
-INSERT INTO events (id, title, description, event_date, location, capacity, target_seats, unit_price, target_sales, current_sales)
-VALUES
-    (2, 'エンジニア向け座談会', '現場エンジニアとの座談会', '2026-04-15 18:00:00', 'オンライン', 50, 40, 20000, 800000, 300000),
-    (3, '内定者懇親会', '内定者同士の交流イベント', '2026-06-01 17:00:00', '本社オフィス', 30, 25, 16000, 400000, 150000),
-    (4, '業界研究セミナー', '複数業界の理解を深めるセミナー', '2026-02-20 19:00:00', 'オンライン', 200, 150, 3000, 500000, 220000)
-ON CONFLICT (id) DO NOTHING;
