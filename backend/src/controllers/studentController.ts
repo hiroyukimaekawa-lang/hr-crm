@@ -13,6 +13,8 @@ let studentTaskColumnsReady = false;
 let studentTaskColumnsPromise: Promise<void> | null = null;
 let salesFunnelTablesReady = false;
 let salesFunnelTablesPromise: Promise<void> | null = null;
+let matcherFunnelTableReady = false;
+let matcherFunnelTablePromise: Promise<void> | null = null;
 
 const ensureInterviewScheduleTables = async () => {
     if (interviewScheduleTableReady) return;
@@ -193,6 +195,33 @@ const ensureSalesFunnelTables = async () => {
     await salesFunnelTablesPromise;
 };
 
+const ensureMatcherFunnelTable = async () => {
+    if (matcherFunnelTableReady) return;
+    if (!matcherFunnelTablePromise) {
+        matcherFunnelTablePromise = (async () => {
+            await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS matcher_funnel_logs (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    student_id INTEGER UNIQUE REFERENCES students(id) ON DELETE CASCADE,
+                    applied_at TIMESTAMP,
+                    message_sent_at TIMESTAMP,
+                    reservation_created_at TIMESTAMP,
+                    interview_scheduled_at TIMESTAMP,
+                    interview_actual_at TIMESTAMP,
+                    reservation_status TEXT,
+                    interview_status TEXT,
+                    created_at TIMESTAMP DEFAULT now()
+                )
+            `);
+            matcherFunnelTableReady = true;
+        })().finally(() => {
+            matcherFunnelTablePromise = null;
+        });
+    }
+    await matcherFunnelTablePromise;
+};
+
 const getStudentColumns = async () => {
     if (cachedStudentColumns) return cachedStudentColumns;
     const result = await pool.query(
@@ -298,12 +327,17 @@ export const getStudents = async (req: Request, res: Response) => {
     try {
         await ensureStudentExtendedColumns();
         await ensureStudentTaskColumns();
+        await ensureMatcherFunnelTable();
         let query = `
             SELECT
                 students.*,
                 users.name as staff_name,
                 st.content as latest_task_content,
-                st.due_date as latest_task_due_date
+                st.due_date as latest_task_due_date,
+                mf.applied_at as matcher_applied_at,
+                mf.reservation_created_at as matcher_reservation_created_at,
+                mf.interview_scheduled_at as matcher_interview_scheduled_at,
+                mf.interview_actual_at as matcher_interview_actual_at
             FROM students
             LEFT JOIN users ON students.staff_id = users.id
             LEFT JOIN LATERAL (
@@ -314,6 +348,13 @@ export const getStudents = async (req: Request, res: Response) => {
                 ORDER BY created_at DESC
                 LIMIT 1
             ) st ON true
+            LEFT JOIN LATERAL (
+                SELECT applied_at, reservation_created_at, interview_scheduled_at, interview_actual_at
+                FROM matcher_funnel_logs
+                WHERE student_id = students.id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) mf ON true
         `;
         const params: any[] = [];
 
@@ -359,6 +400,7 @@ export const createStudent = async (req: Request, res: Response) => {
     } = req.body;
     try {
         await ensureStudentExtendedColumns();
+        await ensureMatcherFunnelTable();
         await ensureSalesFunnelTables();
         const duplicateRes = await pool.query(
             'SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') AND COALESCE(faculty, \'\') = COALESCE($3, \'\') LIMIT 1',
@@ -411,6 +453,23 @@ export const createStudent = async (req: Request, res: Response) => {
         const created = result.rows[0];
         await ensureSourceCategoryFromStudent(normalizedSourceCompany);
         await pool.query(
+            `INSERT INTO matcher_funnel_logs (student_id, applied_at, reservation_status, reservation_created_at, interview_scheduled_at)
+             VALUES ($1, COALESCE($2, CURRENT_TIMESTAMP), $3, $4, $5)
+             ON CONFLICT (student_id)
+             DO UPDATE SET
+               applied_at = COALESCE(EXCLUDED.applied_at, matcher_funnel_logs.applied_at),
+               reservation_status = COALESCE(EXCLUDED.reservation_status, matcher_funnel_logs.reservation_status),
+               reservation_created_at = COALESCE(EXCLUDED.reservation_created_at, matcher_funnel_logs.reservation_created_at),
+               interview_scheduled_at = COALESCE(EXCLUDED.interview_scheduled_at, matcher_funnel_logs.interview_scheduled_at)`,
+            [
+                created.id,
+                normalizeNullableText(req.body?.applied_at),
+                'pending',
+                meeting_decided_date || null,
+                first_interview_date || null
+            ]
+        );
+        await pool.query(
             `INSERT INTO applications (
                 student_id, student_name, source, applied_at, reservation_status, reservation_date
             ) VALUES ($1, $2, $3, COALESCE($4, CURRENT_TIMESTAMP), $5, $6)`,
@@ -442,6 +501,7 @@ export const getStudentDetail = async (req: Request, res: Response) => {
         await ensureStudentExtendedColumns();
         await ensureInterviewScheduleTables();
         await ensureStudentTaskColumns();
+        await ensureMatcherFunnelTable();
         const studentRes = await pool.query('SELECT * FROM students WHERE id = $1', [id]);
         const eventsRes = await pool.query(`
             SELECT e.*, se.status as participation_status, se.created_at as participation_created_at
@@ -469,13 +529,22 @@ export const getStudentDetail = async (req: Request, res: Response) => {
             'SELECT * FROM interview_schedules WHERE student_id = $1 ORDER BY round_no ASC',
             [id]
         );
+        const matcherRes = await pool.query(
+            `SELECT *
+             FROM matcher_funnel_logs
+             WHERE student_id = $1
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [id]
+        );
 
         res.json({
             student: studentRes.rows[0],
             events: eventsRes.rows,
             logs: logsRes.rows,
             tasks: tasksRes.rows,
-            schedules: schedulesRes.rows
+            schedules: schedulesRes.rows,
+            matcher_funnel: matcherRes.rows[0] || null
         });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -1136,6 +1205,171 @@ export const deleteStudent = async (req: Request, res: Response) => {
             return;
         }
         res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const upsertMatcherFunnelByStudentId = async (studentId: string, payload: Record<string, any>) => {
+    await ensureMatcherFunnelTable();
+    const studentRes = await pool.query('SELECT id FROM students WHERE id = $1', [studentId]);
+    if (studentRes.rows.length === 0) {
+        return null;
+    }
+    const columns = Object.keys(payload);
+    if (columns.length === 0) {
+        const exists = await pool.query(
+            'SELECT * FROM matcher_funnel_logs WHERE student_id = $1 LIMIT 1',
+            [studentId]
+        );
+        return exists.rows[0] || null;
+    }
+    const insertCols = ['student_id', ...columns];
+    const insertVals = [studentId, ...columns.map((c) => payload[c])];
+    const placeholders = insertVals.map((_, i) => `$${i + 1}`).join(', ');
+    const updateSet = columns.map((c) => `${c} = COALESCE(EXCLUDED.${c}, matcher_funnel_logs.${c})`).join(', ');
+    const result = await pool.query(
+        `INSERT INTO matcher_funnel_logs (${insertCols.join(', ')})
+         VALUES (${placeholders})
+         ON CONFLICT (student_id) DO UPDATE SET ${updateSet}
+         RETURNING *`,
+        insertVals
+    );
+    return result.rows[0];
+};
+
+export const getMatcherFunnelByStudent = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        await ensureMatcherFunnelTable();
+        const result = await pool.query(
+            'SELECT * FROM matcher_funnel_logs WHERE student_id = $1 LIMIT 1',
+            [id]
+        );
+        res.json(result.rows[0] || null);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const registerMatcherApply = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { applied_at } = req.body || {};
+    try {
+        const row = await upsertMatcherFunnelByStudentId(String(id), {
+            applied_at: normalizeNullableText(applied_at) || new Date().toISOString()
+        });
+        if (!row) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(row);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const registerMatcherMessage = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { message_sent_at } = req.body || {};
+    try {
+        const row = await upsertMatcherFunnelByStudentId(String(id), {
+            message_sent_at: normalizeNullableText(message_sent_at) || new Date().toISOString()
+        });
+        if (!row) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(row);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const registerMatcherReservation = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { reservation_created_at, reservation_status, interview_scheduled_at } = req.body || {};
+    try {
+        const row = await upsertMatcherFunnelByStudentId(String(id), {
+            reservation_created_at: normalizeNullableText(reservation_created_at) || new Date().toISOString(),
+            reservation_status: normalizeNullableText(reservation_status) || 'reserved',
+            interview_scheduled_at: normalizeNullableText(interview_scheduled_at)
+        });
+        if (!row) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(row);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const registerMatcherInterview = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { interview_actual_at, interview_status, interview_scheduled_at } = req.body || {};
+    try {
+        const row = await upsertMatcherFunnelByStudentId(String(id), {
+            interview_actual_at: normalizeNullableText(interview_actual_at),
+            interview_status: normalizeNullableText(interview_status) || 'completed',
+            interview_scheduled_at: normalizeNullableText(interview_scheduled_at)
+        });
+        if (!row) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(row);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const getMatcherFunnelKpi = async (_req: Request, res: Response) => {
+    try {
+        await ensureMatcherFunnelTable();
+        const result = await pool.query(`
+            WITH base AS (
+                SELECT * FROM matcher_funnel_logs
+            )
+            SELECT
+                COUNT(*) FILTER (WHERE applied_at IS NOT NULL)::int AS applications,
+                COUNT(*) FILTER (WHERE message_sent_at IS NOT NULL)::int AS "messagesSent",
+                COUNT(*) FILTER (WHERE reservation_created_at IS NOT NULL)::int AS reservations,
+                COUNT(*) FILTER (WHERE interview_actual_at IS NOT NULL AND COALESCE(interview_status, '') = 'completed')::int AS "interviewsCompleted",
+                ROUND(
+                    (COUNT(*) FILTER (WHERE message_sent_at IS NOT NULL)::numeric / NULLIF(COUNT(*) FILTER (WHERE applied_at IS NOT NULL), 0)) * 100, 2
+                ) AS "applicationToMessageRate",
+                ROUND(
+                    (COUNT(*) FILTER (WHERE reservation_created_at IS NOT NULL)::numeric / NULLIF(COUNT(*) FILTER (WHERE applied_at IS NOT NULL), 0)) * 100, 2
+                ) AS "applicationToReservationRate",
+                ROUND(
+                    (COUNT(*) FILTER (WHERE interview_actual_at IS NOT NULL)::numeric / NULLIF(COUNT(*) FILTER (WHERE reservation_created_at IS NOT NULL), 0)) * 100, 2
+                ) AS "reservationToInterviewRate",
+                ROUND(AVG(EXTRACT(EPOCH FROM (reservation_created_at - applied_at)) / 86400.0)
+                    FILTER (WHERE reservation_created_at IS NOT NULL AND applied_at IS NOT NULL), 2) AS "leadTimeApplyToReservation",
+                ROUND(AVG(EXTRACT(EPOCH FROM (interview_actual_at - reservation_created_at)) / 86400.0)
+                    FILTER (WHERE interview_actual_at IS NOT NULL AND reservation_created_at IS NOT NULL), 2) AS "leadTimeReservationToInterview",
+                ROUND(
+                    (COUNT(*) FILTER (WHERE interview_status = 'no_show')::numeric / NULLIF(COUNT(*) FILTER (WHERE reservation_created_at IS NOT NULL), 0)) * 100, 2
+                ) AS "noShowRate",
+                ROUND(
+                    (COUNT(*) FILTER (WHERE interview_status = 'rescheduled')::numeric / NULLIF(COUNT(*) FILTER (WHERE reservation_created_at IS NOT NULL), 0)) * 100, 2
+                ) AS "rescheduleRate"
+            FROM base
+        `);
+        res.json(result.rows[0] || {
+            applications: 0,
+            messagesSent: 0,
+            reservations: 0,
+            interviewsCompleted: 0,
+            applicationToMessageRate: 0,
+            applicationToReservationRate: 0,
+            reservationToInterviewRate: 0,
+            leadTimeApplyToReservation: 0,
+            leadTimeReservationToInterview: 0,
+            noShowRate: 0,
+            rescheduleRate: 0
+        });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

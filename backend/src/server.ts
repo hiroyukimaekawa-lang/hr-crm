@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import studentRoutes from './routes/studentRoutes';
 import eventRoutes from './routes/eventRoutes';
+import kpiRoutes from './routes/kpiRoutes';
 import { applyPerformanceOptimizations } from './config/performance';
 
 dotenv.config();
@@ -57,6 +58,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/kpi', kpiRoutes);
 
 // 旧APIとの互換性のためのエイリアス（必要に応じて）
 app.post('/api/login', (req, res) => res.redirect(307, '/api/auth/login'));

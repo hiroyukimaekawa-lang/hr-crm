@@ -38,6 +38,10 @@ interface Student {
   staff_name?: string;
   meeting_decided_date?: string | null;
   first_interview_date?: string | null;
+  matcher_applied_at?: string | null;
+  matcher_reservation_created_at?: string | null;
+  matcher_interview_scheduled_at?: string | null;
+  matcher_interview_actual_at?: string | null;
 }
 
 const INVALID_SOURCE_COMPANY_VALUES = new Set(['初回平均(日)', '氏名', '流入経路', 'source_company']);
@@ -196,6 +200,12 @@ const toDateTimeHour = (value?: string | null) => {
   return `${yyyy}-${mm}-${dd}T${hh}:00`;
 };
 
+const normalizeHourDateTime = (value?: string | null) => {
+  if (!value) return null;
+  const v = toDateTimeHour(value);
+  return v || null;
+};
+
 const fetchStudents = async () => {
   try {
     const token = localStorage.getItem('token');
@@ -282,7 +292,7 @@ const submitApplication = async () => {
     const token = localStorage.getItem('token');
     await api.post(`/api/students/${selectedFunnelStudent.value.id}/funnel/application`, {
       source: funnelForm.value.source || null,
-      applied_at: funnelForm.value.applied_at || null
+      applied_at: normalizeHourDateTime(funnelForm.value.applied_at)
     }, { headers: { Authorization: token } });
     await fetchFunnelKpi();
     showToast('申込登録を保存しました。', 'success');
@@ -298,7 +308,7 @@ const submitReservation = async () => {
     const token = localStorage.getItem('token');
     await api.put(`/api/students/${selectedFunnelStudent.value.id}/funnel/reservation`, {
       reservation_status: '初回面談',
-      reservation_date: funnelForm.value.reservation_date || null
+      reservation_date: normalizeHourDateTime(funnelForm.value.reservation_date)
     }, { headers: { Authorization: token } });
     if (!funnelForm.value.interview_scheduled_at && funnelForm.value.reservation_date) {
       funnelForm.value.interview_scheduled_at = funnelForm.value.reservation_date;
@@ -316,8 +326,8 @@ const submitInterview = async () => {
   try {
     const token = localStorage.getItem('token');
     await api.post(`/api/students/${selectedFunnelStudent.value.id}/funnel/interview`, {
-      scheduled_at: funnelForm.value.interview_scheduled_at || null,
-      interviewed_at: funnelForm.value.interview_interviewed_at || null,
+      scheduled_at: normalizeHourDateTime(funnelForm.value.interview_scheduled_at),
+      interviewed_at: normalizeHourDateTime(funnelForm.value.interview_interviewed_at),
       status: funnelForm.value.interview_status || 'completed'
     }, { headers: { Authorization: token } });
     await fetchFunnelKpi();
@@ -1136,6 +1146,22 @@ watch(filteredStudents, () => {
               <p class="text-gray-700">{{ formatDate(s.next_meeting_date) }}</p>
             </div>
             <div>
+              <p class="text-gray-400">申込日</p>
+              <p class="text-gray-700">{{ formatDate(s.matcher_applied_at) }}</p>
+            </div>
+            <div>
+              <p class="text-gray-400">予約日</p>
+              <p class="text-gray-700">{{ formatDate(s.matcher_reservation_created_at) }}</p>
+            </div>
+            <div>
+              <p class="text-gray-400">面談予定日</p>
+              <p class="text-gray-700">{{ formatDate(s.matcher_interview_scheduled_at) }}</p>
+            </div>
+            <div>
+              <p class="text-gray-400">面談実施日</p>
+              <p class="text-gray-700">{{ formatDate(s.matcher_interview_actual_at) }}</p>
+            </div>
+            <div>
               <p class="text-gray-400">タスク履行日</p>
               <p class="text-gray-700">{{ formatDate(s.latest_task_due_date) }}</p>
             </div>
@@ -1228,6 +1254,10 @@ watch(filteredStudents, () => {
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">卒業年度</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">担当</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">申込日</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">予約日</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">面談予定日</th>
+              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">面談実施日</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">次回面談日</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">タスク履行日</th>
               <th class="px-6 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">操作</th>
@@ -1272,6 +1302,10 @@ watch(filteredStudents, () => {
                   <option v-for="v in referralStatusOptions" :key="v" :value="v">{{ v }}</option>
                 </select>
               </td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.matcher_applied_at) }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.matcher_reservation_created_at) }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.matcher_interview_scheduled_at) }}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.matcher_interview_actual_at) }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.next_meeting_date) }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.latest_task_due_date) }}</td>
               <td class="px-6 py-3 text-right text-xs whitespace-nowrap">
@@ -1299,9 +1333,9 @@ watch(filteredStudents, () => {
               </td>
             </tr>
             <tr v-if="totalFilteredCount === 0">
-              <td colSpan="12" class="px-6 py-10 text-center text-sm text-gray-400">
-                該当する学生が見つかりませんでした。
-              </td>
+                <td colSpan="16" class="px-6 py-10 text-center text-sm text-gray-400">
+                  該当する学生が見つかりませんでした。
+                </td>
             </tr>
           </tbody>
         </table>

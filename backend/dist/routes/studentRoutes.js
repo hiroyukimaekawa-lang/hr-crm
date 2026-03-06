@@ -16,6 +16,11 @@ router.post('/source-categories', auth_1.authenticate, studentController_1.creat
 router.delete('/source-categories/:id', auth_1.authenticate, studentController_1.deleteSourceCategory);
 router.post('/', auth_1.authenticate, studentController_1.createStudent);
 router.post('/import', auth_1.authenticate, studentController_1.importStudents);
+router.get('/:id/matcher-funnel', auth_1.authenticate, studentController_1.getMatcherFunnelByStudent);
+router.post('/:id/matcher-funnel/apply', auth_1.authenticate, studentController_1.registerMatcherApply);
+router.post('/:id/matcher-funnel/message', auth_1.authenticate, studentController_1.registerMatcherMessage);
+router.post('/:id/matcher-funnel/reservation', auth_1.authenticate, studentController_1.registerMatcherReservation);
+router.post('/:id/matcher-funnel/interview', auth_1.authenticate, studentController_1.registerMatcherInterview);
 router.post('/:id/funnel/application', auth_1.authenticate, studentController_1.createApplication);
 router.put('/:id/funnel/reservation', auth_1.authenticate, studentController_1.updateApplicationReservation);
 router.post('/:id/funnel/interview', auth_1.authenticate, studentController_1.createInterviewRecord);

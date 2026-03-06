@@ -26,6 +26,16 @@ const studentEvents = ref<any[]>([]);
 const interviewLogs = ref<any[]>([]);
 const tasks = ref<any[]>([]);
 const interviewSchedules = ref<any[]>([]);
+const matcherFunnel = ref<any | null>(null);
+const matcherForm = ref({
+  applied_at: '',
+  message_sent_at: '',
+  reservation_created_at: '',
+  reservation_status: 'reserved',
+  interview_scheduled_at: '',
+  interview_actual_at: '',
+  interview_status: 'completed'
+});
 const expandedLogId = ref<number | null>(null);
 const availableEvents = ref<any[]>([]);
 const newTaskDate = ref('');
@@ -154,9 +164,75 @@ const fetchDetail = async () => {
   interviewLogs.value = res.data.logs;
   tasks.value = res.data.tasks || [];
   interviewSchedules.value = res.data.schedules || [];
+  matcherFunnel.value = res.data.matcher_funnel || null;
+  matcherForm.value = {
+    applied_at: toDateTimeLocalHour(res.data.matcher_funnel?.applied_at || student.value?.created_at),
+    message_sent_at: toDateTimeLocalHour(res.data.matcher_funnel?.message_sent_at),
+    reservation_created_at: toDateTimeLocalHour(res.data.matcher_funnel?.reservation_created_at || student.value?.meeting_decided_date),
+    reservation_status: res.data.matcher_funnel?.reservation_status || 'reserved',
+    interview_scheduled_at: toDateTimeLocalHour(res.data.matcher_funnel?.interview_scheduled_at || student.value?.first_interview_date),
+    interview_actual_at: toDateTimeLocalHour(res.data.matcher_funnel?.interview_actual_at),
+    interview_status: res.data.matcher_funnel?.interview_status || 'completed'
+  };
   referralStatusDraft.value = student.value?.referral_status || '不明';
   progressStageDraft.value = student.value?.progress_stage || '面談調整中';
   resetBasicDraft();
+};
+
+const toDateTimeLocalHour = (value?: string | null) => {
+  if (!value) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw}T10:00`;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:00`;
+};
+
+const normalizeHourDateTime = (value?: string | null) => {
+  if (!value) return null;
+  const v = toDateTimeLocalHour(value);
+  return v || null;
+};
+
+const registerMatcherApply = async () => {
+  const token = localStorage.getItem('token');
+  await api.post(`/api/students/${studentId}/matcher-funnel/apply`, {
+    applied_at: normalizeHourDateTime(matcherForm.value.applied_at)
+  }, { headers: { Authorization: token } });
+  fetchDetail();
+};
+
+const registerMatcherMessage = async () => {
+  const token = localStorage.getItem('token');
+  await api.post(`/api/students/${studentId}/matcher-funnel/message`, {
+    message_sent_at: normalizeHourDateTime(matcherForm.value.message_sent_at)
+  }, { headers: { Authorization: token } });
+  fetchDetail();
+};
+
+const registerMatcherReservation = async () => {
+  const token = localStorage.getItem('token');
+  await api.post(`/api/students/${studentId}/matcher-funnel/reservation`, {
+    reservation_created_at: normalizeHourDateTime(matcherForm.value.reservation_created_at),
+    reservation_status: matcherForm.value.reservation_status || 'reserved',
+    interview_scheduled_at: normalizeHourDateTime(matcherForm.value.interview_scheduled_at)
+  }, { headers: { Authorization: token } });
+  fetchDetail();
+};
+
+const registerMatcherInterview = async () => {
+  const token = localStorage.getItem('token');
+  await api.post(`/api/students/${studentId}/matcher-funnel/interview`, {
+    interview_actual_at: normalizeHourDateTime(matcherForm.value.interview_actual_at),
+    interview_status: matcherForm.value.interview_status || 'completed',
+    interview_scheduled_at: normalizeHourDateTime(matcherForm.value.interview_scheduled_at)
+  }, { headers: { Authorization: token } });
+  fetchDetail();
 };
 
 const fetchAllEvents = async () => {
@@ -736,6 +812,46 @@ watch(
               <button class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700" @click="addInterviewSchedule">
                 追加
               </button>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4">Matcher面談ファネル</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="border border-gray-200 rounded-lg p-3">
+                <p class="text-sm font-semibold mb-2">1) 申込</p>
+                <input v-model="matcherForm.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" />
+                <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherApply">申込登録</button>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-3">
+                <p class="text-sm font-semibold mb-2">2) メッセージ送信</p>
+                <input v-model="matcherForm.message_sent_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" />
+                <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherMessage">メッセージ送信登録</button>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-3">
+                <p class="text-sm font-semibold mb-2">3) 予約</p>
+                <input v-model="matcherForm.reservation_created_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" />
+                <select v-model="matcherForm.reservation_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2">
+                  <option value="pending">pending</option>
+                  <option value="reserved">reserved</option>
+                  <option value="cancel">cancel</option>
+                  <option value="no_response">no_response</option>
+                </select>
+                <input v-model="matcherForm.interview_scheduled_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" />
+                <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherReservation">予約登録</button>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-3">
+                <p class="text-sm font-semibold mb-2">4) 面談実施</p>
+                <input v-model="matcherForm.interview_actual_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" />
+                <select v-model="matcherForm.interview_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2">
+                  <option value="scheduled">scheduled</option>
+                  <option value="completed">completed</option>
+                  <option value="no_show">no_show</option>
+                  <option value="rescheduled">rescheduled</option>
+                  <option value="cancel">cancel</option>
+                </select>
+                <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherInterview">面談実施登録</button>
+              </div>
             </div>
           </div>
 

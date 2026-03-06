@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
+exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
 const db_1 = __importDefault(require("../config/db"));
 let interviewScheduleTableReady = false;
 let interviewScheduleTablePromise = null;
@@ -25,6 +25,8 @@ let studentTaskColumnsReady = false;
 let studentTaskColumnsPromise = null;
 let salesFunnelTablesReady = false;
 let salesFunnelTablesPromise = null;
+let matcherFunnelTableReady = false;
+let matcherFunnelTablePromise = null;
 const ensureInterviewScheduleTables = () => __awaiter(void 0, void 0, void 0, function* () {
     if (interviewScheduleTableReady)
         return;
@@ -204,6 +206,33 @@ const ensureSalesFunnelTables = () => __awaiter(void 0, void 0, void 0, function
     }
     yield salesFunnelTablesPromise;
 });
+const ensureMatcherFunnelTable = () => __awaiter(void 0, void 0, void 0, function* () {
+    if (matcherFunnelTableReady)
+        return;
+    if (!matcherFunnelTablePromise) {
+        matcherFunnelTablePromise = (() => __awaiter(void 0, void 0, void 0, function* () {
+            yield db_1.default.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+            yield db_1.default.query(`
+                CREATE TABLE IF NOT EXISTS matcher_funnel_logs (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    student_id INTEGER UNIQUE REFERENCES students(id) ON DELETE CASCADE,
+                    applied_at TIMESTAMP,
+                    message_sent_at TIMESTAMP,
+                    reservation_created_at TIMESTAMP,
+                    interview_scheduled_at TIMESTAMP,
+                    interview_actual_at TIMESTAMP,
+                    reservation_status TEXT,
+                    interview_status TEXT,
+                    created_at TIMESTAMP DEFAULT now()
+                )
+            `);
+            matcherFunnelTableReady = true;
+        }))().finally(() => {
+            matcherFunnelTablePromise = null;
+        });
+    }
+    yield matcherFunnelTablePromise;
+});
 const getStudentColumns = () => __awaiter(void 0, void 0, void 0, function* () {
     if (cachedStudentColumns)
         return cachedStudentColumns;
@@ -313,12 +342,17 @@ const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     try {
         yield ensureStudentExtendedColumns();
         yield ensureStudentTaskColumns();
+        yield ensureMatcherFunnelTable();
         let query = `
             SELECT
                 students.*,
                 users.name as staff_name,
                 st.content as latest_task_content,
-                st.due_date as latest_task_due_date
+                st.due_date as latest_task_due_date,
+                mf.applied_at as matcher_applied_at,
+                mf.reservation_created_at as matcher_reservation_created_at,
+                mf.interview_scheduled_at as matcher_interview_scheduled_at,
+                mf.interview_actual_at as matcher_interview_actual_at
             FROM students
             LEFT JOIN users ON students.staff_id = users.id
             LEFT JOIN LATERAL (
@@ -329,6 +363,13 @@ const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 ORDER BY created_at DESC
                 LIMIT 1
             ) st ON true
+            LEFT JOIN LATERAL (
+                SELECT applied_at, reservation_created_at, interview_scheduled_at, interview_actual_at
+                FROM matcher_funnel_logs
+                WHERE student_id = students.id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) mf ON true
         `;
         const params = [];
         // staff users can only see their own students regardless of query param
@@ -349,9 +390,11 @@ const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 });
 exports.getStudents = getStudents;
 const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const { name, university, prefecture, academic_track, faculty, referral_status, progress_stage, next_meeting_date, next_action, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason, meeting_decided_date, first_interview_date, second_interview_date } = req.body;
     try {
         yield ensureStudentExtendedColumns();
+        yield ensureMatcherFunnelTable();
         yield ensureSalesFunnelTables();
         const duplicateRes = yield db_1.default.query('SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') AND COALESCE(faculty, \'\') = COALESCE($3, \'\') LIMIT 1', [name, university || null, faculty || null]);
         if (duplicateRes.rows.length > 0) {
@@ -394,6 +437,20 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         const result = yield db_1.default.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`, insertVals);
         const created = result.rows[0];
         yield ensureSourceCategoryFromStudent(normalizedSourceCompany);
+        yield db_1.default.query(`INSERT INTO matcher_funnel_logs (student_id, applied_at, reservation_status, reservation_created_at, interview_scheduled_at)
+             VALUES ($1, COALESCE($2, CURRENT_TIMESTAMP), $3, $4, $5)
+             ON CONFLICT (student_id)
+             DO UPDATE SET
+               applied_at = COALESCE(EXCLUDED.applied_at, matcher_funnel_logs.applied_at),
+               reservation_status = COALESCE(EXCLUDED.reservation_status, matcher_funnel_logs.reservation_status),
+               reservation_created_at = COALESCE(EXCLUDED.reservation_created_at, matcher_funnel_logs.reservation_created_at),
+               interview_scheduled_at = COALESCE(EXCLUDED.interview_scheduled_at, matcher_funnel_logs.interview_scheduled_at)`, [
+            created.id,
+            normalizeNullableText((_a = req.body) === null || _a === void 0 ? void 0 : _a.applied_at),
+            'pending',
+            meeting_decided_date || null,
+            first_interview_date || null
+        ]);
         yield db_1.default.query(`INSERT INTO applications (
                 student_id, student_name, source, applied_at, reservation_status, reservation_date
             ) VALUES ($1, $2, $3, COALESCE($4, CURRENT_TIMESTAMP), $5, $6)`, [
@@ -421,6 +478,7 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
         yield ensureStudentExtendedColumns();
         yield ensureInterviewScheduleTables();
         yield ensureStudentTaskColumns();
+        yield ensureMatcherFunnelTable();
         const studentRes = yield db_1.default.query('SELECT * FROM students WHERE id = $1', [id]);
         const eventsRes = yield db_1.default.query(`
             SELECT e.*, se.status as participation_status, se.created_at as participation_created_at
@@ -442,12 +500,18 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
         `, [id]);
         const tasksRes = yield db_1.default.query('SELECT * FROM student_tasks WHERE student_id = $1 AND COALESCE(completed, FALSE) = FALSE ORDER BY due_date NULLS LAST, created_at DESC', [id]);
         const schedulesRes = yield db_1.default.query('SELECT * FROM interview_schedules WHERE student_id = $1 ORDER BY round_no ASC', [id]);
+        const matcherRes = yield db_1.default.query(`SELECT *
+             FROM matcher_funnel_logs
+             WHERE student_id = $1
+             ORDER BY created_at DESC
+             LIMIT 1`, [id]);
         res.json({
             student: studentRes.rows[0],
             events: eventsRes.rows,
             logs: logsRes.rows,
             tasks: tasksRes.rows,
-            schedules: schedulesRes.rows
+            schedules: schedulesRes.rows,
+            matcher_funnel: matcherRes.rows[0] || null
         });
     }
     catch (err) {
@@ -1054,6 +1118,167 @@ const deleteStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.deleteStudent = deleteStudent;
+const upsertMatcherFunnelByStudentId = (studentId, payload) => __awaiter(void 0, void 0, void 0, function* () {
+    yield ensureMatcherFunnelTable();
+    const studentRes = yield db_1.default.query('SELECT id FROM students WHERE id = $1', [studentId]);
+    if (studentRes.rows.length === 0) {
+        return null;
+    }
+    const columns = Object.keys(payload);
+    if (columns.length === 0) {
+        const exists = yield db_1.default.query('SELECT * FROM matcher_funnel_logs WHERE student_id = $1 LIMIT 1', [studentId]);
+        return exists.rows[0] || null;
+    }
+    const insertCols = ['student_id', ...columns];
+    const insertVals = [studentId, ...columns.map((c) => payload[c])];
+    const placeholders = insertVals.map((_, i) => `$${i + 1}`).join(', ');
+    const updateSet = columns.map((c) => `${c} = COALESCE(EXCLUDED.${c}, matcher_funnel_logs.${c})`).join(', ');
+    const result = yield db_1.default.query(`INSERT INTO matcher_funnel_logs (${insertCols.join(', ')})
+         VALUES (${placeholders})
+         ON CONFLICT (student_id) DO UPDATE SET ${updateSet}
+         RETURNING *`, insertVals);
+    return result.rows[0];
+});
+const getMatcherFunnelByStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    try {
+        yield ensureMatcherFunnelTable();
+        const result = yield db_1.default.query('SELECT * FROM matcher_funnel_logs WHERE student_id = $1 LIMIT 1', [id]);
+        res.json(result.rows[0] || null);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.getMatcherFunnelByStudent = getMatcherFunnelByStudent;
+const registerMatcherApply = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { applied_at } = req.body || {};
+    try {
+        const row = yield upsertMatcherFunnelByStudentId(String(id), {
+            applied_at: normalizeNullableText(applied_at) || new Date().toISOString()
+        });
+        if (!row) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(row);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.registerMatcherApply = registerMatcherApply;
+const registerMatcherMessage = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { message_sent_at } = req.body || {};
+    try {
+        const row = yield upsertMatcherFunnelByStudentId(String(id), {
+            message_sent_at: normalizeNullableText(message_sent_at) || new Date().toISOString()
+        });
+        if (!row) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(row);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.registerMatcherMessage = registerMatcherMessage;
+const registerMatcherReservation = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { reservation_created_at, reservation_status, interview_scheduled_at } = req.body || {};
+    try {
+        const row = yield upsertMatcherFunnelByStudentId(String(id), {
+            reservation_created_at: normalizeNullableText(reservation_created_at) || new Date().toISOString(),
+            reservation_status: normalizeNullableText(reservation_status) || 'reserved',
+            interview_scheduled_at: normalizeNullableText(interview_scheduled_at)
+        });
+        if (!row) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(row);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.registerMatcherReservation = registerMatcherReservation;
+const registerMatcherInterview = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { interview_actual_at, interview_status, interview_scheduled_at } = req.body || {};
+    try {
+        const row = yield upsertMatcherFunnelByStudentId(String(id), {
+            interview_actual_at: normalizeNullableText(interview_actual_at),
+            interview_status: normalizeNullableText(interview_status) || 'completed',
+            interview_scheduled_at: normalizeNullableText(interview_scheduled_at)
+        });
+        if (!row) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(row);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.registerMatcherInterview = registerMatcherInterview;
+const getMatcherFunnelKpi = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield ensureMatcherFunnelTable();
+        const result = yield db_1.default.query(`
+            WITH base AS (
+                SELECT * FROM matcher_funnel_logs
+            )
+            SELECT
+                COUNT(*) FILTER (WHERE applied_at IS NOT NULL)::int AS applications,
+                COUNT(*) FILTER (WHERE message_sent_at IS NOT NULL)::int AS "messagesSent",
+                COUNT(*) FILTER (WHERE reservation_created_at IS NOT NULL)::int AS reservations,
+                COUNT(*) FILTER (WHERE interview_actual_at IS NOT NULL AND COALESCE(interview_status, '') = 'completed')::int AS "interviewsCompleted",
+                ROUND(
+                    (COUNT(*) FILTER (WHERE message_sent_at IS NOT NULL)::numeric / NULLIF(COUNT(*) FILTER (WHERE applied_at IS NOT NULL), 0)) * 100, 2
+                ) AS "applicationToMessageRate",
+                ROUND(
+                    (COUNT(*) FILTER (WHERE reservation_created_at IS NOT NULL)::numeric / NULLIF(COUNT(*) FILTER (WHERE applied_at IS NOT NULL), 0)) * 100, 2
+                ) AS "applicationToReservationRate",
+                ROUND(
+                    (COUNT(*) FILTER (WHERE interview_actual_at IS NOT NULL)::numeric / NULLIF(COUNT(*) FILTER (WHERE reservation_created_at IS NOT NULL), 0)) * 100, 2
+                ) AS "reservationToInterviewRate",
+                ROUND(AVG(EXTRACT(EPOCH FROM (reservation_created_at - applied_at)) / 86400.0)
+                    FILTER (WHERE reservation_created_at IS NOT NULL AND applied_at IS NOT NULL), 2) AS "leadTimeApplyToReservation",
+                ROUND(AVG(EXTRACT(EPOCH FROM (interview_actual_at - reservation_created_at)) / 86400.0)
+                    FILTER (WHERE interview_actual_at IS NOT NULL AND reservation_created_at IS NOT NULL), 2) AS "leadTimeReservationToInterview",
+                ROUND(
+                    (COUNT(*) FILTER (WHERE interview_status = 'no_show')::numeric / NULLIF(COUNT(*) FILTER (WHERE reservation_created_at IS NOT NULL), 0)) * 100, 2
+                ) AS "noShowRate",
+                ROUND(
+                    (COUNT(*) FILTER (WHERE interview_status = 'rescheduled')::numeric / NULLIF(COUNT(*) FILTER (WHERE reservation_created_at IS NOT NULL), 0)) * 100, 2
+                ) AS "rescheduleRate"
+            FROM base
+        `);
+        res.json(result.rows[0] || {
+            applications: 0,
+            messagesSent: 0,
+            reservations: 0,
+            interviewsCompleted: 0,
+            applicationToMessageRate: 0,
+            applicationToReservationRate: 0,
+            reservationToInterviewRate: 0,
+            leadTimeApplyToReservation: 0,
+            leadTimeReservationToInterview: 0,
+            noShowRate: 0,
+            rescheduleRate: 0
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.getMatcherFunnelKpi = getMatcherFunnelKpi;
 const getFunnelMasterData = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield ensureSalesFunnelTables();

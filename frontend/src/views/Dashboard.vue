@@ -2,7 +2,6 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { api } from '../lib/api';
 import Layout from '../components/Layout.vue';
-import { Users, Calendar, UserPlus, FileCheck, Link as LinkIcon } from 'lucide-vue-next';
 
 interface Student {
   id: number;
@@ -40,8 +39,6 @@ interface EventParticipant {
 
 const students = ref<Student[]>([]);
 const events = ref<EventItem[]>([]);
-const inviteUrl = ref('');
-const inviteMessage = ref('');
 const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
 const selectedYomiEvent = ref<EventItem | null>(null);
 const yomiParticipants = ref<EventParticipant[]>([]);
@@ -103,6 +100,14 @@ const interviewExecutionByStaff = ref<Array<{
   first_interview_execution_rate: number | null;
 }>>([]);
 const sourceCompanyFilter = ref('ALL');
+const funnelKpi = ref({
+  daily_applications: [] as Array<{ day: string; count: number }>,
+  applicationToReservationRate: 0,
+  reservationToInterviewRate: 0,
+  interviewToProposalRate: 0,
+  proposalToJoinRate: 0,
+  lostReasonRanking: [] as Array<{ reason_name: string; count: number }>
+});
 
 const fetchData = async () => {
   try {
@@ -114,9 +119,23 @@ const fetchData = async () => {
     students.value = studentRes.data;
     events.value = eventRes.data;
     fetchInterviewMetrics().catch((err) => console.error(err));
+    fetchFunnelKpi().catch((err) => console.error(err));
   } catch (err) {
     console.error(err);
   }
+};
+
+const fetchFunnelKpi = async () => {
+  const token = localStorage.getItem('token');
+  const res = await api.get('/api/students/metrics/funnel', { headers: { Authorization: token } });
+  funnelKpi.value = {
+    daily_applications: Array.isArray(res.data?.daily_applications) ? res.data.daily_applications : [],
+    applicationToReservationRate: Number(res.data?.application_to_reservation_rate || 0),
+    reservationToInterviewRate: Number(res.data?.reservation_to_interview_rate || 0),
+    interviewToProposalRate: Number(res.data?.interview_to_proposal_rate || 0),
+    proposalToJoinRate: Number(res.data?.proposal_to_join_rate || 0),
+    lostReasonRanking: Array.isArray(res.data?.lost_reason_ranking) ? res.data.lost_reason_ranking : []
+  };
 };
 
 const fetchInterviewMetrics = async () => {
@@ -190,31 +209,6 @@ const fetchInterviewMetrics = async () => {
       }))
     : [];
 };
-
-const createInvite = async () => {
-  try {
-    inviteMessage.value = '';
-    const token = localStorage.getItem('token');
-    const res = await api.post('/api/auth/invite', {}, { headers: { Authorization: token } });
-    inviteUrl.value = res.data.invite_url;
-  } catch (err) {
-    inviteMessage.value = '招待URLの発行に失敗しました。';
-  }
-};
-
-const copyInvite = async () => {
-  if (!inviteUrl.value) return;
-  await navigator.clipboard.writeText(inviteUrl.value);
-  inviteMessage.value = 'コピーしました。';
-};
-
-const totalParticipants = computed(() =>
-  events.value.reduce((sum, e) => sum + Number(e.total_count || 0), 0)
-);
-
-const attendedParticipants = computed(() =>
-  events.value.reduce((sum, e) => sum + Number(e.attended_count || 0), 0)
-);
 
 const upcomingEvents = computed(() => {
   const now = new Date();
@@ -438,12 +432,15 @@ const sourceCompanyOptions = computed(() => {
   return ['ALL', ...Array.from(set).sort()];
 });
 
-const stats = computed(() => [
-  { label: '総学生数', value: students.value.length, icon: Users, color: 'bg-blue-50 text-blue-600' },
-  { label: 'イベント数', value: events.value.length, icon: Calendar, color: 'bg-green-50 text-green-600' },
-  { label: '参加者数', value: totalParticipants.value, icon: UserPlus, color: 'bg-purple-50 text-purple-600' },
-  { label: '出席者数', value: attendedParticipants.value, icon: FileCheck, color: 'bg-amber-50 text-amber-600' }
-]);
+const monthlyYomiByEvent = computed(() => {
+  const month = selectedMonthKey.value;
+  return eventYomiRows.value
+    .filter((row) => String(row.event_date || '').slice(0, 7) === month)
+    .map((row) => ({
+      ...row,
+      heldDate: row.event_date ? new Date(row.event_date).toLocaleDateString('ja-JP') : '-'
+    }));
+});
 
 onMounted(fetchData);
 watch(sourceCompanyFilter, fetchInterviewMetrics);
@@ -455,21 +452,6 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
       <div class="mb-8">
         <h1 class="text-3xl font-bold text-gray-900">ダッシュボード</h1>
         <p class="text-gray-500 mt-2">最新の統計と活動状況を確認できます。</p>
-      </div>
-
-      <div v-if="user.role === 'admin'" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-lg font-bold text-gray-900">担当者招待URL</h2>
-          <button @click="createInvite" class="px-4 py-2 bg-blue-600 text-white rounded-lg">発行</button>
-        </div>
-        <div v-if="inviteUrl" class="flex items-center gap-2">
-          <input :value="inviteUrl" readonly class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-          <button @click="copyInvite" class="px-3 py-2 border border-gray-200 rounded-lg text-sm flex items-center gap-2">
-            <LinkIcon class="w-4 h-4" />
-            コピー
-          </button>
-        </div>
-        <p v-if="inviteMessage" class="text-xs text-gray-500 mt-2">{{ inviteMessage }}</p>
       </div>
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
@@ -519,17 +501,76 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div v-for="card in stats" :key="card.label" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div class="flex items-center gap-4">
-            <div :class="`w-12 h-12 rounded-lg ${card.color} flex items-center justify-center`">
-              <component :is="card.icon" class="w-6 h-6" />
-            </div>
-            <div>
-              <p class="text-sm text-gray-500">{{ card.label }}</p>
-              <p class="text-2xl font-bold text-gray-900">{{ card.value }}</p>
-            </div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">月間ヨミ表</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">開催日</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">イベント名</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-blue-700 uppercase">A</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-amber-700 uppercase">B</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-purple-700 uppercase">C</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-red-700 uppercase">XA</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">合計</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr v-for="row in monthlyYomiByEvent" :key="`monthly-yomi-${row.id}`" class="hover:bg-gray-50">
+                <td class="px-3 py-2 text-gray-600">{{ row.heldDate }}</td>
+                <td class="px-3 py-2 text-gray-900">{{ row.title }}</td>
+                <td class="px-3 py-2 text-right text-blue-700 font-semibold">{{ row.a }}</td>
+                <td class="px-3 py-2 text-right text-amber-700 font-semibold">{{ row.b }}</td>
+                <td class="px-3 py-2 text-right text-purple-700 font-semibold">{{ row.c }}</td>
+                <td class="px-3 py-2 text-right text-red-700 font-semibold">{{ row.xa }}</td>
+                <td class="px-3 py-2 text-right text-gray-900 font-semibold">{{ row.total }}</td>
+              </tr>
+              <tr v-if="monthlyYomiByEvent.length === 0">
+                <td colSpan="7" class="px-3 py-8 text-center text-gray-400">対象月のイベントデータはありません。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">ファネルKPI</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div class="rounded-lg border border-gray-200 p-3"><p class="text-xs text-gray-500">申込→予約率</p><p class="text-xl font-bold">{{ funnelKpi.applicationToReservationRate.toFixed(2) }}%</p></div>
+          <div class="rounded-lg border border-gray-200 p-3"><p class="text-xs text-gray-500">予約→面談率</p><p class="text-xl font-bold">{{ funnelKpi.reservationToInterviewRate.toFixed(2) }}%</p></div>
+          <div class="rounded-lg border border-gray-200 p-3"><p class="text-xs text-gray-500">面談→イベント提案率</p><p class="text-xl font-bold">{{ funnelKpi.interviewToProposalRate.toFixed(2) }}%</p></div>
+          <div class="rounded-lg border border-gray-200 p-3"><p class="text-xs text-gray-500">提案→参加率</p><p class="text-xl font-bold">{{ funnelKpi.proposalToJoinRate.toFixed(2) }}%</p></div>
+          <div class="rounded-lg border border-gray-200 p-3">
+            <p class="text-xs text-gray-500 mb-1">失注理由ランキング</p>
+            <p class="text-xs text-gray-700" v-if="funnelKpi.lostReasonRanking.length === 0">データなし</p>
+            <ul v-else class="text-xs text-gray-700 space-y-0.5">
+              <li v-for="r in funnelKpi.lostReasonRanking.slice(0, 3)" :key="`lost-dashboard-${r.reason_name}`">{{ r.reason_name }}: {{ r.count }}</li>
+            </ul>
           </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">日別申込数（直近31日）</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[360px] text-xs">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left text-gray-500">日付</th>
+                <th class="px-3 py-2 text-right text-gray-500">申込数</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="d in funnelKpi.daily_applications" :key="`daily-dashboard-${d.day}`">
+                <td class="px-3 py-2 text-gray-700">{{ d.day ? new Date(d.day).toLocaleDateString('ja-JP') : '-' }}</td>
+                <td class="px-3 py-2 text-right text-gray-900">{{ d.count }}</td>
+              </tr>
+              <tr v-if="funnelKpi.daily_applications.length === 0">
+                <td class="px-3 py-3 text-gray-400 text-center" colSpan="2">データがありません</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

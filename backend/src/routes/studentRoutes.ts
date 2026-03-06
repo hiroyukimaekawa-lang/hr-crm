@@ -20,6 +20,11 @@ import {
     createEventProposal,
     getFunnelKpi,
     getFunnelMasterData,
+    getMatcherFunnelByStudent,
+    registerMatcherApply,
+    registerMatcherMessage,
+    registerMatcherReservation,
+    registerMatcherInterview,
     importStudents,
     createInterviewSchedule,
     updateInterviewSchedule,
@@ -42,6 +47,11 @@ router.post('/source-categories', authenticate, createSourceCategory);
 router.delete('/source-categories/:id', authenticate, deleteSourceCategory);
 router.post('/', authenticate, createStudent);
 router.post('/import', authenticate, importStudents);
+router.get('/:id/matcher-funnel', authenticate, getMatcherFunnelByStudent);
+router.post('/:id/matcher-funnel/apply', authenticate, registerMatcherApply);
+router.post('/:id/matcher-funnel/message', authenticate, registerMatcherMessage);
+router.post('/:id/matcher-funnel/reservation', authenticate, registerMatcherReservation);
+router.post('/:id/matcher-funnel/interview', authenticate, registerMatcherInterview);
 router.post('/:id/funnel/application', authenticate, createApplication);
 router.put('/:id/funnel/reservation', authenticate, updateApplicationReservation);
 router.post('/:id/funnel/interview', authenticate, createInterviewRecord);
