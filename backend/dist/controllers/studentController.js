@@ -105,6 +105,15 @@ const ensureStudentTaskColumns = () => __awaiter(void 0, void 0, void 0, functio
     if (!studentTaskColumnsPromise) {
         studentTaskColumnsPromise = (() => __awaiter(void 0, void 0, void 0, function* () {
             yield db_1.default.query(`
+                CREATE TABLE IF NOT EXISTS student_tasks (
+                    id SERIAL PRIMARY KEY,
+                    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                    due_date DATE,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            yield db_1.default.query(`
                 ALTER TABLE student_tasks
                 ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT FALSE
             `);

@@ -93,6 +93,15 @@ const ensureStudentTaskColumns = async () => {
     if (!studentTaskColumnsPromise) {
         studentTaskColumnsPromise = (async () => {
             await pool.query(`
+                CREATE TABLE IF NOT EXISTS student_tasks (
+                    id SERIAL PRIMARY KEY,
+                    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                    due_date DATE,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            await pool.query(`
                 ALTER TABLE student_tasks
                 ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT FALSE
             `);
