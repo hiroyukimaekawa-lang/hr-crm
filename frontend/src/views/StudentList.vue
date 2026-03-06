@@ -36,6 +36,8 @@ interface Student {
   tags?: string[] | null;
   staff_id?: number | null;
   staff_name?: string;
+  meeting_decided_date?: string | null;
+  first_interview_date?: string | null;
 }
 
 const INVALID_SOURCE_COMPANY_VALUES = new Set(['初回平均(日)', '氏名', '流入経路', 'source_company']);
@@ -169,9 +171,7 @@ const newStudent = ref({
 const funnelForm = ref({
   source: '',
   applied_at: '',
-  reservation_status: '',
   reservation_date: '',
-  reservation_created_at: '',
   interview_scheduled_at: '',
   interview_interviewed_at: '',
   interview_status: 'completed',
@@ -180,6 +180,21 @@ const funnelForm = ref({
   lost_reason_id: '',
   memo: ''
 });
+
+const toDateTimeHour = (value?: string | null) => {
+  if (!value) return '';
+  const trimmed = String(value).trim();
+  if (!trimmed) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return `${trimmed}T10:00`;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(trimmed)) return trimmed.slice(0, 16);
+  const d = new Date(trimmed);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:00`;
+};
 
 const fetchStudents = async () => {
   try {
@@ -248,11 +263,9 @@ const openFunnelModal = (student: Student) => {
   funnelError.value = '';
   funnelForm.value = {
     source: normalizeSourceCompany(student.source_company) || '',
-    applied_at: '',
-    reservation_status: '',
-    reservation_date: '',
-    reservation_created_at: '',
-    interview_scheduled_at: '',
+    applied_at: toDateTimeHour(student.meeting_decided_date),
+    reservation_date: toDateTimeHour(student.meeting_decided_date),
+    interview_scheduled_at: toDateTimeHour(student.first_interview_date),
     interview_interviewed_at: '',
     interview_status: 'completed',
     event_id: '',
@@ -284,10 +297,12 @@ const submitReservation = async () => {
   try {
     const token = localStorage.getItem('token');
     await api.put(`/api/students/${selectedFunnelStudent.value.id}/funnel/reservation`, {
-      reservation_status: funnelForm.value.reservation_status || null,
-      reservation_date: funnelForm.value.reservation_date || null,
-      reservation_created_at: funnelForm.value.reservation_created_at || null
+      reservation_status: '初回面談',
+      reservation_date: funnelForm.value.reservation_date || null
     }, { headers: { Authorization: token } });
+    if (!funnelForm.value.interview_scheduled_at && funnelForm.value.reservation_date) {
+      funnelForm.value.interview_scheduled_at = funnelForm.value.reservation_date;
+    }
     await fetchFunnelKpi();
     showToast('予約登録を保存しました。', 'success');
   } catch (err: any) {
@@ -1401,7 +1416,7 @@ watch(filteredStudents, () => {
       <div v-if="showFunnel && selectedFunnelStudent" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[90]">
         <div class="w-full max-w-3xl bg-white rounded-xl shadow-xl p-4 md:p-6 max-h-[85vh] overflow-y-auto">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-bold text-gray-900">営業ファネル登録: {{ selectedFunnelStudent.name }}</h2>
+            <h2 class="text-lg font-bold text-gray-900">面談ファネル登録: {{ selectedFunnelStudent.name }}</h2>
             <button class="text-sm text-gray-500 hover:text-gray-700" @click="showFunnel = false">閉じる</button>
           </div>
           <p v-if="funnelError" class="mb-3 text-sm text-red-600">{{ funnelError }}</p>
@@ -1412,27 +1427,25 @@ watch(filteredStudents, () => {
               <label class="block text-xs text-gray-600 mb-1">流入元</label>
               <input v-model="funnelForm.source" type="text" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
               <label class="block text-xs text-gray-600 mb-1">申込日</label>
-              <input v-model="funnelForm.applied_at" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <input v-model="funnelForm.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
               <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitApplication">申込登録</button>
             </div>
 
             <div class="border border-gray-200 rounded-lg p-3">
               <h3 class="font-semibold text-sm mb-2">2) 予約登録</h3>
               <label class="block text-xs text-gray-600 mb-1">予約ステータス</label>
-              <input v-model="funnelForm.reservation_status" type="text" placeholder="reserved など" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <input value="初回面談" type="text" disabled class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2 bg-gray-50 text-gray-600">
               <label class="block text-xs text-gray-600 mb-1">予約日</label>
-              <input v-model="funnelForm.reservation_date" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
-              <label class="block text-xs text-gray-600 mb-1">予約作成日</label>
-              <input v-model="funnelForm.reservation_created_at" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <input v-model="funnelForm.reservation_date" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
               <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitReservation">予約登録</button>
             </div>
 
             <div class="border border-gray-200 rounded-lg p-3">
               <h3 class="font-semibold text-sm mb-2">3) 面談実施登録</h3>
               <label class="block text-xs text-gray-600 mb-1">面談予定日</label>
-              <input v-model="funnelForm.interview_scheduled_at" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <input v-model="funnelForm.interview_scheduled_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
               <label class="block text-xs text-gray-600 mb-1">面談実施日</label>
-              <input v-model="funnelForm.interview_interviewed_at" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <input v-model="funnelForm.interview_interviewed_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
               <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitInterview">面談実施登録</button>
             </div>
 

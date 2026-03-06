@@ -352,6 +352,7 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     const { name, university, prefecture, academic_track, faculty, referral_status, progress_stage, next_meeting_date, next_action, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason, meeting_decided_date, first_interview_date, second_interview_date } = req.body;
     try {
         yield ensureStudentExtendedColumns();
+        yield ensureSalesFunnelTables();
         const duplicateRes = yield db_1.default.query('SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') AND COALESCE(faculty, \'\') = COALESCE($3, \'\') LIMIT 1', [name, university || null, faculty || null]);
         if (duplicateRes.rows.length > 0) {
             res.status(409).json({ error: 'Student already exists' });
@@ -393,6 +394,16 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         const result = yield db_1.default.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`, insertVals);
         const created = result.rows[0];
         yield ensureSourceCategoryFromStudent(normalizedSourceCompany);
+        yield db_1.default.query(`INSERT INTO applications (
+                student_id, student_name, source, applied_at, reservation_status, reservation_date
+            ) VALUES ($1, $2, $3, COALESCE($4, CURRENT_TIMESTAMP), $5, $6)`, [
+            created.id,
+            created.name,
+            normalizedSourceCompany,
+            meeting_decided_date || null,
+            '初回面談',
+            meeting_decided_date || null
+        ]);
         const preContactDate = oneDayBefore(first_interview_date || null);
         if ((created === null || created === void 0 ? void 0 : created.id) && preContactDate) {
             yield db_1.default.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)', [created.id, preContactDate, '事前連絡']);

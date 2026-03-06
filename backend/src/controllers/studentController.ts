@@ -359,6 +359,7 @@ export const createStudent = async (req: Request, res: Response) => {
     } = req.body;
     try {
         await ensureStudentExtendedColumns();
+        await ensureSalesFunnelTables();
         const duplicateRes = await pool.query(
             'SELECT id FROM students WHERE name = $1 AND COALESCE(university, \'\') = COALESCE($2, \'\') AND COALESCE(faculty, \'\') = COALESCE($3, \'\') LIMIT 1',
             [name, university || null, faculty || null]
@@ -409,6 +410,19 @@ export const createStudent = async (req: Request, res: Response) => {
         );
         const created = result.rows[0];
         await ensureSourceCategoryFromStudent(normalizedSourceCompany);
+        await pool.query(
+            `INSERT INTO applications (
+                student_id, student_name, source, applied_at, reservation_status, reservation_date
+            ) VALUES ($1, $2, $3, COALESCE($4, CURRENT_TIMESTAMP), $5, $6)`,
+            [
+                created.id,
+                created.name,
+                normalizedSourceCompany,
+                meeting_decided_date || null,
+                '初回面談',
+                meeting_decided_date || null
+            ]
+        );
         const preContactDate = oneDayBefore(first_interview_date || null);
         if (created?.id && preContactDate) {
             await pool.query(
