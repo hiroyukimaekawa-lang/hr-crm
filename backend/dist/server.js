@@ -21,21 +21,34 @@ const eventRoutes_1 = __importDefault(require("./routes/eventRoutes"));
 const performance_1 = require("./config/performance");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-// Middleware
-app.use((0, cors_1.default)({
+const normalizeOrigin = (origin) => origin.trim().replace(/\/+$/, '');
+const allowedOrigins = Array.from(new Set([
+    process.env.ALLOWED_ORIGINS || '',
+    process.env.FRONTEND_URL || '',
+    'http://localhost:5173',
+    'https://hrcrm-chi.vercel.app'
+]
+    .flatMap((entry) => entry.split(','))
+    .map((origin) => normalizeOrigin(origin))
+    .filter(Boolean)));
+const corsOptions = {
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin) {
+            callback(null, true);
+            return;
+        }
+        const normalized = normalizeOrigin(origin);
+        if (allowedOrigins.includes(normalized)) {
             callback(null, true);
             return;
         }
         callback(new Error('Not allowed by CORS'));
     },
     credentials: true
-}));
+};
+// Middleware
+app.use((0, cors_1.default)(corsOptions));
+app.options('*', (0, cors_1.default)(corsOptions));
 app.use(express_1.default.json());
 // Routes
 // これにより、例えば /api/auth/login や /api/students などに分岐されます

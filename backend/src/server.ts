@@ -9,22 +9,37 @@ import { applyPerformanceOptimizations } from './config/performance';
 dotenv.config();
 
 const app = express();
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-
-// Middleware
-app.use(cors({
+const normalizeOrigin = (origin: string) => origin.trim().replace(/\/+$/, '');
+const allowedOrigins = Array.from(new Set(
+    [
+        process.env.ALLOWED_ORIGINS || '',
+        process.env.FRONTEND_URL || '',
+        'http://localhost:5173',
+        'https://hrcrm-chi.vercel.app'
+    ]
+        .flatMap((entry) => entry.split(','))
+        .map((origin) => normalizeOrigin(origin))
+        .filter(Boolean)
+));
+const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin) {
+            callback(null, true);
+            return;
+        }
+        const normalized = normalizeOrigin(origin);
+        if (allowedOrigins.includes(normalized)) {
             callback(null, true);
             return;
         }
         callback(new Error('Not allowed by CORS'));
     },
     credentials: true
-}));
+};
+
+// Middleware
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 // Routes
