@@ -391,7 +391,7 @@ const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 exports.getStudents = getStudents;
 const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    const { name, university, prefecture, academic_track, faculty, referral_status, progress_stage, next_meeting_date, next_action, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason, meeting_decided_date, first_interview_date, second_interview_date } = req.body;
+    const { name, university, prefecture, academic_track, faculty, referral_status, progress_stage, next_meeting_date, next_action, desired_industry, desired_role, graduation_year, email, phone, status, tags, staff_id, source_company, interview_reason, applied_at, meeting_decided_date, first_interview_date, second_interview_date } = req.body;
     try {
         yield ensureStudentExtendedColumns();
         yield ensureMatcherFunnelTable();
@@ -457,7 +457,7 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             created.id,
             created.name,
             normalizedSourceCompany,
-            meeting_decided_date || null,
+            normalizeNullableText(applied_at) || meeting_decided_date || null,
             '初回面談',
             meeting_decided_date || null
         ]);

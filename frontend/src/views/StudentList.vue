@@ -166,6 +166,7 @@ const newStudent = ref({
   faculty: '',
   interview_reason: '',
   staff_id: '',
+  applied_at: '',
   meeting_decided_date: '',
   first_interview_date: '',
   prefecture: '',
@@ -431,6 +432,7 @@ const createStudent = async () => {
       university: newStudent.value.university,
       faculty: newStudent.value.faculty || null,
       interview_reason: newStudent.value.interview_reason || null,
+      applied_at: normalizeHourDateTime(newStudent.value.applied_at),
       meeting_decided_date: newStudent.value.meeting_decided_date || null,
       first_interview_date: newStudent.value.first_interview_date || null,
       prefecture: newStudent.value.prefecture || null,
@@ -447,6 +449,7 @@ const createStudent = async () => {
       faculty: '',
       interview_reason: '',
       staff_id: '',
+      applied_at: '',
       meeting_decided_date: '',
       first_interview_date: '',
       prefecture: '',
@@ -1410,6 +1413,13 @@ watch(filteredStudents, () => {
               <option value="">未割当</option>
               <option v-for="u in staffUsers" :key="`create-staff-${u.id}`" :value="String(u.id)">{{ u.name }}</option>
             </select>
+          </div>
+          <div class="pt-1 border-t border-gray-100">
+            <p class="text-sm font-semibold text-gray-800 mb-2">申込み起点で登録</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">申込日（時間単位）</label>
+            <input v-model="newStudent.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">面談決定日</label>

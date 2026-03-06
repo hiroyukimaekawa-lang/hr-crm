@@ -394,6 +394,7 @@ export const createStudent = async (req: Request, res: Response) => {
         staff_id,
         source_company,
         interview_reason,
+        applied_at,
         meeting_decided_date,
         first_interview_date,
         second_interview_date
@@ -477,7 +478,7 @@ export const createStudent = async (req: Request, res: Response) => {
                 created.id,
                 created.name,
                 normalizedSourceCompany,
-                meeting_decided_date || null,
+                normalizeNullableText(applied_at) || meeting_decided_date || null,
                 '初回面談',
                 meeting_decided_date || null
             ]
