@@ -97,9 +97,21 @@ const ensureStudentTaskColumns = async () => {
                     id SERIAL PRIMARY KEY,
                     student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
                     due_date DATE,
-                    content TEXT NOT NULL,
+                    content TEXT NOT NULL DEFAULT '',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
+            `);
+            await pool.query(`
+                ALTER TABLE student_tasks
+                ADD COLUMN IF NOT EXISTS due_date DATE
+            `);
+            await pool.query(`
+                ALTER TABLE student_tasks
+                ADD COLUMN IF NOT EXISTS content TEXT DEFAULT ''
+            `);
+            await pool.query(`
+                ALTER TABLE student_tasks
+                ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             `);
             await pool.query(`
                 ALTER TABLE student_tasks

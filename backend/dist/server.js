@@ -45,7 +45,8 @@ const corsOptionsDelegate = (req, callback) => {
                 return;
             }
             const normalized = normalizeOrigin(origin);
-            if (allowedOrigins.includes(normalized)) {
+            const isVercelPreview = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(normalized);
+            if (allowedOrigins.includes(normalized) || isVercelPreview) {
                 originCallback(null, true);
                 return;
             }
