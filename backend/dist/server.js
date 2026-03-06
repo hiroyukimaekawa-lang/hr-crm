@@ -31,24 +31,32 @@ const allowedOrigins = Array.from(new Set([
     .flatMap((entry) => entry.split(','))
     .map((origin) => normalizeOrigin(origin))
     .filter(Boolean)));
-const corsOptions = {
-    origin: (origin, callback) => {
-        if (!origin) {
-            callback(null, true);
-            return;
-        }
-        const normalized = normalizeOrigin(origin);
-        if (allowedOrigins.includes(normalized)) {
-            callback(null, true);
-            return;
-        }
-        callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true
+const corsOptionsDelegate = (req, callback) => {
+    const reqAny = req;
+    // ログイン機能のみ従来どおり許可（任意Origin）
+    if (String((reqAny === null || reqAny === void 0 ? void 0 : reqAny.url) || '').startsWith('/api/auth')) {
+        callback(null, { origin: true, credentials: true });
+        return;
+    }
+    callback(null, {
+        origin: (origin, originCallback) => {
+            if (!origin) {
+                originCallback(null, true);
+                return;
+            }
+            const normalized = normalizeOrigin(origin);
+            if (allowedOrigins.includes(normalized)) {
+                originCallback(null, true);
+                return;
+            }
+            originCallback(new Error('Not allowed by CORS'));
+        },
+        credentials: true
+    });
 };
 // Middleware
-app.use((0, cors_1.default)(corsOptions));
-app.options('*', (0, cors_1.default)(corsOptions));
+app.use((0, cors_1.default)(corsOptionsDelegate));
+app.options('*', (0, cors_1.default)(corsOptionsDelegate));
 app.use(express_1.default.json());
 // Routes
 // これにより、例えば /api/auth/login や /api/students などに分岐されます

@@ -21,25 +21,34 @@ const allowedOrigins = Array.from(new Set(
         .map((origin) => normalizeOrigin(origin))
         .filter(Boolean)
 ));
-const corsOptions: cors.CorsOptions = {
-    origin: (origin, callback) => {
-        if (!origin) {
-            callback(null, true);
-            return;
-        }
-        const normalized = normalizeOrigin(origin);
-        if (allowedOrigins.includes(normalized)) {
-            callback(null, true);
-            return;
-        }
-        callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true
+const corsOptionsDelegate: cors.CorsOptionsDelegate = (req, callback) => {
+    const reqAny = req as any;
+    // ログイン機能のみ従来どおり許可（任意Origin）
+    if (String(reqAny?.url || '').startsWith('/api/auth')) {
+        callback(null, { origin: true, credentials: true });
+        return;
+    }
+
+    callback(null, {
+        origin: (origin, originCallback) => {
+            if (!origin) {
+                originCallback(null, true);
+                return;
+            }
+            const normalized = normalizeOrigin(origin);
+            if (allowedOrigins.includes(normalized)) {
+                originCallback(null, true);
+                return;
+            }
+            originCallback(new Error('Not allowed by CORS'));
+        },
+        credentials: true
+    });
 };
 
 // Middleware
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.use(cors(corsOptionsDelegate));
+app.options('*', cors(corsOptionsDelegate));
 app.use(express.json());
 
 // Routes
