@@ -48,7 +48,7 @@ const corsOptionsDelegate: cors.CorsOptionsDelegate = (req, callback) => {
 
 // Middleware
 app.use(cors(corsOptionsDelegate));
-app.options('*', cors(corsOptionsDelegate));
+app.options(/.*/, cors(corsOptionsDelegate));
 app.use(express.json());
 
 // Routes

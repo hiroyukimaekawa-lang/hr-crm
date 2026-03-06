@@ -56,7 +56,7 @@ const corsOptionsDelegate = (req, callback) => {
 };
 // Middleware
 app.use((0, cors_1.default)(corsOptionsDelegate));
-app.options('*', (0, cors_1.default)(corsOptionsDelegate));
+app.options(/.*/, (0, cors_1.default)(corsOptionsDelegate));
 app.use(express_1.default.json());
 // Routes
 // これにより、例えば /api/auth/login や /api/students などに分岐されます
