@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
+exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
 const db_1 = __importDefault(require("../config/db"));
 let interviewScheduleTableReady = false;
 let interviewScheduleTablePromise = null;
@@ -23,6 +23,8 @@ let sourceCategoriesTableReady = false;
 let sourceCategoriesTablePromise = null;
 let studentTaskColumnsReady = false;
 let studentTaskColumnsPromise = null;
+let salesFunnelTablesReady = false;
+let salesFunnelTablesPromise = null;
 const ensureInterviewScheduleTables = () => __awaiter(void 0, void 0, void 0, function* () {
     if (interviewScheduleTableReady)
         return;
@@ -112,6 +114,74 @@ const ensureStudentTaskColumns = () => __awaiter(void 0, void 0, void 0, functio
         });
     }
     yield studentTaskColumnsPromise;
+});
+const ensureSalesFunnelTables = () => __awaiter(void 0, void 0, void 0, function* () {
+    if (salesFunnelTablesReady)
+        return;
+    if (!salesFunnelTablesPromise) {
+        salesFunnelTablesPromise = (() => __awaiter(void 0, void 0, void 0, function* () {
+            yield db_1.default.query(`
+                CREATE TABLE IF NOT EXISTS applications (
+                    id SERIAL PRIMARY KEY,
+                    student_id INTEGER REFERENCES students(id) ON DELETE SET NULL,
+                    student_name VARCHAR(255) NOT NULL,
+                    source VARCHAR(255),
+                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    first_message_sent_at TIMESTAMP,
+                    reservation_status VARCHAR(100),
+                    reservation_date TIMESTAMP,
+                    reservation_created_at TIMESTAMP,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            yield db_1.default.query(`
+                CREATE TABLE IF NOT EXISTS interviews (
+                    id SERIAL PRIMARY KEY,
+                    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                    scheduled_at TIMESTAMP,
+                    interviewed_at TIMESTAMP,
+                    status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS company VARCHAR(255)
+            `);
+            yield db_1.default.query(`
+                CREATE TABLE IF NOT EXISTS lost_reasons (
+                    id SERIAL PRIMARY KEY,
+                    reason_name VARCHAR(255) UNIQUE NOT NULL
+                )
+            `);
+            yield db_1.default.query(`
+                CREATE TABLE IF NOT EXISTS event_proposals (
+                    id SERIAL PRIMARY KEY,
+                    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                    proposed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(50) NOT NULL DEFAULT 'proposed',
+                    lost_reason_id INTEGER REFERENCES lost_reasons(id) ON DELETE SET NULL,
+                    memo TEXT,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            yield db_1.default.query(`
+                INSERT INTO lost_reasons (reason_name)
+                VALUES
+                    ('日程が合わない'),
+                    ('優先度が低い'),
+                    ('連絡不通'),
+                    ('他社で決定'),
+                    ('その他')
+                ON CONFLICT (reason_name) DO NOTHING
+            `);
+            salesFunnelTablesReady = true;
+        }))().finally(() => {
+            salesFunnelTablesPromise = null;
+        });
+    }
+    yield salesFunnelTablesPromise;
 });
 const getStudentColumns = () => __awaiter(void 0, void 0, void 0, function* () {
     if (cachedStudentColumns)
@@ -952,6 +1022,219 @@ const deleteStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.deleteStudent = deleteStudent;
+const getFunnelMasterData = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield ensureSalesFunnelTables();
+        const [eventsRes, reasonsRes] = yield Promise.all([
+            db_1.default.query('SELECT id, title AS event_name, event_date, company FROM events ORDER BY event_date DESC NULLS LAST, id DESC'),
+            db_1.default.query('SELECT id, reason_name FROM lost_reasons ORDER BY id ASC')
+        ]);
+        res.json({
+            events: eventsRes.rows,
+            lost_reasons: reasonsRes.rows
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.getFunnelMasterData = getFunnelMasterData;
+const createApplication = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { source, applied_at, first_message_sent_at, reservation_status, reservation_date, reservation_created_at } = req.body || {};
+    try {
+        yield ensureSalesFunnelTables();
+        const studentRes = yield db_1.default.query('SELECT id, name, source_company FROM students WHERE id = $1', [id]);
+        if (studentRes.rows.length === 0) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        const st = studentRes.rows[0];
+        const result = yield db_1.default.query(`INSERT INTO applications (
+                student_id, student_name, source, applied_at, first_message_sent_at,
+                reservation_status, reservation_date, reservation_created_at
+            ) VALUES ($1, $2, $3, COALESCE($4, CURRENT_TIMESTAMP), $5, $6, $7, $8)
+            RETURNING *`, [
+            st.id,
+            st.name,
+            normalizeNullableText(source) || st.source_company || null,
+            normalizeNullableText(applied_at),
+            normalizeNullableText(first_message_sent_at),
+            normalizeNullableText(reservation_status),
+            normalizeNullableText(reservation_date),
+            normalizeNullableText(reservation_created_at)
+        ]);
+        res.status(201).json(result.rows[0]);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.createApplication = createApplication;
+const updateApplicationReservation = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { reservation_status, reservation_date, reservation_created_at, first_message_sent_at } = req.body || {};
+    try {
+        yield ensureSalesFunnelTables();
+        const appRes = yield db_1.default.query('SELECT * FROM applications WHERE student_id = $1 ORDER BY applied_at DESC NULLS LAST, id DESC LIMIT 1', [id]);
+        if (appRes.rows.length === 0) {
+            res.status(404).json({ error: 'Application not found for student' });
+            return;
+        }
+        const app = appRes.rows[0];
+        const result = yield db_1.default.query(`UPDATE applications
+             SET reservation_status = $1,
+                 reservation_date = $2,
+                 reservation_created_at = $3,
+                 first_message_sent_at = COALESCE($4, first_message_sent_at)
+             WHERE id = $5
+             RETURNING *`, [
+            normalizeNullableText(reservation_status),
+            normalizeNullableText(reservation_date),
+            normalizeNullableText(reservation_created_at),
+            normalizeNullableText(first_message_sent_at),
+            app.id
+        ]);
+        res.json(result.rows[0]);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.updateApplicationReservation = updateApplicationReservation;
+const createInterviewRecord = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { scheduled_at, interviewed_at, status } = req.body || {};
+    try {
+        yield ensureSalesFunnelTables();
+        const result = yield db_1.default.query(`INSERT INTO interviews (student_id, scheduled_at, interviewed_at, status)
+             VALUES ($1, $2, $3, $4)
+             RETURNING *`, [
+            id,
+            normalizeNullableText(scheduled_at),
+            normalizeNullableText(interviewed_at),
+            normalizeNullableText(status) || 'completed'
+        ]);
+        res.status(201).json(result.rows[0]);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.createInterviewRecord = createInterviewRecord;
+const createEventProposal = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { event_id, proposed_at, status, lost_reason_id, memo } = req.body || {};
+    if (!event_id) {
+        res.status(400).json({ error: 'event_id is required' });
+        return;
+    }
+    try {
+        yield ensureSalesFunnelTables();
+        const result = yield db_1.default.query(`INSERT INTO event_proposals (student_id, event_id, proposed_at, status, lost_reason_id, memo)
+             VALUES ($1, $2, COALESCE($3, CURRENT_TIMESTAMP), $4, $5, $6)
+             RETURNING *`, [
+            id,
+            Number(event_id),
+            normalizeNullableText(proposed_at),
+            normalizeNullableText(status) || 'proposed',
+            lost_reason_id ? Number(lost_reason_id) : null,
+            normalizeNullableText(memo)
+        ]);
+        res.status(201).json(result.rows[0]);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.createEventProposal = createEventProposal;
+const getFunnelKpi = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield ensureSalesFunnelTables();
+        const [dailyRes, summaryRes, lostRes] = yield Promise.all([
+            db_1.default.query(`
+                SELECT DATE(applied_at) AS day, COUNT(*)::int AS count
+                FROM applications
+                GROUP BY DATE(applied_at)
+                ORDER BY day DESC
+                LIMIT 31
+            `),
+            db_1.default.query(`
+                WITH app_s AS (
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt
+                    FROM applications
+                    WHERE student_id IS NOT NULL
+                ),
+                reserve_s AS (
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt
+                    FROM applications
+                    WHERE student_id IS NOT NULL
+                      AND (
+                        COALESCE(reservation_status, '') IN ('reserved', '予約済み', '予約')
+                        OR reservation_created_at IS NOT NULL
+                      )
+                ),
+                interview_s AS (
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
+                      AND (COALESCE(status, '') IN ('completed', '面談実施', 'interviewed') OR interviewed_at IS NOT NULL)
+                ),
+                proposal_s AS (
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt
+                    FROM event_proposals
+                ),
+                join_s AS (
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt
+                    FROM event_proposals
+                    WHERE COALESCE(status, '') IN ('joined', '参加', '参加確定', 'accepted')
+                )
+                SELECT
+                    app_s.cnt AS applications_students,
+                    reserve_s.cnt AS reserved_students,
+                    interview_s.cnt AS interviewed_students,
+                    proposal_s.cnt AS proposed_students,
+                    join_s.cnt AS joined_students
+                FROM app_s, reserve_s, interview_s, proposal_s, join_s
+            `),
+            db_1.default.query(`
+                SELECT COALESCE(lr.reason_name, '未設定') AS reason_name, COUNT(*)::int AS count
+                FROM event_proposals ep
+                LEFT JOIN lost_reasons lr ON lr.id = ep.lost_reason_id
+                WHERE ep.lost_reason_id IS NOT NULL
+                GROUP BY COALESCE(lr.reason_name, '未設定')
+                ORDER BY count DESC, reason_name ASC
+                LIMIT 10
+            `)
+        ]);
+        const s = summaryRes.rows[0] || {};
+        const applicationsStudents = Number(s.applications_students || 0);
+        const reservedStudents = Number(s.reserved_students || 0);
+        const interviewedStudents = Number(s.interviewed_students || 0);
+        const proposedStudents = Number(s.proposed_students || 0);
+        const joinedStudents = Number(s.joined_students || 0);
+        const rate = (a, b) => (b > 0 ? Number(((a / b) * 100).toFixed(2)) : 0);
+        res.json({
+            daily_applications: dailyRes.rows,
+            application_to_reservation_rate: rate(reservedStudents, applicationsStudents),
+            reservation_to_interview_rate: rate(interviewedStudents, reservedStudents),
+            interview_to_proposal_rate: rate(proposedStudents, interviewedStudents),
+            proposal_to_join_rate: rate(joinedStudents, proposedStudents),
+            lost_reason_ranking: lostRes.rows,
+            counts: {
+                applications_students: applicationsStudents,
+                reserved_students: reservedStudents,
+                interviewed_students: interviewedStudents,
+                proposed_students: proposedStudents,
+                joined_students: joinedStudents
+            }
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.getFunnelKpi = getFunnelKpi;
 const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const { students } = req.body;

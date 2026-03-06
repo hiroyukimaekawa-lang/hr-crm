@@ -14,6 +14,12 @@ import {
     completeStudentTask,
     deleteStudentTask,
     deleteStudent,
+    createApplication,
+    updateApplicationReservation,
+    createInterviewRecord,
+    createEventProposal,
+    getFunnelKpi,
+    getFunnelMasterData,
     importStudents,
     createInterviewSchedule,
     updateInterviewSchedule,
@@ -29,11 +35,17 @@ const router = express.Router();
 
 router.get('/', authenticate, getStudents);
 router.get('/metrics/interviews', authenticate, getInterviewMetrics);
+router.get('/metrics/funnel', authenticate, getFunnelKpi);
+router.get('/funnel/master', authenticate, getFunnelMasterData);
 router.get('/source-categories', authenticate, getSourceCategories);
 router.post('/source-categories', authenticate, createSourceCategory);
 router.delete('/source-categories/:id', authenticate, deleteSourceCategory);
 router.post('/', authenticate, createStudent);
 router.post('/import', authenticate, importStudents);
+router.post('/:id/funnel/application', authenticate, createApplication);
+router.put('/:id/funnel/reservation', authenticate, updateApplicationReservation);
+router.post('/:id/funnel/interview', authenticate, createInterviewRecord);
+router.post('/:id/funnel/event-proposal', authenticate, createEventProposal);
 router.get('/:id', authenticate, getStudentDetail);
 router.post('/:id/interview-schedules', authenticate, createInterviewSchedule);
 router.put('/interview-schedules/:scheduleId', authenticate, updateInterviewSchedule);

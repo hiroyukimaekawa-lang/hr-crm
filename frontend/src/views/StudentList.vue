@@ -50,6 +50,18 @@ interface SourceCategory {
   name: string;
 }
 
+interface EventMaster {
+  id: number;
+  event_name: string;
+  event_date?: string | null;
+  company?: string | null;
+}
+
+interface LostReason {
+  id: number;
+  reason_name: string;
+}
+
 type ExportColumnKey =
   | 'source_company'
   | 'name'
@@ -80,6 +92,16 @@ const exportColumnOptions: Array<{ key: ExportColumnKey; label: string }> = [
 const students = ref<Student[]>([]);
 const staffUsers = ref<StaffUser[]>([]);
 const sourceCategories = ref<SourceCategory[]>([]);
+const funnelEvents = ref<EventMaster[]>([]);
+const lostReasons = ref<LostReason[]>([]);
+const funnelKpi = ref({
+  daily_applications: [] as Array<{ day: string; count: number }>,
+  application_to_reservation_rate: 0,
+  reservation_to_interview_rate: 0,
+  interview_to_proposal_rate: 0,
+  proposal_to_join_rate: 0,
+  lost_reason_ranking: [] as Array<{ reason_name: string; count: number }>
+});
 const router = useRouter();
 const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
 const showAll = ref(user.role === 'admin');
@@ -126,8 +148,11 @@ const appliedFilters = ref({
 });
 
 const showCreate = ref(false);
+const showFunnel = ref(false);
 const createError = ref('');
+const funnelError = ref('');
 const isCreatingStudent = ref(false);
+const selectedFunnelStudent = ref<Student | null>(null);
 const newStudent = ref({
   source_company: '',
   name: '',
@@ -140,6 +165,20 @@ const newStudent = ref({
   prefecture: '',
   academic_track: '',
   graduation_year: ''
+});
+const funnelForm = ref({
+  source: '',
+  applied_at: '',
+  reservation_status: '',
+  reservation_date: '',
+  reservation_created_at: '',
+  interview_scheduled_at: '',
+  interview_interviewed_at: '',
+  interview_status: 'completed',
+  event_id: '',
+  proposal_status: 'proposed',
+  lost_reason_id: '',
+  memo: ''
 });
 
 const fetchStudents = async () => {
@@ -173,6 +212,126 @@ const fetchSourceCategories = async () => {
     sourceCategories.value = Array.isArray(res.data) ? res.data : [];
   } catch (err) {
     console.error(err);
+  }
+};
+
+const fetchFunnelMaster = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    const res = await api.get('/api/students/funnel/master', { headers: { Authorization: token } });
+    funnelEvents.value = Array.isArray(res.data?.events) ? res.data.events : [];
+    lostReasons.value = Array.isArray(res.data?.lost_reasons) ? res.data.lost_reasons : [];
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+const fetchFunnelKpi = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    const res = await api.get('/api/students/metrics/funnel', { headers: { Authorization: token } });
+    funnelKpi.value = {
+      daily_applications: Array.isArray(res.data?.daily_applications) ? res.data.daily_applications : [],
+      application_to_reservation_rate: Number(res.data?.application_to_reservation_rate || 0),
+      reservation_to_interview_rate: Number(res.data?.reservation_to_interview_rate || 0),
+      interview_to_proposal_rate: Number(res.data?.interview_to_proposal_rate || 0),
+      proposal_to_join_rate: Number(res.data?.proposal_to_join_rate || 0),
+      lost_reason_ranking: Array.isArray(res.data?.lost_reason_ranking) ? res.data.lost_reason_ranking : []
+    };
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+const openFunnelModal = (student: Student) => {
+  selectedFunnelStudent.value = student;
+  funnelError.value = '';
+  funnelForm.value = {
+    source: normalizeSourceCompany(student.source_company) || '',
+    applied_at: '',
+    reservation_status: '',
+    reservation_date: '',
+    reservation_created_at: '',
+    interview_scheduled_at: '',
+    interview_interviewed_at: '',
+    interview_status: 'completed',
+    event_id: '',
+    proposal_status: 'proposed',
+    lost_reason_id: '',
+    memo: ''
+  };
+  showFunnel.value = true;
+};
+
+const submitApplication = async () => {
+  if (!selectedFunnelStudent.value) return;
+  try {
+    const token = localStorage.getItem('token');
+    await api.post(`/api/students/${selectedFunnelStudent.value.id}/funnel/application`, {
+      source: funnelForm.value.source || null,
+      applied_at: funnelForm.value.applied_at || null
+    }, { headers: { Authorization: token } });
+    await fetchFunnelKpi();
+    showToast('申込登録を保存しました。', 'success');
+  } catch (err: any) {
+    funnelError.value = err?.response?.data?.error || '申込登録に失敗しました。';
+    showToast(funnelError.value, 'error');
+  }
+};
+
+const submitReservation = async () => {
+  if (!selectedFunnelStudent.value) return;
+  try {
+    const token = localStorage.getItem('token');
+    await api.put(`/api/students/${selectedFunnelStudent.value.id}/funnel/reservation`, {
+      reservation_status: funnelForm.value.reservation_status || null,
+      reservation_date: funnelForm.value.reservation_date || null,
+      reservation_created_at: funnelForm.value.reservation_created_at || null
+    }, { headers: { Authorization: token } });
+    await fetchFunnelKpi();
+    showToast('予約登録を保存しました。', 'success');
+  } catch (err: any) {
+    funnelError.value = err?.response?.data?.error || '予約登録に失敗しました。';
+    showToast(funnelError.value, 'error');
+  }
+};
+
+const submitInterview = async () => {
+  if (!selectedFunnelStudent.value) return;
+  try {
+    const token = localStorage.getItem('token');
+    await api.post(`/api/students/${selectedFunnelStudent.value.id}/funnel/interview`, {
+      scheduled_at: funnelForm.value.interview_scheduled_at || null,
+      interviewed_at: funnelForm.value.interview_interviewed_at || null,
+      status: funnelForm.value.interview_status || 'completed'
+    }, { headers: { Authorization: token } });
+    await fetchFunnelKpi();
+    showToast('面談実施登録を保存しました。', 'success');
+  } catch (err: any) {
+    funnelError.value = err?.response?.data?.error || '面談実施登録に失敗しました。';
+    showToast(funnelError.value, 'error');
+  }
+};
+
+const submitProposal = async () => {
+  if (!selectedFunnelStudent.value) return;
+  if (!funnelForm.value.event_id) {
+    showToast('イベントを選択してください。', 'error');
+    return;
+  }
+  try {
+    const token = localStorage.getItem('token');
+    await api.post(`/api/students/${selectedFunnelStudent.value.id}/funnel/event-proposal`, {
+      event_id: Number(funnelForm.value.event_id),
+      status: funnelForm.value.proposal_status || 'proposed',
+      lost_reason_id: funnelForm.value.lost_reason_id ? Number(funnelForm.value.lost_reason_id) : null,
+      memo: funnelForm.value.memo || null
+    }, { headers: { Authorization: token } });
+    await fetchFunnelKpi();
+    showToast('イベント提案登録を保存しました。', 'success');
+  } catch (err: any) {
+    funnelError.value = err?.response?.data?.error || 'イベント提案登録に失敗しました。';
+    showToast(funnelError.value, 'error');
   }
 };
 
@@ -634,6 +793,8 @@ const onCsvFileChange = async (event: Event) => {
 onMounted(() => {
   fetchStudents();
   fetchSourceCategories();
+  fetchFunnelMaster();
+  fetchFunnelKpi();
   if (user.role === 'admin') {
     fetchStaffUsers();
   }
@@ -697,6 +858,55 @@ watch(filteredStudents, () => {
             <UserPlus class="w-4 h-4" />
             学生登録
           </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 mb-6">
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <p class="text-xs text-gray-500">申込→予約率</p>
+          <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.application_to_reservation_rate.toFixed(2) }}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <p class="text-xs text-gray-500">予約→面談率</p>
+          <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.reservation_to_interview_rate.toFixed(2) }}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <p class="text-xs text-gray-500">面談→イベント提案率</p>
+          <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.interview_to_proposal_rate.toFixed(2) }}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <p class="text-xs text-gray-500">提案→参加率</p>
+          <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.proposal_to_join_rate.toFixed(2) }}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <p class="text-xs text-gray-500 mb-1">失注理由ランキング</p>
+          <p class="text-xs text-gray-700" v-if="funnelKpi.lost_reason_ranking.length === 0">データなし</p>
+          <ul v-else class="text-xs text-gray-700 space-y-0.5">
+            <li v-for="r in funnelKpi.lost_reason_ranking.slice(0, 3)" :key="`lost-${r.reason_name}`">{{ r.reason_name }}: {{ r.count }}</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">日別申込数（直近31日）</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[360px] text-xs">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left text-gray-500">日付</th>
+                <th class="px-3 py-2 text-right text-gray-500">申込数</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="d in funnelKpi.daily_applications" :key="`daily-${d.day}`">
+                <td class="px-3 py-2 text-gray-700">{{ formatDate(d.day) }}</td>
+                <td class="px-3 py-2 text-right text-gray-900">{{ d.count }}</td>
+              </tr>
+              <tr v-if="funnelKpi.daily_applications.length === 0">
+                <td class="px-3 py-3 text-gray-400 text-center" colSpan="2">データがありません</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -960,13 +1170,21 @@ watch(filteredStudents, () => {
             </div>
           </div>
           <div class="flex items-center justify-between">
-            <button
-              class="text-blue-600 hover:text-blue-800 text-sm font-semibold inline-flex items-center gap-1"
-              @click="router.push(`/students/${s.id}`)"
-            >
-              詳細
-              <ChevronRight class="w-4 h-4" />
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                class="text-blue-600 hover:text-blue-800 text-sm font-semibold inline-flex items-center gap-1"
+                @click="router.push(`/students/${s.id}`)"
+              >
+                詳細
+                <ChevronRight class="w-4 h-4" />
+              </button>
+              <button
+                class="px-2 py-1 text-xs border border-indigo-200 text-indigo-700 rounded hover:bg-indigo-50"
+                @click="openFunnelModal(s)"
+              >
+                ファネル登録
+              </button>
+            </div>
             <button
               v-if="user.role === 'admin'"
               class="text-gray-400 hover:text-red-600 inline-flex items-center"
@@ -1048,6 +1266,12 @@ watch(filteredStudents, () => {
                 >
                   詳細
                   <ChevronRight class="w-4 h-4" />
+                </button>
+                <button
+                  class="ml-2 px-2 py-1 border border-indigo-200 text-indigo-700 rounded text-xs hover:bg-indigo-50"
+                  @click="openFunnelModal(s)"
+                >
+                  ファネル登録
                 </button>
                 <button
                   v-if="user.role === 'admin'"
@@ -1168,6 +1392,74 @@ watch(filteredStudents, () => {
             <button @click="createStudent" :disabled="isCreatingStudent" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {{ isCreatingStudent ? '登録中...' : '保存' }}
             </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <teleport to="body">
+      <div v-if="showFunnel && selectedFunnelStudent" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[90]">
+        <div class="w-full max-w-3xl bg-white rounded-xl shadow-xl p-4 md:p-6 max-h-[85vh] overflow-y-auto">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold text-gray-900">営業ファネル登録: {{ selectedFunnelStudent.name }}</h2>
+            <button class="text-sm text-gray-500 hover:text-gray-700" @click="showFunnel = false">閉じる</button>
+          </div>
+          <p v-if="funnelError" class="mb-3 text-sm text-red-600">{{ funnelError }}</p>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="border border-gray-200 rounded-lg p-3">
+              <h3 class="font-semibold text-sm mb-2">1) 申込登録</h3>
+              <label class="block text-xs text-gray-600 mb-1">流入元</label>
+              <input v-model="funnelForm.source" type="text" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <label class="block text-xs text-gray-600 mb-1">申込日</label>
+              <input v-model="funnelForm.applied_at" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitApplication">申込登録</button>
+            </div>
+
+            <div class="border border-gray-200 rounded-lg p-3">
+              <h3 class="font-semibold text-sm mb-2">2) 予約登録</h3>
+              <label class="block text-xs text-gray-600 mb-1">予約ステータス</label>
+              <input v-model="funnelForm.reservation_status" type="text" placeholder="reserved など" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <label class="block text-xs text-gray-600 mb-1">予約日</label>
+              <input v-model="funnelForm.reservation_date" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <label class="block text-xs text-gray-600 mb-1">予約作成日</label>
+              <input v-model="funnelForm.reservation_created_at" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitReservation">予約登録</button>
+            </div>
+
+            <div class="border border-gray-200 rounded-lg p-3">
+              <h3 class="font-semibold text-sm mb-2">3) 面談実施登録</h3>
+              <label class="block text-xs text-gray-600 mb-1">面談予定日</label>
+              <input v-model="funnelForm.interview_scheduled_at" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <label class="block text-xs text-gray-600 mb-1">面談実施日</label>
+              <input v-model="funnelForm.interview_interviewed_at" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitInterview">面談実施登録</button>
+            </div>
+
+            <div class="border border-gray-200 rounded-lg p-3">
+              <h3 class="font-semibold text-sm mb-2">4) イベント提案登録</h3>
+              <label class="block text-xs text-gray-600 mb-1">イベント</label>
+              <select v-model="funnelForm.event_id" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+                <option value="">選択してください</option>
+                <option v-for="e in funnelEvents" :key="`funnel-ev-${e.id}`" :value="String(e.id)">
+                  {{ e.event_name }}（{{ formatDate(e.event_date || '') }}）
+                </option>
+              </select>
+              <label class="block text-xs text-gray-600 mb-1">提案ステータス</label>
+              <select v-model="funnelForm.proposal_status" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+                <option value="proposed">提案済み</option>
+                <option value="joined">参加</option>
+                <option value="lost">失注</option>
+              </select>
+              <label class="block text-xs text-gray-600 mb-1">失注理由</label>
+              <select v-model="funnelForm.lost_reason_id" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+                <option value="">未選択</option>
+                <option v-for="r in lostReasons" :key="`lost-r-${r.id}`" :value="String(r.id)">{{ r.reason_name }}</option>
+              </select>
+              <label class="block text-xs text-gray-600 mb-1">メモ</label>
+              <textarea v-model="funnelForm.memo" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2" />
+              <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitProposal">イベント提案登録</button>
+            </div>
           </div>
         </div>
       </div>
