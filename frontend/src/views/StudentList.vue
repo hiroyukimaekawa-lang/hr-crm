@@ -190,6 +190,8 @@ const normalizeHourDateTime = (value?: string | null) => {
   return v || null;
 };
 
+const forceHourOnly = (value?: string | null) => toDateTimeHour(value);
+
 const fetchStudents = async () => {
   try {
     const token = localStorage.getItem('token');
@@ -1378,7 +1380,7 @@ watch(filteredStudents, () => {
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">申込日（時間単位）</label>
-            <input v-model="newStudent.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <input v-model="newStudent.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" @change="newStudent.applied_at = forceHourOnly(newStudent.applied_at)">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">面談決定日</label>
@@ -1430,7 +1432,7 @@ watch(filteredStudents, () => {
               <label class="block text-xs text-gray-600 mb-1">流入元</label>
               <input v-model="funnelForm.source" type="text" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
               <label class="block text-xs text-gray-600 mb-1">申込日</label>
-              <input v-model="funnelForm.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <input v-model="funnelForm.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2" @change="funnelForm.applied_at = forceHourOnly(funnelForm.applied_at)">
               <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitApplication">申込登録</button>
             </div>
 
@@ -1439,16 +1441,16 @@ watch(filteredStudents, () => {
               <label class="block text-xs text-gray-600 mb-1">予約ステータス</label>
               <input value="初回面談" type="text" disabled class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2 bg-gray-50 text-gray-600">
               <label class="block text-xs text-gray-600 mb-1">予約日（TimeRex予約日）</label>
-              <input v-model="funnelForm.reservation_date" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <input v-model="funnelForm.reservation_date" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2" @change="funnelForm.reservation_date = forceHourOnly(funnelForm.reservation_date)">
               <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitReservation">予約登録</button>
             </div>
 
             <div class="border border-gray-200 rounded-lg p-3">
               <h3 class="font-semibold text-sm mb-2">3) 面談実施登録</h3>
               <label class="block text-xs text-gray-600 mb-1">面談予定日（実際の面談日）</label>
-              <input v-model="funnelForm.interview_scheduled_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <input v-model="funnelForm.interview_scheduled_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2" @change="funnelForm.interview_scheduled_at = forceHourOnly(funnelForm.interview_scheduled_at)">
               <label class="block text-xs text-gray-600 mb-1">面談実施日</label>
-              <input v-model="funnelForm.interview_interviewed_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
+              <input v-model="funnelForm.interview_interviewed_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2" @change="funnelForm.interview_interviewed_at = forceHourOnly(funnelForm.interview_interviewed_at)">
               <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitInterview">面談実施登録</button>
             </div>
 

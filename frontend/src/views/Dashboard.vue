@@ -364,6 +364,15 @@ const interviewCountByDate = computed(() => {
   return m;
 });
 
+const applicationCountByDate = computed(() => {
+  const m: Record<string, number> = {};
+  funnelKpi.value.daily_applications.forEach((r) => {
+    const key = String(r.day || '').slice(0, 10);
+    m[key] = (m[key] || 0) + Number(r.count || 0);
+  });
+  return m;
+});
+
 const calendarCells = computed(() => {
   const base = calendarBaseMonth.value;
   const year = base.getFullYear();
@@ -598,6 +607,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
           >
             <p v-if="cell.day" class="text-gray-700 font-semibold mb-1">{{ cell.day }}</p>
             <template v-if="cell.date">
+              <p class="text-[11px] text-indigo-700">申込: {{ applicationCountByDate[cell.date] || 0 }}</p>
               <p class="text-[11px] text-blue-700">設定: {{ settingCountByDate[cell.date] || 0 }}</p>
               <p class="text-[11px] text-emerald-700">面談: {{ interviewCountByDate[cell.date] || 0 }}</p>
             </template>

@@ -1433,9 +1433,92 @@ const getStudentEventProposals = (req, res) => __awaiter(void 0, void 0, void 0,
     }
 });
 exports.getStudentEventProposals = getStudentEventProposals;
-const getFunnelKpi = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield ensureSalesFunnelTables();
+        if (String(req.query.group_by_source || '') === '1') {
+            const bySourceRes = yield db_1.default.query(`
+                WITH src AS (
+                    SELECT DISTINCT COALESCE(NULLIF(TRIM(source_company), ''), '未設定') AS source_company
+                    FROM students
+                ),
+                app_s AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(DISTINCT a.student_id)::int AS cnt
+                    FROM applications a
+                    JOIN students s ON s.id = a.student_id
+                    WHERE a.student_id IS NOT NULL
+                    GROUP BY 1
+                ),
+                reserve_s AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(DISTINCT a.student_id)::int AS cnt
+                    FROM applications a
+                    JOIN students s ON s.id = a.student_id
+                    WHERE a.student_id IS NOT NULL
+                      AND (
+                        COALESCE(a.reservation_status, '') IN ('reserved', '予約済み', '予約', '初回面談')
+                        OR a.reservation_created_at IS NOT NULL
+                        OR a.reservation_date IS NOT NULL
+                      )
+                    GROUP BY 1
+                ),
+                interview_s AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(DISTINCT i.student_id)::int AS cnt
+                    FROM interviews i
+                    JOIN students s ON s.id = i.student_id
+                    WHERE i.student_id IS NOT NULL
+                      AND (COALESCE(i.status, '') IN ('completed', '面談実施', 'interviewed') OR i.interviewed_at IS NOT NULL)
+                    GROUP BY 1
+                ),
+                proposal_s AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(DISTINCT ep.student_id)::int AS cnt
+                    FROM event_proposals ep
+                    JOIN students s ON s.id = ep.student_id
+                    GROUP BY 1
+                ),
+                join_s AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(DISTINCT ep.student_id)::int AS cnt
+                    FROM event_proposals ep
+                    JOIN students s ON s.id = ep.student_id
+                    WHERE COALESCE(ep.status, '') IN ('joined', '参加', '参加確定', 'accepted')
+                    GROUP BY 1
+                ),
+                daily_app AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(*)::int AS cnt
+                    FROM applications a
+                    JOIN students s ON s.id = a.student_id
+                    WHERE DATE(a.applied_at) = CURRENT_DATE
+                    GROUP BY 1
+                )
+                SELECT
+                    src.source_company,
+                    COALESCE(daily_app.cnt, 0)::int AS daily_applications,
+                    COALESCE(app_s.cnt, 0)::int AS applications_students,
+                    COALESCE(reserve_s.cnt, 0)::int AS reserved_students,
+                    COALESCE(interview_s.cnt, 0)::int AS interviewed_students,
+                    COALESCE(proposal_s.cnt, 0)::int AS proposed_students,
+                    COALESCE(join_s.cnt, 0)::int AS joined_students,
+                    ROUND((COALESCE(reserve_s.cnt, 0)::numeric / NULLIF(COALESCE(app_s.cnt, 0), 0)) * 100, 2) AS application_to_reservation_rate,
+                    ROUND((COALESCE(interview_s.cnt, 0)::numeric / NULLIF(COALESCE(reserve_s.cnt, 0), 0)) * 100, 2) AS reservation_to_interview_rate,
+                    ROUND((COALESCE(proposal_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS interview_to_proposal_rate,
+                    ROUND((COALESCE(join_s.cnt, 0)::numeric / NULLIF(COALESCE(proposal_s.cnt, 0), 0)) * 100, 2) AS proposal_to_join_rate
+                FROM src
+                LEFT JOIN app_s ON app_s.source_company = src.source_company
+                LEFT JOIN reserve_s ON reserve_s.source_company = src.source_company
+                LEFT JOIN interview_s ON interview_s.source_company = src.source_company
+                LEFT JOIN proposal_s ON proposal_s.source_company = src.source_company
+                LEFT JOIN join_s ON join_s.source_company = src.source_company
+                LEFT JOIN daily_app ON daily_app.source_company = src.source_company
+                ORDER BY src.source_company ASC
+            `);
+            res.json(bySourceRes.rows);
+            return;
+        }
         const [dailyRes, dailySettingsRes, summaryRes, lostRes] = yield Promise.all([
             db_1.default.query(`
                 SELECT DATE(applied_at) AS day, COUNT(*)::int AS count

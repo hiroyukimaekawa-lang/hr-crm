@@ -207,6 +207,7 @@ const normalizeHourDateTime = (value?: string | null) => {
   const v = toDateTimeLocalHour(value);
   return v || null;
 };
+const forceHourOnly = (value?: string | null) => toDateTimeLocalHour(value);
 
 const registerMatcherApply = async () => {
   const token = localStorage.getItem('token');
@@ -862,29 +863,29 @@ watch(
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div class="border border-gray-200 rounded-lg p-3">
                 <p class="text-sm font-semibold mb-2">1) 申込</p>
-                <input v-model="matcherForm.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" />
+                <input v-model="matcherForm.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" @change="matcherForm.applied_at = forceHourOnly(matcherForm.applied_at)" />
                 <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherApply">申込登録</button>
               </div>
               <div class="border border-gray-200 rounded-lg p-3">
                 <p class="text-sm font-semibold mb-2">2) メッセージ送信</p>
-                <input v-model="matcherForm.message_sent_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" />
+                <input v-model="matcherForm.message_sent_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" @change="matcherForm.message_sent_at = forceHourOnly(matcherForm.message_sent_at)" />
                 <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherMessage">メッセージ送信登録</button>
               </div>
               <div class="border border-gray-200 rounded-lg p-3">
                 <p class="text-sm font-semibold mb-2">3) 予約</p>
-                <input v-model="matcherForm.reservation_created_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" />
+                <input v-model="matcherForm.reservation_created_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" @change="matcherForm.reservation_created_at = forceHourOnly(matcherForm.reservation_created_at)" />
                 <select v-model="matcherForm.reservation_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2">
                   <option value="pending">pending</option>
                   <option value="reserved">reserved</option>
                   <option value="cancel">cancel</option>
                   <option value="no_response">no_response</option>
                 </select>
-                <input v-model="matcherForm.interview_scheduled_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" />
+                <input v-model="matcherForm.interview_scheduled_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" @change="matcherForm.interview_scheduled_at = forceHourOnly(matcherForm.interview_scheduled_at)" />
                 <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherReservation">予約登録</button>
               </div>
               <div class="border border-gray-200 rounded-lg p-3">
                 <p class="text-sm font-semibold mb-2">4) 面談実施</p>
-                <input v-model="matcherForm.interview_actual_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" />
+                <input v-model="matcherForm.interview_actual_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" @change="matcherForm.interview_actual_at = forceHourOnly(matcherForm.interview_actual_at)" />
                 <select v-model="matcherForm.interview_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2">
                   <option value="scheduled">scheduled</option>
                   <option value="completed">completed</option>
