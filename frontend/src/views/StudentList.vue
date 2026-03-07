@@ -56,18 +56,6 @@ interface SourceCategory {
   name: string;
 }
 
-interface EventMaster {
-  id: number;
-  event_name: string;
-  event_date?: string | null;
-  company?: string | null;
-}
-
-interface LostReason {
-  id: number;
-  reason_name: string;
-}
-
 type ExportColumnKey =
   | 'source_company'
   | 'name'
@@ -98,10 +86,9 @@ const exportColumnOptions: Array<{ key: ExportColumnKey; label: string }> = [
 const students = ref<Student[]>([]);
 const staffUsers = ref<StaffUser[]>([]);
 const sourceCategories = ref<SourceCategory[]>([]);
-const funnelEvents = ref<EventMaster[]>([]);
-const lostReasons = ref<LostReason[]>([]);
 const funnelKpi = ref({
   daily_applications: [] as Array<{ day: string; count: number }>,
+  daily_settings: [] as Array<{ day: string; count: number }>,
   application_to_reservation_rate: 0,
   reservation_to_interview_rate: 0,
   interview_to_proposal_rate: 0,
@@ -179,11 +166,7 @@ const funnelForm = ref({
   reservation_date: '',
   interview_scheduled_at: '',
   interview_interviewed_at: '',
-  interview_status: 'completed',
-  event_id: '',
-  proposal_status: 'proposed',
-  lost_reason_id: '',
-  memo: ''
+  interview_status: 'completed'
 });
 
 const toDateTimeHour = (value?: string | null) => {
@@ -241,23 +224,13 @@ const fetchSourceCategories = async () => {
   }
 };
 
-const fetchFunnelMaster = async () => {
-  try {
-    const token = localStorage.getItem('token');
-    const res = await api.get('/api/students/funnel/master', { headers: { Authorization: token } });
-    funnelEvents.value = Array.isArray(res.data?.events) ? res.data.events : [];
-    lostReasons.value = Array.isArray(res.data?.lost_reasons) ? res.data.lost_reasons : [];
-  } catch (err) {
-    console.error(err);
-  }
-};
-
 const fetchFunnelKpi = async () => {
   try {
     const token = localStorage.getItem('token');
     const res = await api.get('/api/students/metrics/funnel', { headers: { Authorization: token } });
     funnelKpi.value = {
       daily_applications: Array.isArray(res.data?.daily_applications) ? res.data.daily_applications : [],
+      daily_settings: Array.isArray(res.data?.daily_settings) ? res.data.daily_settings : [],
       application_to_reservation_rate: Number(res.data?.application_to_reservation_rate || 0),
       reservation_to_interview_rate: Number(res.data?.reservation_to_interview_rate || 0),
       interview_to_proposal_rate: Number(res.data?.interview_to_proposal_rate || 0),
@@ -274,15 +247,11 @@ const openFunnelModal = (student: Student) => {
   funnelError.value = '';
   funnelForm.value = {
     source: normalizeSourceCompany(student.source_company) || '',
-    applied_at: toDateTimeHour(student.meeting_decided_date),
+    applied_at: toDateTimeHour(student.matcher_applied_at || student.meeting_decided_date),
     reservation_date: toDateTimeHour(student.meeting_decided_date),
     interview_scheduled_at: toDateTimeHour(student.first_interview_date),
     interview_interviewed_at: '',
-    interview_status: 'completed',
-    event_id: '',
-    proposal_status: 'proposed',
-    lost_reason_id: '',
-    memo: ''
+    interview_status: 'completed'
   };
   showFunnel.value = true;
 };
@@ -291,10 +260,15 @@ const submitApplication = async () => {
   if (!selectedFunnelStudent.value) return;
   try {
     const token = localStorage.getItem('token');
+    const appliedAt = normalizeHourDateTime(funnelForm.value.applied_at);
     await api.post(`/api/students/${selectedFunnelStudent.value.id}/funnel/application`, {
       source: funnelForm.value.source || null,
-      applied_at: normalizeHourDateTime(funnelForm.value.applied_at)
+      applied_at: appliedAt
     }, { headers: { Authorization: token } });
+    await api.post(`/api/students/${selectedFunnelStudent.value.id}/matcher-funnel/apply`, {
+      applied_at: appliedAt
+    }, { headers: { Authorization: token } });
+    await fetchStudents();
     await fetchFunnelKpi();
     showToast('申込登録を保存しました。', 'success');
   } catch (err: any) {
@@ -307,13 +281,16 @@ const submitReservation = async () => {
   if (!selectedFunnelStudent.value) return;
   try {
     const token = localStorage.getItem('token');
+    const reservationDate = normalizeHourDateTime(funnelForm.value.reservation_date);
     await api.put(`/api/students/${selectedFunnelStudent.value.id}/funnel/reservation`, {
       reservation_status: '初回面談',
-      reservation_date: normalizeHourDateTime(funnelForm.value.reservation_date)
+      reservation_date: reservationDate
     }, { headers: { Authorization: token } });
-    if (!funnelForm.value.interview_scheduled_at && funnelForm.value.reservation_date) {
-      funnelForm.value.interview_scheduled_at = funnelForm.value.reservation_date;
-    }
+    await api.post(`/api/students/${selectedFunnelStudent.value.id}/matcher-funnel/reservation`, {
+      reservation_created_at: reservationDate,
+      reservation_status: 'reserved'
+    }, { headers: { Authorization: token } });
+    await fetchStudents();
     await fetchFunnelKpi();
     showToast('予約登録を保存しました。', 'success');
   } catch (err: any) {
@@ -326,37 +303,23 @@ const submitInterview = async () => {
   if (!selectedFunnelStudent.value) return;
   try {
     const token = localStorage.getItem('token');
+    const scheduledAt = normalizeHourDateTime(funnelForm.value.interview_scheduled_at);
+    const interviewedAt = normalizeHourDateTime(funnelForm.value.interview_interviewed_at);
     await api.post(`/api/students/${selectedFunnelStudent.value.id}/funnel/interview`, {
-      scheduled_at: normalizeHourDateTime(funnelForm.value.interview_scheduled_at),
-      interviewed_at: normalizeHourDateTime(funnelForm.value.interview_interviewed_at),
+      scheduled_at: scheduledAt,
+      interviewed_at: interviewedAt,
       status: funnelForm.value.interview_status || 'completed'
     }, { headers: { Authorization: token } });
+    await api.post(`/api/students/${selectedFunnelStudent.value.id}/matcher-funnel/interview`, {
+      interview_scheduled_at: scheduledAt,
+      interview_actual_at: interviewedAt,
+      interview_status: funnelForm.value.interview_status || 'completed'
+    }, { headers: { Authorization: token } });
+    await fetchStudents();
     await fetchFunnelKpi();
     showToast('面談実施登録を保存しました。', 'success');
   } catch (err: any) {
     funnelError.value = err?.response?.data?.error || '面談実施登録に失敗しました。';
-    showToast(funnelError.value, 'error');
-  }
-};
-
-const submitProposal = async () => {
-  if (!selectedFunnelStudent.value) return;
-  if (!funnelForm.value.event_id) {
-    showToast('イベントを選択してください。', 'error');
-    return;
-  }
-  try {
-    const token = localStorage.getItem('token');
-    await api.post(`/api/students/${selectedFunnelStudent.value.id}/funnel/event-proposal`, {
-      event_id: Number(funnelForm.value.event_id),
-      status: funnelForm.value.proposal_status || 'proposed',
-      lost_reason_id: funnelForm.value.lost_reason_id ? Number(funnelForm.value.lost_reason_id) : null,
-      memo: funnelForm.value.memo || null
-    }, { headers: { Authorization: token } });
-    await fetchFunnelKpi();
-    showToast('イベント提案登録を保存しました。', 'success');
-  } catch (err: any) {
-    funnelError.value = err?.response?.data?.error || 'イベント提案登録に失敗しました。';
     showToast(funnelError.value, 'error');
   }
 };
@@ -563,6 +526,25 @@ const filteredStudents = computed(() => {
       && matchesNextMeetingDate
       && matchesTaskDueDate;
   });
+});
+
+const dailyFunnelRows = computed(() => {
+  const applyMap = new Map<string, number>();
+  const settingMap = new Map<string, number>();
+  funnelKpi.value.daily_applications.forEach((r) => {
+    const day = String(r.day || '').slice(0, 10);
+    if (day) applyMap.set(day, Number(r.count || 0));
+  });
+  funnelKpi.value.daily_settings.forEach((r) => {
+    const day = String(r.day || '').slice(0, 10);
+    if (day) settingMap.set(day, Number(r.count || 0));
+  });
+  const keys = Array.from(new Set([...applyMap.keys(), ...settingMap.keys()])).sort((a, b) => (a < b ? 1 : -1));
+  return keys.slice(0, 31).map((day) => ({
+    day,
+    applications: applyMap.get(day) || 0,
+    settings: settingMap.get(day) || 0
+  }));
 });
 
 const totalFilteredCount = computed(() => filteredStudents.value.length);
@@ -821,7 +803,6 @@ const onCsvFileChange = async (event: Event) => {
 onMounted(() => {
   fetchStudents();
   fetchSourceCategories();
-  fetchFunnelMaster();
   fetchFunnelKpi();
   if (user.role === 'admin') {
     fetchStaffUsers();
@@ -916,22 +897,24 @@ watch(filteredStudents, () => {
       </div>
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-        <h3 class="text-sm font-semibold text-gray-800 mb-2">日別申込数（直近31日）</h3>
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">日別申込/設定数（直近31日）</h3>
         <div class="overflow-x-auto">
           <table class="w-full min-w-[360px] text-xs">
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-3 py-2 text-left text-gray-500">日付</th>
                 <th class="px-3 py-2 text-right text-gray-500">申込数</th>
+                <th class="px-3 py-2 text-right text-gray-500">設定数</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr v-for="d in funnelKpi.daily_applications" :key="`daily-${d.day}`">
+              <tr v-for="d in dailyFunnelRows" :key="`daily-${d.day}`">
                 <td class="px-3 py-2 text-gray-700">{{ formatDate(d.day) }}</td>
-                <td class="px-3 py-2 text-right text-gray-900">{{ d.count }}</td>
+                <td class="px-3 py-2 text-right text-gray-900">{{ d.applications }}</td>
+                <td class="px-3 py-2 text-right text-gray-900">{{ d.settings }}</td>
               </tr>
-              <tr v-if="funnelKpi.daily_applications.length === 0">
-                <td class="px-3 py-3 text-gray-400 text-center" colSpan="2">データがありません</td>
+              <tr v-if="dailyFunnelRows.length === 0">
+                <td class="px-3 py-3 text-gray-400 text-center" colSpan="3">データがありません</td>
               </tr>
             </tbody>
           </table>
@@ -1149,22 +1132,6 @@ watch(filteredStudents, () => {
               <p class="text-gray-700">{{ formatDate(s.next_meeting_date) }}</p>
             </div>
             <div>
-              <p class="text-gray-400">申込日</p>
-              <p class="text-gray-700">{{ formatDate(s.matcher_applied_at) }}</p>
-            </div>
-            <div>
-              <p class="text-gray-400">予約日</p>
-              <p class="text-gray-700">{{ formatDate(s.matcher_reservation_created_at) }}</p>
-            </div>
-            <div>
-              <p class="text-gray-400">面談予定日</p>
-              <p class="text-gray-700">{{ formatDate(s.matcher_interview_scheduled_at) }}</p>
-            </div>
-            <div>
-              <p class="text-gray-400">面談実施日</p>
-              <p class="text-gray-700">{{ formatDate(s.matcher_interview_actual_at) }}</p>
-            </div>
-            <div>
               <p class="text-gray-400">タスク履行日</p>
               <p class="text-gray-700">{{ formatDate(s.latest_task_due_date) }}</p>
             </div>
@@ -1245,7 +1212,7 @@ watch(filteredStudents, () => {
       </div>
 
       <div v-else class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
-        <table class="w-full min-w-[1100px]">
+        <table class="w-full min-w-[980px]">
           <thead class="bg-gray-50 border-b border-gray-200 text-xs">
             <tr>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">流入経路</th>
@@ -1257,10 +1224,6 @@ watch(filteredStudents, () => {
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">卒業年度</th>
               <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">担当</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">申込日</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">予約日</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">面談予定日</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">面談実施日</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">次回面談日</th>
               <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">タスク履行日</th>
               <th class="px-6 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">操作</th>
@@ -1305,10 +1268,6 @@ watch(filteredStudents, () => {
                   <option v-for="v in referralStatusOptions" :key="v" :value="v">{{ v }}</option>
                 </select>
               </td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.matcher_applied_at) }}</td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.matcher_reservation_created_at) }}</td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.matcher_interview_scheduled_at) }}</td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.matcher_interview_actual_at) }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.next_meeting_date) }}</td>
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.latest_task_due_date) }}</td>
               <td class="px-6 py-3 text-right text-xs whitespace-nowrap">
@@ -1336,7 +1295,7 @@ watch(filteredStudents, () => {
               </td>
             </tr>
             <tr v-if="totalFilteredCount === 0">
-                <td colSpan="16" class="px-6 py-10 text-center text-sm text-gray-400">
+                <td colSpan="12" class="px-6 py-10 text-center text-sm text-gray-400">
                   該当する学生が見つかりませんでした。
                 </td>
             </tr>
@@ -1479,44 +1438,20 @@ watch(filteredStudents, () => {
               <h3 class="font-semibold text-sm mb-2">2) 予約登録</h3>
               <label class="block text-xs text-gray-600 mb-1">予約ステータス</label>
               <input value="初回面談" type="text" disabled class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2 bg-gray-50 text-gray-600">
-              <label class="block text-xs text-gray-600 mb-1">予約日</label>
+              <label class="block text-xs text-gray-600 mb-1">予約日（TimeRex予約日）</label>
               <input v-model="funnelForm.reservation_date" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
               <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitReservation">予約登録</button>
             </div>
 
             <div class="border border-gray-200 rounded-lg p-3">
               <h3 class="font-semibold text-sm mb-2">3) 面談実施登録</h3>
-              <label class="block text-xs text-gray-600 mb-1">面談予定日</label>
+              <label class="block text-xs text-gray-600 mb-1">面談予定日（実際の面談日）</label>
               <input v-model="funnelForm.interview_scheduled_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
               <label class="block text-xs text-gray-600 mb-1">面談実施日</label>
               <input v-model="funnelForm.interview_interviewed_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
               <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitInterview">面談実施登録</button>
             </div>
 
-            <div class="border border-gray-200 rounded-lg p-3">
-              <h3 class="font-semibold text-sm mb-2">4) イベント提案登録</h3>
-              <label class="block text-xs text-gray-600 mb-1">イベント</label>
-              <select v-model="funnelForm.event_id" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
-                <option value="">選択してください</option>
-                <option v-for="e in funnelEvents" :key="`funnel-ev-${e.id}`" :value="String(e.id)">
-                  {{ e.event_name }}（{{ formatDate(e.event_date || '') }}）
-                </option>
-              </select>
-              <label class="block text-xs text-gray-600 mb-1">提案ステータス</label>
-              <select v-model="funnelForm.proposal_status" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
-                <option value="proposed">提案済み</option>
-                <option value="joined">参加</option>
-                <option value="lost">失注</option>
-              </select>
-              <label class="block text-xs text-gray-600 mb-1">失注理由</label>
-              <select v-model="funnelForm.lost_reason_id" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
-                <option value="">未選択</option>
-                <option v-for="r in lostReasons" :key="`lost-r-${r.id}`" :value="String(r.id)">{{ r.reason_name }}</option>
-              </select>
-              <label class="block text-xs text-gray-600 mb-1">メモ</label>
-              <textarea v-model="funnelForm.memo" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2" />
-              <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitProposal">イベント提案登録</button>
-            </div>
           </div>
         </div>
       </div>

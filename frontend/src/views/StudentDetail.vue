@@ -36,6 +36,15 @@ const matcherForm = ref({
   interview_actual_at: '',
   interview_status: 'completed'
 });
+const proposalEvents = ref<any[]>([]);
+const proposalLostReasons = ref<any[]>([]);
+const eventProposals = ref<any[]>([]);
+const proposalForm = ref({
+  event_id: '',
+  status: 'proposed',
+  lost_reason_id: '',
+  memo: ''
+});
 const expandedLogId = ref<number | null>(null);
 const availableEvents = ref<any[]>([]);
 const newTaskDate = ref('');
@@ -239,6 +248,37 @@ const fetchAllEvents = async () => {
   const token = localStorage.getItem('token');
   const res = await api.get('/api/events', { headers: { Authorization: token } });
   availableEvents.value = res.data;
+};
+
+const fetchProposalMaster = async () => {
+  const token = localStorage.getItem('token');
+  const res = await api.get('/api/students/funnel/master', { headers: { Authorization: token } });
+  proposalEvents.value = Array.isArray(res.data?.events) ? res.data.events : [];
+  proposalLostReasons.value = Array.isArray(res.data?.lost_reasons) ? res.data.lost_reasons : [];
+};
+
+const fetchEventProposals = async () => {
+  const token = localStorage.getItem('token');
+  const res = await api.get(`/api/students/${studentId}/funnel/event-proposals`, { headers: { Authorization: token } });
+  eventProposals.value = Array.isArray(res.data) ? res.data : [];
+};
+
+const submitEventProposal = async () => {
+  if (!proposalForm.value.event_id) return;
+  const token = localStorage.getItem('token');
+  await api.post(`/api/students/${studentId}/funnel/event-proposal`, {
+    event_id: Number(proposalForm.value.event_id),
+    status: proposalForm.value.status || 'proposed',
+    lost_reason_id: proposalForm.value.lost_reason_id ? Number(proposalForm.value.lost_reason_id) : null,
+    memo: proposalForm.value.memo || null
+  }, { headers: { Authorization: token } });
+  proposalForm.value = {
+    event_id: '',
+    status: 'proposed',
+    lost_reason_id: '',
+    memo: ''
+  };
+  await fetchEventProposals();
 };
 
 const addLog = async () => {
@@ -485,6 +525,8 @@ const onBeforeUnload = (e: BeforeUnloadEvent) => {
 onMounted(() => {
   fetchDetail().then(restoreDraft);
   fetchAllEvents();
+  fetchProposalMaster();
+  fetchEventProposals();
   window.addEventListener('beforeunload', onBeforeUnload);
 });
 
@@ -853,6 +895,43 @@ watch(
                 <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherInterview">面談実施登録</button>
               </div>
             </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4">イベント提案管理（複数登録）</h2>
+            <div class="space-y-2 mb-4">
+              <div v-for="p in eventProposals" :key="`proposal-${p.id}`" class="rounded-lg border border-gray-200 p-3 text-sm">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-semibold text-gray-900">{{ p.event_name || '-' }}</span>
+                  <span class="text-xs text-gray-500">{{ formatDateTime(p.proposed_at) }}</span>
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{{ p.status || '-' }}</span>
+                  <span v-if="p.lost_reason_name" class="text-xs text-red-600">失注理由: {{ p.lost_reason_name }}</span>
+                </div>
+                <p v-if="p.memo" class="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{{ p.memo }}</p>
+              </div>
+              <p v-if="eventProposals.length === 0" class="text-sm text-gray-400">提案履歴はまだありません</p>
+            </div>
+            <div class="pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-2">
+              <select v-model="proposalForm.event_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="">イベントを選択</option>
+                <option v-for="e in proposalEvents" :key="`proposal-event-${e.id}`" :value="String(e.id)">
+                  {{ e.event_name || e.title }}（{{ e.event_date ? formatDateTime(e.event_date) : '-' }}）
+                </option>
+              </select>
+              <select v-model="proposalForm.status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="proposed">提案済み</option>
+                <option value="joined">参加</option>
+                <option value="lost">失注</option>
+              </select>
+              <select v-model="proposalForm.lost_reason_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="">失注理由（任意）</option>
+                <option v-for="r in proposalLostReasons" :key="`proposal-lost-${r.id}`" :value="String(r.id)">{{ r.reason_name }}</option>
+              </select>
+              <input v-model="proposalForm.memo" type="text" placeholder="メモ（任意）" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <button class="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700" @click="submitEventProposal">
+              イベント提案を追加
+            </button>
           </div>
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

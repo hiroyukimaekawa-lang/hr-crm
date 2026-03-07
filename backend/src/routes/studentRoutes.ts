@@ -18,6 +18,7 @@ import {
     updateApplicationReservation,
     createInterviewRecord,
     createEventProposal,
+    getStudentEventProposals,
     getFunnelKpi,
     getFunnelMasterData,
     getMatcherFunnelByStudent,
@@ -55,6 +56,7 @@ router.post('/:id/matcher-funnel/interview', authenticate, registerMatcherInterv
 router.post('/:id/funnel/application', authenticate, createApplication);
 router.put('/:id/funnel/reservation', authenticate, updateApplicationReservation);
 router.post('/:id/funnel/interview', authenticate, createInterviewRecord);
+router.get('/:id/funnel/event-proposals', authenticate, getStudentEventProposals);
 router.post('/:id/funnel/event-proposal', authenticate, createEventProposal);
 router.get('/:id', authenticate, getStudentDetail);
 router.post('/:id/interview-schedules', authenticate, createInterviewSchedule);

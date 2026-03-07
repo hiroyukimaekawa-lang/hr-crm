@@ -339,12 +339,6 @@ const updateYomiParticipantStatus = async (eventId: number, studentId: number, s
   }
 };
 
-const recentStudents = computed(() => {
-  return [...students.value]
-    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-    .slice(0, 5);
-});
-
 const calendarBaseMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -535,157 +529,6 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
       </div>
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-        <h2 class="text-lg font-bold text-gray-900 mb-4">ファネルKPI</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div class="rounded-lg border border-gray-200 p-3"><p class="text-xs text-gray-500">申込→予約率</p><p class="text-xl font-bold">{{ funnelKpi.applicationToReservationRate.toFixed(2) }}%</p></div>
-          <div class="rounded-lg border border-gray-200 p-3"><p class="text-xs text-gray-500">予約→面談率</p><p class="text-xl font-bold">{{ funnelKpi.reservationToInterviewRate.toFixed(2) }}%</p></div>
-          <div class="rounded-lg border border-gray-200 p-3"><p class="text-xs text-gray-500">面談→イベント提案率</p><p class="text-xl font-bold">{{ funnelKpi.interviewToProposalRate.toFixed(2) }}%</p></div>
-          <div class="rounded-lg border border-gray-200 p-3"><p class="text-xs text-gray-500">提案→参加率</p><p class="text-xl font-bold">{{ funnelKpi.proposalToJoinRate.toFixed(2) }}%</p></div>
-          <div class="rounded-lg border border-gray-200 p-3">
-            <p class="text-xs text-gray-500 mb-1">失注理由ランキング</p>
-            <p class="text-xs text-gray-700" v-if="funnelKpi.lostReasonRanking.length === 0">データなし</p>
-            <ul v-else class="text-xs text-gray-700 space-y-0.5">
-              <li v-for="r in funnelKpi.lostReasonRanking.slice(0, 3)" :key="`lost-dashboard-${r.reason_name}`">{{ r.reason_name }}: {{ r.count }}</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-        <h3 class="text-sm font-semibold text-gray-800 mb-2">日別申込数（直近31日）</h3>
-        <div class="overflow-x-auto">
-          <table class="w-full min-w-[360px] text-xs">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-3 py-2 text-left text-gray-500">日付</th>
-                <th class="px-3 py-2 text-right text-gray-500">申込数</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr v-for="d in funnelKpi.daily_applications" :key="`daily-dashboard-${d.day}`">
-                <td class="px-3 py-2 text-gray-700">{{ d.day ? new Date(d.day).toLocaleDateString('ja-JP') : '-' }}</td>
-                <td class="px-3 py-2 text-right text-gray-900">{{ d.count }}</td>
-              </tr>
-              <tr v-if="funnelKpi.daily_applications.length === 0">
-                <td class="px-3 py-3 text-gray-400 text-center" colSpan="2">データがありません</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="mb-4">
-        <p class="text-sm text-gray-600 mb-2">流入経路タブ</p>
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="opt in sourceCompanyOptions"
-            :key="`source-filter-${opt}`"
-            class="px-3 py-1.5 rounded-lg text-sm border"
-            :class="sourceCompanyFilter === opt ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
-            @click="sourceCompanyFilter = opt"
-          >
-            {{ opt === 'ALL' ? 'すべて' : opt }}
-          </button>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <p class="text-sm text-gray-500">初回面談リードタイム平均</p>
-          <p class="text-2xl font-bold text-gray-900">{{ interviewMetrics.first_lead_time_days_avg ?? '-' }}<span class="text-sm font-medium text-gray-500">日</span></p>
-        </div>
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <p class="text-sm text-gray-500">初回面談リスケ</p>
-          <p class="text-2xl font-bold text-gray-900">{{ interviewMetrics.first_rescheduled }}<span class="text-sm font-medium text-gray-500">件</span></p>
-          <p class="text-xs text-gray-500 mt-1">率: {{ interviewMetrics.first_reschedule_rate ?? '-' }}% / 母数: {{ interviewMetrics.first_total }}</p>
-        </div>
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <p class="text-sm text-gray-500">2回目以降リードタイム平均</p>
-          <p class="text-2xl font-bold text-gray-900">{{ interviewMetrics.followup_lead_time_days_avg ?? '-' }}<span class="text-sm font-medium text-gray-500">日</span></p>
-        </div>
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <p class="text-sm text-gray-500">2回目以降リスケ</p>
-          <p class="text-2xl font-bold text-gray-900">{{ interviewMetrics.followup_rescheduled }}<span class="text-sm font-medium text-gray-500">件</span></p>
-          <p class="text-xs text-gray-500 mt-1">率: {{ interviewMetrics.followup_reschedule_rate ?? '-' }}% / 母数: {{ interviewMetrics.followup_total }}</p>
-        </div>
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <p class="text-sm text-gray-500">初回面談実施率</p>
-          <p class="text-2xl font-bold text-gray-900">{{ interviewMetrics.account_summary.first_interview_execution_rate ?? '-' }}<span class="text-sm font-medium text-gray-500">%</span></p>
-          <p class="text-xs text-gray-500 mt-1">実施: {{ interviewMetrics.account_summary.first_interview_executed_count }} / 設定: {{ interviewMetrics.account_summary.settings_count }}</p>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-        <h2 class="text-lg font-bold text-gray-900 mb-4">流入経路別リードタイム</h2>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">流入経路</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">設定数</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談数</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">2回目面談数</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">面談数</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談実施数</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談実施率(%)</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">設定→初回面談平均(日)</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回平均(日)</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回リスケ率(%)</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">2回目以降平均(日)</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">2回目以降リスケ率(%)</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              <tr v-for="row in interviewMetricsBySource" :key="`metric-row-${row.source_company}`" class="hover:bg-gray-50">
-                <td class="px-3 py-2 text-gray-900">{{ row.source_company }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.settings_count ?? 0 }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_interviews_count ?? 0 }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.second_interviews_count ?? 0 }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.interviews_count ?? 0 }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_interview_executed_count ?? 0 }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_interview_execution_rate ?? '-' }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.setting_to_first_interview_lead_time_days_avg ?? '-' }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_lead_time_days_avg ?? '-' }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_reschedule_rate ?? '-' }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.followup_lead_time_days_avg ?? '-' }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.followup_reschedule_rate ?? '-' }}</td>
-              </tr>
-              <tr v-if="interviewMetricsBySource.length === 0">
-                <td colSpan="12" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-        <h2 class="text-lg font-bold text-gray-900 mb-4">担当者別 初回面談実施率</h2>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">担当者</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">設定数</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談実施数</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">初回面談実施率(%)</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              <tr v-for="row in interviewExecutionByStaff" :key="`staff-exec-${row.staff_id ?? 'none'}-${row.staff_name}`" class="hover:bg-gray-50">
-                <td class="px-3 py-2 text-gray-900">{{ row.staff_name || '未割当' }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.settings_count }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_interview_executed_count }}</td>
-                <td class="px-3 py-2 text-right text-gray-700">{{ row.first_interview_execution_rate ?? '-' }}</td>
-              </tr>
-              <tr v-if="interviewExecutionByStaff.length === 0">
-                <td colSpan="4" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
           <h2 class="text-lg font-bold text-gray-900">日別設定/面談カレンダー</h2>
           <div class="flex items-center gap-2">
@@ -762,19 +605,6 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
         </div>
       </div>
 
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 class="text-lg font-bold text-gray-900 mb-4">最近登録された学生</h2>
-        <div class="space-y-3">
-          <div v-for="s in recentStudents" :key="s.id" class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-medium text-gray-900">{{ s.name }}</p>
-              <p class="text-xs text-gray-500">{{ s.status || '未設定' }}</p>
-            </div>
-            <span class="text-xs text-gray-400">{{ s.created_at ? new Date(s.created_at).toLocaleDateString('ja-JP') : '-' }}</span>
-          </div>
-          <div v-if="recentStudents.length === 0" class="text-sm text-gray-400">学生データがありません。</div>
-        </div>
-      </div>
     </div>
 
     <div v-if="selectedYomiEvent" class="fixed inset-0 z-[90]">

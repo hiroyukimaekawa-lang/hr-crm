@@ -1519,14 +1519,52 @@ export const createEventProposal = async (req: Request, res: Response) => {
     }
 };
 
+export const getStudentEventProposals = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        await ensureSalesFunnelTables();
+        const result = await pool.query(
+            `SELECT
+                ep.id,
+                ep.student_id,
+                ep.event_id,
+                ep.proposed_at,
+                ep.status,
+                ep.lost_reason_id,
+                ep.memo,
+                ep.created_at,
+                e.title AS event_name,
+                e.event_date,
+                lr.reason_name AS lost_reason_name
+             FROM event_proposals ep
+             LEFT JOIN events e ON e.id = ep.event_id
+             LEFT JOIN lost_reasons lr ON lr.id = ep.lost_reason_id
+             WHERE ep.student_id = $1
+             ORDER BY ep.proposed_at DESC, ep.id DESC`,
+            [id]
+        );
+        res.json(result.rows);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
 export const getFunnelKpi = async (_req: Request, res: Response) => {
     try {
         await ensureSalesFunnelTables();
-        const [dailyRes, summaryRes, lostRes] = await Promise.all([
+        const [dailyRes, dailySettingsRes, summaryRes, lostRes] = await Promise.all([
             pool.query(`
                 SELECT DATE(applied_at) AS day, COUNT(*)::int AS count
                 FROM applications
                 GROUP BY DATE(applied_at)
+                ORDER BY day DESC
+                LIMIT 31
+            `),
+            pool.query(`
+                SELECT DATE(COALESCE(reservation_date, reservation_created_at)) AS day, COUNT(*)::int AS count
+                FROM applications
+                WHERE COALESCE(reservation_date, reservation_created_at) IS NOT NULL
+                GROUP BY DATE(COALESCE(reservation_date, reservation_created_at))
                 ORDER BY day DESC
                 LIMIT 31
             `),
@@ -1587,6 +1625,7 @@ export const getFunnelKpi = async (_req: Request, res: Response) => {
         const rate = (a: number, b: number) => (b > 0 ? Number(((a / b) * 100).toFixed(2)) : 0);
         res.json({
             daily_applications: dailyRes.rows,
+            daily_settings: dailySettingsRes.rows,
             application_to_reservation_rate: rate(reservedStudents, applicationsStudents),
             reservation_to_interview_rate: rate(interviewedStudents, reservedStudents),
             interview_to_proposal_rate: rate(proposedStudents, interviewedStudents),

@@ -24,6 +24,7 @@ router.post('/:id/matcher-funnel/interview', auth_1.authenticate, studentControl
 router.post('/:id/funnel/application', auth_1.authenticate, studentController_1.createApplication);
 router.put('/:id/funnel/reservation', auth_1.authenticate, studentController_1.updateApplicationReservation);
 router.post('/:id/funnel/interview', auth_1.authenticate, studentController_1.createInterviewRecord);
+router.get('/:id/funnel/event-proposals', auth_1.authenticate, studentController_1.getStudentEventProposals);
 router.post('/:id/funnel/event-proposal', auth_1.authenticate, studentController_1.createEventProposal);
 router.get('/:id', auth_1.authenticate, studentController_1.getStudentDetail);
 router.post('/:id/interview-schedules', auth_1.authenticate, studentController_1.createInterviewSchedule);

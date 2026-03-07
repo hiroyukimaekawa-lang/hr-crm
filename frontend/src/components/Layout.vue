@@ -48,7 +48,7 @@ const menuItems = computed(() => [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard, path: '/dashboard' },
   { id: 'students', label: '学生一覧', icon: Users, path: '/students' },
   { id: 'events', label: 'イベント一覧', icon: Calendar, path: '/events' },
-  { id: 'lead-time', label: 'リードタイム', icon: ChartColumn, path: '/lead-time' },
+  { id: 'lead-time', label: '学生流入', icon: ChartColumn, path: '/lead-time' },
   { id: 'settings', label: '設定', icon: Settings, path: '/settings' }
 ]);
 

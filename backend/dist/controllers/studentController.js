@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
+exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.getStudentEventProposals = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
 const db_1 = __importDefault(require("../config/db"));
 let interviewScheduleTableReady = false;
 let interviewScheduleTablePromise = null;
@@ -1405,14 +1405,50 @@ const createEventProposal = (req, res) => __awaiter(void 0, void 0, void 0, func
     }
 });
 exports.createEventProposal = createEventProposal;
+const getStudentEventProposals = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    try {
+        yield ensureSalesFunnelTables();
+        const result = yield db_1.default.query(`SELECT
+                ep.id,
+                ep.student_id,
+                ep.event_id,
+                ep.proposed_at,
+                ep.status,
+                ep.lost_reason_id,
+                ep.memo,
+                ep.created_at,
+                e.title AS event_name,
+                e.event_date,
+                lr.reason_name AS lost_reason_name
+             FROM event_proposals ep
+             LEFT JOIN events e ON e.id = ep.event_id
+             LEFT JOIN lost_reasons lr ON lr.id = ep.lost_reason_id
+             WHERE ep.student_id = $1
+             ORDER BY ep.proposed_at DESC, ep.id DESC`, [id]);
+        res.json(result.rows);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.getStudentEventProposals = getStudentEventProposals;
 const getFunnelKpi = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield ensureSalesFunnelTables();
-        const [dailyRes, summaryRes, lostRes] = yield Promise.all([
+        const [dailyRes, dailySettingsRes, summaryRes, lostRes] = yield Promise.all([
             db_1.default.query(`
                 SELECT DATE(applied_at) AS day, COUNT(*)::int AS count
                 FROM applications
                 GROUP BY DATE(applied_at)
+                ORDER BY day DESC
+                LIMIT 31
+            `),
+            db_1.default.query(`
+                SELECT DATE(COALESCE(reservation_date, reservation_created_at)) AS day, COUNT(*)::int AS count
+                FROM applications
+                WHERE COALESCE(reservation_date, reservation_created_at) IS NOT NULL
+                GROUP BY DATE(COALESCE(reservation_date, reservation_created_at))
                 ORDER BY day DESC
                 LIMIT 31
             `),
@@ -1473,6 +1509,7 @@ const getFunnelKpi = (_req, res) => __awaiter(void 0, void 0, void 0, function* 
         const rate = (a, b) => (b > 0 ? Number(((a / b) * 100).toFixed(2)) : 0);
         res.json({
             daily_applications: dailyRes.rows,
+            daily_settings: dailySettingsRes.rows,
             application_to_reservation_rate: rate(reservedStudents, applicationsStudents),
             reservation_to_interview_rate: rate(interviewedStudents, reservedStudents),
             interview_to_proposal_rate: rate(proposedStudents, interviewedStudents),
