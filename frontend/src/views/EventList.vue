@@ -49,6 +49,24 @@ const selectedCalendarEvent = ref<EventItem | null>(null);
 const router = useRouter();
 const calendarBaseMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
+const parseLocalDate = (value?: string | Date) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  const s = String(value).trim().replace('Z', '');
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const yyyy = Number(m[1]);
+  const mm = Number(m[2]) - 1;
+  const dd = Number(m[3]);
+  const hh = Number(m[4] || 0);
+  const mi = Number(m[5] || 0);
+  const ss = Number(m[6] || 0);
+  return new Date(yyyy, mm, dd, hh, mi, ss);
+};
+
 const fetchEvents = async () => {
   const token = localStorage.getItem('token');
   const res = await api.get('/api/events', { headers: { Authorization: token } });
@@ -80,7 +98,9 @@ const deleteEvent = async (eventId: number) => {
 
 const eventStatus = (eventDate?: string) => {
   if (!eventDate) return '未定';
-  return new Date(eventDate) > new Date() ? '開催予定' : '終了';
+  const d = parseLocalDate(eventDate);
+  if (!d) return '未定';
+  return d > new Date() ? '開催予定' : '終了';
 };
 
 const progressRate = (event: EventItem) => {
@@ -99,7 +119,8 @@ const remainingEntries = (event: EventItem) => {
 };
 
 const formatDateKey = (value: string | Date) => {
-  const d = new Date(value);
+  const d = parseLocalDate(value);
+  if (!d) return '';
   if (Number.isNaN(d.getTime())) return '';
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -147,7 +168,10 @@ const displayEventDates = (event: EventItem | null) => {
   const list = Array.isArray(event.event_dates) && event.event_dates.length > 0
     ? event.event_dates
     : (event.event_date ? [event.event_date] : []);
-  return list.map((d) => new Date(d).toLocaleString('ja-JP'));
+  return list.map((d) => {
+    const dt = parseLocalDate(d);
+    return dt ? dt.toLocaleString('ja-JP') : String(d);
+  });
 };
 
 const getEventsForDate = (key: string) => eventsByDate.value[key] || [];

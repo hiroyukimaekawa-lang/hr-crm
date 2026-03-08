@@ -83,7 +83,7 @@ export const getEvents = async (req: Request, res: Response) => {
             FROM events e
             LEFT JOIN LATERAL (
                 SELECT
-                    json_agg(to_char(ed.event_date, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') ORDER BY ed.event_date ASC) as event_dates
+                    json_agg(to_char(ed.event_date, 'YYYY-MM-DD"T"HH24:MI:SS') ORDER BY ed.event_date ASC) as event_dates
                 FROM event_dates ed
                 WHERE ed.event_id = e.id
             ) date_stats ON true

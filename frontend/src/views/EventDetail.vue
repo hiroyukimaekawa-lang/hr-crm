@@ -64,9 +64,27 @@ const form = ref({
   current_sales: ''
 });
 
+const parseLocalDate = (value?: string) => {
+  if (!value) return null;
+  const s = String(value).trim().replace('Z', '');
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const yyyy = Number(m[1]);
+  const mm = Number(m[2]) - 1;
+  const dd = Number(m[3]);
+  const hh = Number(m[4] || 0);
+  const mi = Number(m[5] || 0);
+  const ss = Number(m[6] || 0);
+  return new Date(yyyy, mm, dd, hh, mi, ss);
+};
+
 const toDateTimeLocalValue = (value?: string) => {
   if (!value) return '';
-  const d = new Date(value);
+  const d = parseLocalDate(value);
+  if (!d) return '';
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
   const yyyy = d.getFullYear();
@@ -146,7 +164,10 @@ const displayEventDates = (ev: EventDetail | null) => {
   const list = Array.isArray(ev.event_dates) && ev.event_dates.length > 0
     ? ev.event_dates
     : (ev.event_date ? [ev.event_date] : []);
-  return list.map((d) => new Date(d).toLocaleString('ja-JP'));
+  return list.map((d) => {
+    const dt = parseLocalDate(d);
+    return dt ? dt.toLocaleString('ja-JP') : String(d);
+  });
 };
 
 const filteredParticipants = computed(() => {
