@@ -273,6 +273,28 @@ const normalizeProgressStage = (value: any) => {
     return '面談調整中';
 };
 
+const normalizeToHour = (value: any): string | null => {
+    const raw = normalizeNullableText(value);
+    if (!raw) return null;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        return `${raw} 00:00:00`;
+    }
+
+    const direct = raw.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2})/);
+    if (direct) {
+        return `${direct[1]} ${direct[2]}:00:00`;
+    }
+
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return null;
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:00:00`;
+};
+
 const normalizeReferralStatus = (value: any) => {
     const raw = String(value ?? '').trim();
     if (!raw) return '不明';
@@ -441,8 +463,10 @@ export const createStudent = async (req: Request, res: Response) => {
         pushCol('staff_id', staff_id || null);
         pushCol('source_company', source_company || null);
         pushCol('interview_reason', interview_reason || null);
-        pushCol('meeting_decided_date', meeting_decided_date || null);
-        pushCol('first_interview_date', first_interview_date || null);
+        const normalizedMeetingDecidedDate = normalizeToHour(meeting_decided_date);
+        const normalizedFirstInterviewDate = normalizeToHour(first_interview_date);
+        pushCol('meeting_decided_date', normalizedMeetingDecidedDate);
+        pushCol('first_interview_date', normalizedFirstInterviewDate);
         pushCol('second_interview_date', second_interview_date || null);
 
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
@@ -464,10 +488,10 @@ export const createStudent = async (req: Request, res: Response) => {
                interview_scheduled_at = COALESCE(EXCLUDED.interview_scheduled_at, matcher_funnel_logs.interview_scheduled_at)`,
             [
                 created.id,
-                normalizeNullableText(req.body?.applied_at),
+                normalizeToHour(req.body?.applied_at),
                 'pending',
-                meeting_decided_date || null,
-                first_interview_date || null
+                normalizedMeetingDecidedDate,
+                normalizedFirstInterviewDate
             ]
         );
         await pool.query(
@@ -478,12 +502,12 @@ export const createStudent = async (req: Request, res: Response) => {
                 created.id,
                 created.name,
                 normalizedSourceCompany,
-                normalizeNullableText(applied_at) || meeting_decided_date || null,
+                normalizeToHour(applied_at) || normalizedMeetingDecidedDate || null,
                 '初回面談',
-                meeting_decided_date || null
+                normalizedMeetingDecidedDate
             ]
         );
-        const preContactDate = oneDayBefore(first_interview_date || null);
+        const preContactDate = oneDayBefore(normalizedFirstInterviewDate || null);
         if (created?.id && preContactDate) {
             await pool.query(
                 'INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)',
@@ -1258,7 +1282,7 @@ export const registerMatcherApply = async (req: Request, res: Response) => {
     const { applied_at } = req.body || {};
     try {
         const row = await upsertMatcherFunnelByStudentId(String(id), {
-            applied_at: normalizeNullableText(applied_at) || new Date().toISOString()
+            applied_at: normalizeToHour(applied_at) || normalizeToHour(new Date().toISOString())
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
@@ -1275,7 +1299,7 @@ export const registerMatcherMessage = async (req: Request, res: Response) => {
     const { message_sent_at } = req.body || {};
     try {
         const row = await upsertMatcherFunnelByStudentId(String(id), {
-            message_sent_at: normalizeNullableText(message_sent_at) || new Date().toISOString()
+            message_sent_at: normalizeToHour(message_sent_at) || normalizeToHour(new Date().toISOString())
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
@@ -1292,9 +1316,9 @@ export const registerMatcherReservation = async (req: Request, res: Response) =>
     const { reservation_created_at, reservation_status, interview_scheduled_at } = req.body || {};
     try {
         const row = await upsertMatcherFunnelByStudentId(String(id), {
-            reservation_created_at: normalizeNullableText(reservation_created_at) || new Date().toISOString(),
+            reservation_created_at: normalizeToHour(reservation_created_at) || normalizeToHour(new Date().toISOString()),
             reservation_status: normalizeNullableText(reservation_status) || 'reserved',
-            interview_scheduled_at: normalizeNullableText(interview_scheduled_at)
+            interview_scheduled_at: normalizeToHour(interview_scheduled_at)
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
@@ -1311,9 +1335,9 @@ export const registerMatcherInterview = async (req: Request, res: Response) => {
     const { interview_actual_at, interview_status, interview_scheduled_at } = req.body || {};
     try {
         const row = await upsertMatcherFunnelByStudentId(String(id), {
-            interview_actual_at: normalizeNullableText(interview_actual_at),
+            interview_actual_at: normalizeToHour(interview_actual_at),
             interview_status: normalizeNullableText(interview_status) || 'completed',
-            interview_scheduled_at: normalizeNullableText(interview_scheduled_at)
+            interview_scheduled_at: normalizeToHour(interview_scheduled_at)
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
@@ -1420,11 +1444,11 @@ export const createApplication = async (req: Request, res: Response) => {
                 st.id,
                 st.name,
                 normalizeNullableText(source) || st.source_company || null,
-                normalizeNullableText(applied_at),
+                normalizeToHour(applied_at),
                 normalizeNullableText(first_message_sent_at),
                 normalizeNullableText(reservation_status),
-                normalizeNullableText(reservation_date),
-                normalizeNullableText(reservation_created_at)
+                normalizeToHour(reservation_date),
+                normalizeToHour(reservation_created_at)
             ]
         );
         res.status(201).json(result.rows[0]);
@@ -1457,9 +1481,9 @@ export const updateApplicationReservation = async (req: Request, res: Response) 
              RETURNING *`,
             [
                 normalizeNullableText(reservation_status),
-                normalizeNullableText(reservation_date),
-                normalizeNullableText(reservation_created_at),
-                normalizeNullableText(first_message_sent_at),
+                normalizeToHour(reservation_date),
+                normalizeToHour(reservation_created_at),
+                normalizeToHour(first_message_sent_at),
                 app.id
             ]
         );
@@ -1480,8 +1504,8 @@ export const createInterviewRecord = async (req: Request, res: Response) => {
              RETURNING *`,
             [
                 id,
-                normalizeNullableText(scheduled_at),
-                normalizeNullableText(interviewed_at),
+                normalizeToHour(scheduled_at),
+                normalizeToHour(interviewed_at),
                 normalizeNullableText(status) || 'completed'
             ]
         );

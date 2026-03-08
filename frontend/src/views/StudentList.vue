@@ -1383,8 +1383,8 @@ watch(filteredStudents, () => {
             <input v-model="newStudent.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" @change="newStudent.applied_at = forceHourOnly(newStudent.applied_at)">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">面談決定日</label>
-            <input v-model="newStudent.meeting_decided_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <label class="block text-sm font-medium text-gray-700 mb-1">面談決定日（時間単位）</label>
+            <input v-model="newStudent.meeting_decided_date" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" @change="newStudent.meeting_decided_date = forceHourOnly(newStudent.meeting_decided_date)">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">初回面談日</label>
