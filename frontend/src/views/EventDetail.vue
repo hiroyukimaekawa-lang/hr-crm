@@ -14,9 +14,11 @@ import {
 } from 'lucide-vue-next';
 
 interface Participant {
+  id?: number; // student_events row id
   student_id: number;
   status: string;
   created_at: string;
+  selected_event_date?: string | null;
   name: string;
   university?: string;
   staff_name?: string;
@@ -117,9 +119,9 @@ const fetchDetail = async () => {
   };
 };
 
-const updateStatus = async (studentId: number, status: string) => {
+const updateStatus = async (studentEventId: number, status: string) => {
   const token = localStorage.getItem('token');
-  await api.put(`/api/events/${eventId}/participants/${studentId}`,
+  await api.put(`/api/events/${eventId}/participants/${studentEventId}`,
     { status },
     { headers: { Authorization: token } }
   );
@@ -379,8 +381,8 @@ onMounted(fetchDetail);
                   <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-200">
-                <tr v-for="p in filteredParticipants" :key="p.student_id" class="hover:bg-gray-50">
+                <tbody class="divide-y divide-gray-200">
+                <tr v-for="p in filteredParticipants" :key="p.id || p.student_id" class="hover:bg-gray-50">
                   <td class="px-4 py-3">
                     <button class="text-blue-600 hover:text-blue-800" @click="router.push(`/students/${p.student_id}`)">
                       {{ p.name }}
@@ -396,22 +398,22 @@ onMounted(fetchDetail);
                   </td>
                   <td class="px-4 py-3 text-right">
                     <div class="inline-flex items-center gap-1.5 flex-wrap justify-end max-w-[260px] ml-auto">
-                      <button class="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs hover:bg-blue-100" @click="updateStatus(p.student_id, 'A_ENTRY')" title="A:エントリー">
+                      <button class="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs hover:bg-blue-100" @click="updateStatus(p.id!, 'A_ENTRY')" title="A:エントリー">
                         A
                       </button>
-                      <button class="px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700 text-xs hover:bg-amber-100" @click="updateStatus(p.student_id, 'B_WAITING')" title="B:回答待ち">
+                      <button class="px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700 text-xs hover:bg-amber-100" @click="updateStatus(p.id!, 'B_WAITING')" title="B:回答待ち">
                         B
                       </button>
-                      <button class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs hover:bg-purple-100" @click="updateStatus(p.student_id, 'C_WAITING')" title="C:回答待ち">
+                      <button class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs hover:bg-purple-100" @click="updateStatus(p.id!, 'C_WAITING')" title="C:回答待ち">
                         C
                       </button>
-                      <button class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs hover:bg-red-100" @click="updateStatus(p.student_id, 'XA_CANCEL')" title="XA:エントリーキャンセル">
+                      <button class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs hover:bg-red-100" @click="updateStatus(p.id!, 'XA_CANCEL')" title="XA:エントリーキャンセル">
                         XA
                       </button>
-                      <button class="px-2 py-1 rounded border border-green-200 bg-green-50 text-green-700 text-xs hover:bg-green-100" @click="updateStatus(p.student_id, 'attended')" title="出席（任意）">
+                      <button class="px-2 py-1 rounded border border-green-200 bg-green-50 text-green-700 text-xs hover:bg-green-100" @click="updateStatus(p.id!, 'attended')" title="出席（任意）">
                         <CheckCircle class="w-4 h-4" />
                       </button>
-                      <button class="px-2 py-1 rounded border border-gray-200 bg-gray-50 text-gray-600 text-xs hover:bg-gray-100" @click="updateStatus(p.student_id, 'canceled')" title="旧キャンセル">
+                      <button class="px-2 py-1 rounded border border-gray-200 bg-gray-50 text-gray-600 text-xs hover:bg-gray-100" @click="updateStatus(p.id!, 'canceled')" title="旧キャンセル">
                         <XCircle class="w-4 h-4" />
                       </button>
                     </div>

@@ -29,6 +29,7 @@ interface EventItem {
 }
 
 interface EventParticipant {
+  student_event_id?: number;
   student_id: number;
   status: string;
   created_at: string;
@@ -328,10 +329,18 @@ const yomiSections: Array<{ key: YomiKey; label: string; accent: string }> = [
   { key: 'XA', label: 'XA:エントリーキャンセル', accent: 'text-red-700 border-red-200 bg-red-50' }
 ];
 
-const updateYomiParticipantStatus = async (eventId: number, studentId: number, status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL') => {
+const updateYomiParticipantStatus = async (
+  eventId: number,
+  studentEventId: number,
+  status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL'
+) => {
   try {
     const token = localStorage.getItem('token');
-    await api.put(`/api/events/${eventId}/participants/${studentId}`, { status }, { headers: { Authorization: token } });
+    await api.put(
+      `/api/events/${eventId}/participants/${studentEventId}`,
+      { status },
+      { headers: { Authorization: token } }
+    );
     await openYomiEventDetail(eventId);
     await fetchData();
   } catch (err) {
@@ -537,7 +546,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
         </div>
       </div>
 
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+      <div v-if="false" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
           <h2 class="text-lg font-bold text-gray-900">日別設定/面談カレンダー</h2>
           <div class="flex items-center gap-2">
@@ -607,9 +616,9 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
           >
             <p v-if="cell.day" class="text-gray-700 font-semibold mb-1">{{ cell.day }}</p>
             <template v-if="cell.date">
-              <p class="text-[11px] text-indigo-700">申込: {{ applicationCountByDate[cell.date] || 0 }}</p>
-              <p class="text-[11px] text-blue-700">設定: {{ settingCountByDate[cell.date] || 0 }}</p>
-              <p class="text-[11px] text-emerald-700">面談: {{ interviewCountByDate[cell.date] || 0 }}</p>
+              <p class="text-[11px] text-indigo-700">申込: {{ applicationCountByDate[cell.date!] || 0 }}</p>
+              <p class="text-[11px] text-blue-700">設定: {{ settingCountByDate[cell.date!] || 0 }}</p>
+              <p class="text-[11px] text-emerald-700">面談: {{ interviewCountByDate[cell.date!] || 0 }}</p>
             </template>
           </div>
         </div>
@@ -650,7 +659,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
-                  <tr v-for="p in yomiGroups[section.key]" :key="`${section.key}-${p.student_id}`" class="hover:bg-gray-50">
+                  <tr v-for="p in yomiGroups[section.key]" :key="`${section.key}-${p.student_event_id || p.student_id}`" class="hover:bg-gray-50">
                     <td class="px-3 py-2 text-gray-900">{{ p.name }}</td>
                     <td class="px-3 py-2 text-gray-600">{{ p.university || '-' }}</td>
                     <td class="px-3 py-2 text-gray-600">{{ p.staff_name || '-' }}</td>
@@ -658,7 +667,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                       <select
                         class="w-full min-w-[170px] px-2 py-1 border border-gray-300 rounded-md text-xs bg-white"
                         :value="p.status === 'registered' ? 'A_ENTRY' : (p.status || 'A_ENTRY')"
-                        @change="selectedYomiEvent && updateYomiParticipantStatus(selectedYomiEvent.id, p.student_id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL')"
+                        @change="selectedYomiEvent && updateYomiParticipantStatus(selectedYomiEvent.id, p.student_event_id!, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL')"
                       >
                         <option value="A_ENTRY">A:エントリー</option>
                         <option value="B_WAITING">B:回答待ち</option>

@@ -262,10 +262,61 @@ const ensureStudentEventsColumns = async () => {
     if (studentEventsColumnsReady) return;
     if (!studentEventsColumnsPromise) {
         studentEventsColumnsPromise = (async () => {
+            // Ensure selected_event_date column exists
             await pool.query(`
                 ALTER TABLE student_events
                 ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP
             `);
+
+            // Ensure surrogate primary key for student_events to allow multiple rows
+            // per (student_id, event_id) with different selected_event_date
+            await pool.query(`
+                ALTER TABLE student_events
+                ADD COLUMN IF NOT EXISTS id SERIAL
+            `);
+
+            // Drop legacy primary key on (student_id, event_id) if it exists
+            await pool.query(`
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints
+                        WHERE table_schema = 'public'
+                          AND table_name = 'student_events'
+                          AND constraint_type = 'PRIMARY KEY'
+                          AND constraint_name = 'student_events_pkey'
+                    ) THEN
+                        ALTER TABLE student_events DROP CONSTRAINT student_events_pkey;
+                    END IF;
+                END
+                $$;
+            `);
+
+            // Ensure primary key on id
+            await pool.query(`
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints
+                        WHERE table_schema = 'public'
+                          AND table_name = 'student_events'
+                          AND constraint_type = 'PRIMARY KEY'
+                    ) THEN
+                        ALTER TABLE student_events
+                        ADD CONSTRAINT student_events_pkey PRIMARY KEY (id);
+                    END IF;
+                END
+                $$;
+            `);
+
+            // Unique index so that the same student/event/date triplet is not duplicated
+            await pool.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_student_events_unique_triplet
+                ON student_events(student_id, event_id, selected_event_date)
+            `);
+
             studentEventsColumnsReady = true;
         })().finally(() => {
             studentEventsColumnsPromise = null;
@@ -602,6 +653,7 @@ export const getStudentDetail = async (req: Request, res: Response) => {
                 e.*,
                 to_char(e.event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as event_date,
                 COALESCE(eds.event_dates, '[]'::json) as event_dates,
+                se.id as student_event_id,
                 se.status as participation_status,
                 se.created_at as participation_created_at,
                 to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
@@ -1057,10 +1109,9 @@ export const linkEvent = async (req: Request, res: Response) => {
         await pool.query(
             `INSERT INTO student_events (student_id, event_id, status, selected_event_date)
              VALUES ($1, $2, $3, $4)
-             ON CONFLICT (student_id, event_id)
+             ON CONFLICT (student_id, event_id, selected_event_date)
              DO UPDATE SET
-                status = EXCLUDED.status,
-                selected_event_date = COALESCE(EXCLUDED.selected_event_date, student_events.selected_event_date)`,
+                status = EXCLUDED.status`,
             [id, event_id, safeStatus, normalizeToHour(selected_event_date)]
         );
         res.json({ success: true });
@@ -1712,7 +1763,25 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     FROM interviews i
                     JOIN students s ON s.id = i.student_id
                     WHERE i.student_id IS NOT NULL
+                      AND i.scheduled_at IS NOT NULL
+                    GROUP BY 1
+                ),
+                interview_completed_s AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(DISTINCT i.student_id)::int AS cnt
+                    FROM interviews i
+                    JOIN students s ON s.id = i.student_id
+                    WHERE i.student_id IS NOT NULL
                       AND (COALESCE(i.status, '') IN ('completed', '面談実施', 'interviewed') OR i.interviewed_at IS NOT NULL)
+                    GROUP BY 1
+                ),
+                interview_no_show_s AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(DISTINCT i.student_id)::int AS cnt
+                    FROM interviews i
+                    JOIN students s ON s.id = i.student_id
+                    WHERE i.student_id IS NOT NULL
+                      AND COALESCE(i.status, '') = 'no_show'
                     GROUP BY 1
                 ),
                 proposal_s AS (
@@ -1737,26 +1806,83 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     JOIN students s ON s.id = a.student_id
                     WHERE DATE(a.applied_at) = CURRENT_DATE
                     GROUP BY 1
+                ),
+                daily_avg AS (
+                    SELECT
+                        source_company,
+                        ROUND(AVG(cnt)::numeric, 2) AS avg_daily_applications
+                    FROM (
+                        SELECT
+                            COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                            DATE(a.applied_at) AS day,
+                            COUNT(*)::int AS cnt
+                        FROM applications a
+                        JOIN students s ON s.id = a.student_id
+                        WHERE a.applied_at >= (CURRENT_DATE - INTERVAL '30 days')
+                        GROUP BY 1, 2
+                    ) t
+                    GROUP BY source_company
+                ),
+                app_to_reserve_lt AS (
+                    SELECT
+                        COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                        ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(a.reservation_created_at, a.reservation_date) - a.applied_at)) / 86400.0)::numeric, 2) AS days
+                    FROM applications a
+                    JOIN students s ON s.id = a.student_id
+                    WHERE a.applied_at IS NOT NULL
+                      AND COALESCE(a.reservation_created_at, a.reservation_date) IS NOT NULL
+                    GROUP BY 1
+                ),
+                latest_interview AS (
+                    SELECT DISTINCT ON (i.student_id)
+                        i.student_id,
+                        i.scheduled_at
+                    FROM interviews i
+                    WHERE i.student_id IS NOT NULL
+                    ORDER BY i.student_id, COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) DESC, i.id DESC
+                ),
+                reserve_to_interview_lt AS (
+                    SELECT
+                        COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                        ROUND(AVG(EXTRACT(EPOCH FROM (li.scheduled_at - COALESCE(a.reservation_date, a.reservation_created_at))) / 86400.0)::numeric, 2) AS days
+                    FROM applications a
+                    JOIN students s ON s.id = a.student_id
+                    JOIN latest_interview li ON li.student_id = a.student_id
+                    WHERE COALESCE(a.reservation_date, a.reservation_created_at) IS NOT NULL
+                      AND li.scheduled_at IS NOT NULL
+                    GROUP BY 1
                 )
                 SELECT
                     src.source_company,
                     COALESCE(daily_app.cnt, 0)::int AS daily_applications,
+                    COALESCE(daily_avg.avg_daily_applications, 0)::numeric(10,2) AS avg_daily_applications,
                     COALESCE(app_s.cnt, 0)::int AS applications_students,
                     COALESCE(reserve_s.cnt, 0)::int AS reserved_students,
-                    COALESCE(interview_s.cnt, 0)::int AS interviewed_students,
+                    COALESCE(interview_s.cnt, 0)::int AS interview_scheduled_students,
+                    COALESCE(interview_completed_s.cnt, 0)::int AS interviewed_students,
+                    COALESCE(interview_no_show_s.cnt, 0)::int AS no_show_students,
                     COALESCE(proposal_s.cnt, 0)::int AS proposed_students,
                     COALESCE(join_s.cnt, 0)::int AS joined_students,
+                    app_to_reserve_lt.days AS apply_to_reservation_lead_time_days_avg,
+                    reserve_to_interview_lt.days AS reservation_to_interview_lead_time_days_avg,
                     ROUND((COALESCE(reserve_s.cnt, 0)::numeric / NULLIF(COALESCE(app_s.cnt, 0), 0)) * 100, 2) AS application_to_reservation_rate,
                     ROUND((COALESCE(interview_s.cnt, 0)::numeric / NULLIF(COALESCE(reserve_s.cnt, 0), 0)) * 100, 2) AS reservation_to_interview_rate,
-                    ROUND((COALESCE(proposal_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS interview_to_proposal_rate,
-                    ROUND((COALESCE(join_s.cnt, 0)::numeric / NULLIF(COALESCE(proposal_s.cnt, 0), 0)) * 100, 2) AS proposal_to_join_rate
+                    ROUND((COALESCE(proposal_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_completed_s.cnt, 0), 0)) * 100, 2) AS interview_to_proposal_rate,
+                    ROUND((COALESCE(join_s.cnt, 0)::numeric / NULLIF(COALESCE(proposal_s.cnt, 0), 0)) * 100, 2) AS proposal_to_join_rate,
+                    ROUND((COALESCE(interview_completed_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS interview_completed_rate,
+                    ROUND((COALESCE(interview_no_show_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS no_show_rate
                 FROM src
                 LEFT JOIN app_s ON app_s.source_company = src.source_company
                 LEFT JOIN reserve_s ON reserve_s.source_company = src.source_company
                 LEFT JOIN interview_s ON interview_s.source_company = src.source_company
+                LEFT JOIN interview_completed_s ON interview_completed_s.source_company = src.source_company
+                LEFT JOIN interview_no_show_s ON interview_no_show_s.source_company = src.source_company
                 LEFT JOIN proposal_s ON proposal_s.source_company = src.source_company
                 LEFT JOIN join_s ON join_s.source_company = src.source_company
                 LEFT JOIN daily_app ON daily_app.source_company = src.source_company
+                LEFT JOIN daily_avg ON daily_avg.source_company = src.source_company
+                LEFT JOIN app_to_reserve_lt ON app_to_reserve_lt.source_company = src.source_company
+                LEFT JOIN reserve_to_interview_lt ON reserve_to_interview_lt.source_company = src.source_company
                 ORDER BY src.source_company ASC
             `);
             res.json(bySourceRes.rows);
@@ -1798,7 +1924,40 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     SELECT COUNT(DISTINCT student_id)::int AS cnt
                     FROM interviews
                     WHERE student_id IS NOT NULL
+                      AND scheduled_at IS NOT NULL
+                ),
+                interview_completed_s AS (
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
                       AND (COALESCE(status, '') IN ('completed', '面談実施', 'interviewed') OR interviewed_at IS NOT NULL)
+                ),
+                interview_no_show_s AS (
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
+                      AND COALESCE(status, '') = 'no_show'
+                ),
+                apply_to_reserve_lt AS (
+                    SELECT ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(reservation_created_at, reservation_date) - applied_at)) / 86400.0)::numeric, 2) AS days
+                    FROM applications
+                    WHERE applied_at IS NOT NULL
+                      AND COALESCE(reservation_created_at, reservation_date) IS NOT NULL
+                ),
+                latest_interview AS (
+                    SELECT DISTINCT ON (student_id)
+                        student_id,
+                        scheduled_at
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
+                    ORDER BY student_id, COALESCE(scheduled_at, interviewed_at, created_at) DESC, id DESC
+                ),
+                reserve_to_interview_lt AS (
+                    SELECT ROUND(AVG(EXTRACT(EPOCH FROM (li.scheduled_at - COALESCE(a.reservation_date, a.reservation_created_at))) / 86400.0)::numeric, 2) AS days
+                    FROM applications a
+                    JOIN latest_interview li ON li.student_id = a.student_id
+                    WHERE COALESCE(a.reservation_date, a.reservation_created_at) IS NOT NULL
+                      AND li.scheduled_at IS NOT NULL
                 ),
                 proposal_s AS (
                     SELECT COUNT(DISTINCT student_id)::int AS cnt
@@ -1812,10 +1971,14 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                 SELECT
                     app_s.cnt AS applications_students,
                     reserve_s.cnt AS reserved_students,
-                    interview_s.cnt AS interviewed_students,
+                    interview_s.cnt AS interview_scheduled_students,
+                    interview_completed_s.cnt AS interviewed_students,
+                    interview_no_show_s.cnt AS no_show_students,
                     proposal_s.cnt AS proposed_students,
-                    join_s.cnt AS joined_students
-                FROM app_s, reserve_s, interview_s, proposal_s, join_s
+                    join_s.cnt AS joined_students,
+                    apply_to_reserve_lt.days AS apply_to_reservation_lead_time_days_avg,
+                    reserve_to_interview_lt.days AS reservation_to_interview_lead_time_days_avg
+                FROM app_s, reserve_s, interview_s, interview_completed_s, interview_no_show_s, proposal_s, join_s, apply_to_reserve_lt, reserve_to_interview_lt
             `),
             pool.query(`
                 SELECT COALESCE(lr.reason_name, '未設定') AS reason_name, COUNT(*)::int AS count
@@ -1830,7 +1993,9 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
         const s = summaryRes.rows[0] || {};
         const applicationsStudents = Number(s.applications_students || 0);
         const reservedStudents = Number(s.reserved_students || 0);
+        const interviewScheduledStudents = Number(s.interview_scheduled_students || 0);
         const interviewedStudents = Number(s.interviewed_students || 0);
+        const noShowStudents = Number(s.no_show_students || 0);
         const proposedStudents = Number(s.proposed_students || 0);
         const joinedStudents = Number(s.joined_students || 0);
         const rate = (a: number, b: number) => (b > 0 ? Number(((a / b) * 100).toFixed(2)) : 0);
@@ -1838,14 +2003,20 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
             daily_applications: dailyRes.rows,
             daily_settings: dailySettingsRes.rows,
             application_to_reservation_rate: rate(reservedStudents, applicationsStudents),
-            reservation_to_interview_rate: rate(interviewedStudents, reservedStudents),
+            reservation_to_interview_rate: rate(interviewScheduledStudents, reservedStudents),
             interview_to_proposal_rate: rate(proposedStudents, interviewedStudents),
             proposal_to_join_rate: rate(joinedStudents, proposedStudents),
+            apply_to_reservation_lead_time_days_avg: s.apply_to_reservation_lead_time_days_avg !== null ? Number(s.apply_to_reservation_lead_time_days_avg) : null,
+            reservation_to_interview_lead_time_days_avg: s.reservation_to_interview_lead_time_days_avg !== null ? Number(s.reservation_to_interview_lead_time_days_avg) : null,
+            interview_completed_rate: rate(interviewedStudents, interviewScheduledStudents),
+            no_show_rate: rate(noShowStudents, interviewScheduledStudents),
             lost_reason_ranking: lostRes.rows,
             counts: {
                 applications_students: applicationsStudents,
                 reserved_students: reservedStudents,
+                interview_scheduled_students: interviewScheduledStudents,
                 interviewed_students: interviewedStudents,
+                no_show_students: noShowStudents,
                 proposed_students: proposedStudents,
                 joined_students: joinedStudents
             }

@@ -36,6 +36,7 @@ const matcherForm = ref({
   interview_actual_at: '',
   interview_status: 'completed'
 });
+const hourOptions = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 const proposalEvents = ref<any[]>([]);
 const proposalLostReasons = ref<any[]>([]);
 const eventProposals = ref<any[]>([]);
@@ -212,6 +213,19 @@ const normalizeHourDateTime = (value?: string | null) => {
   return v || null;
 };
 const forceHourOnly = (value?: string | null) => toDateTimeLocalHour(value);
+const getDatePart = (value?: string | null) => {
+  const v = toDateTimeLocalHour(value);
+  return v ? v.slice(0, 10) : '';
+};
+const getHourPart = (value?: string | null) => {
+  const v = toDateTimeLocalHour(value);
+  return v ? v.slice(11, 13) : '10';
+};
+const mergeDateHour = (date: string, hour: string) => {
+  if (!date) return '';
+  const hh = (hour || '10').padStart(2, '0');
+  return `${date}T${hh}:00`;
+};
 
 const registerMatcherApply = async () => {
   const token = localStorage.getItem('token');
@@ -385,16 +399,29 @@ const linkEvent = async () => {
   fetchDetail();
 };
 
-const updateEventParticipationStatus = async (eventId: number, status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL') => {
+const updateEventParticipationStatus = async (
+  eventId: number,
+  studentEventId: number,
+  status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL'
+) => {
   const token = localStorage.getItem('token');
-  await api.put(`/api/events/${eventId}/participants/${studentId}`, { status }, { headers: { Authorization: token } });
+  await api.put(
+    `/api/events/${eventId}/participants/${studentEventId}`,
+    { status },
+    { headers: { Authorization: token } }
+  );
   fetchDetail();
 };
 
-const updateEventParticipationDate = async (eventId: number, currentStatus: string, date: string) => {
+const updateEventParticipationDate = async (
+  eventId: number,
+  studentEventId: number,
+  currentStatus: string,
+  date: string
+) => {
   const token = localStorage.getItem('token');
   await api.put(
-    `/api/events/${eventId}/participants/${studentId}`,
+    `/api/events/${eventId}/participants/${studentEventId}`,
     { status: currentStatus || 'A_ENTRY', selected_event_date: date || null },
     { headers: { Authorization: token } }
   );
@@ -945,29 +972,99 @@ watch(selectedEventId, () => {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div class="border border-gray-200 rounded-lg p-3">
                 <p class="text-sm font-semibold mb-2">1) 申込</p>
-                <input v-model="matcherForm.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" @change="matcherForm.applied_at = forceHourOnly(matcherForm.applied_at)" />
+                <div class="grid grid-cols-12 gap-2 mb-2">
+                  <input
+                    :value="getDatePart(matcherForm.applied_at)"
+                    type="date"
+                    class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    @input="matcherForm.applied_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.applied_at))"
+                  />
+                  <select
+                    :value="getHourPart(matcherForm.applied_at)"
+                    class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    @change="matcherForm.applied_at = mergeDateHour(getDatePart(matcherForm.applied_at), ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option v-for="h in hourOptions" :key="`matcher-apply-hour-${h}`" :value="h">{{ h }}:00</option>
+                  </select>
+                </div>
                 <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherApply">申込登録</button>
               </div>
               <div class="border border-gray-200 rounded-lg p-3">
                 <p class="text-sm font-semibold mb-2">2) メッセージ送信</p>
-                <input v-model="matcherForm.message_sent_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" @change="matcherForm.message_sent_at = forceHourOnly(matcherForm.message_sent_at)" />
+                <div class="grid grid-cols-12 gap-2 mb-2">
+                  <input
+                    :value="getDatePart(matcherForm.message_sent_at)"
+                    type="date"
+                    class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    @input="matcherForm.message_sent_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.message_sent_at))"
+                  />
+                  <select
+                    :value="getHourPart(matcherForm.message_sent_at)"
+                    class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    @change="matcherForm.message_sent_at = mergeDateHour(getDatePart(matcherForm.message_sent_at), ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option v-for="h in hourOptions" :key="`matcher-msg-hour-${h}`" :value="h">{{ h }}:00</option>
+                  </select>
+                </div>
                 <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherMessage">メッセージ送信登録</button>
               </div>
               <div class="border border-gray-200 rounded-lg p-3">
                 <p class="text-sm font-semibold mb-2">3) 予約</p>
-                <input v-model="matcherForm.reservation_created_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" @change="matcherForm.reservation_created_at = forceHourOnly(matcherForm.reservation_created_at)" />
+                <div class="grid grid-cols-12 gap-2 mb-2">
+                  <input
+                    :value="getDatePart(matcherForm.reservation_created_at)"
+                    type="date"
+                    class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    @input="matcherForm.reservation_created_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.reservation_created_at))"
+                  />
+                  <select
+                    :value="getHourPart(matcherForm.reservation_created_at)"
+                    class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    @change="matcherForm.reservation_created_at = mergeDateHour(getDatePart(matcherForm.reservation_created_at), ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option v-for="h in hourOptions" :key="`matcher-reserve-hour-${h}`" :value="h">{{ h }}:00</option>
+                  </select>
+                </div>
                 <select v-model="matcherForm.reservation_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2">
                   <option value="pending">pending</option>
                   <option value="reserved">reserved</option>
                   <option value="cancel">cancel</option>
                   <option value="no_response">no_response</option>
                 </select>
-                <input v-model="matcherForm.interview_scheduled_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" @change="matcherForm.interview_scheduled_at = forceHourOnly(matcherForm.interview_scheduled_at)" />
+                <div class="grid grid-cols-12 gap-2 mb-2">
+                  <input
+                    :value="getDatePart(matcherForm.interview_scheduled_at)"
+                    type="date"
+                    class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    @input="matcherForm.interview_scheduled_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.interview_scheduled_at))"
+                  />
+                  <select
+                    :value="getHourPart(matcherForm.interview_scheduled_at)"
+                    class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    @change="matcherForm.interview_scheduled_at = mergeDateHour(getDatePart(matcherForm.interview_scheduled_at), ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option v-for="h in hourOptions" :key="`matcher-scheduled-hour-${h}`" :value="h">{{ h }}:00</option>
+                  </select>
+                </div>
                 <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherReservation">予約登録</button>
               </div>
               <div class="border border-gray-200 rounded-lg p-3">
                 <p class="text-sm font-semibold mb-2">4) 面談実施</p>
-                <input v-model="matcherForm.interview_actual_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2" @change="matcherForm.interview_actual_at = forceHourOnly(matcherForm.interview_actual_at)" />
+                <div class="grid grid-cols-12 gap-2 mb-2">
+                  <input
+                    :value="getDatePart(matcherForm.interview_actual_at)"
+                    type="date"
+                    class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    @input="matcherForm.interview_actual_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.interview_actual_at))"
+                  />
+                  <select
+                    :value="getHourPart(matcherForm.interview_actual_at)"
+                    class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    @change="matcherForm.interview_actual_at = mergeDateHour(getDatePart(matcherForm.interview_actual_at), ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option v-for="h in hourOptions" :key="`matcher-actual-hour-${h}`" :value="h">{{ h }}:00</option>
+                  </select>
+                </div>
                 <select v-model="matcherForm.interview_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2">
                   <option value="scheduled">scheduled</option>
                   <option value="completed">completed</option>
@@ -1028,7 +1125,7 @@ watch(selectedEventId, () => {
               参加・エントリーイベント
             </h2>
             <div class="space-y-3 mb-6">
-              <div v-for="e in studentEvents" :key="e.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div v-for="e in studentEvents" :key="e.student_event_id || e.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div>
                   <span class="text-sm font-medium text-gray-800">{{ e.title }}</span>
                   <p class="text-xs text-gray-500">{{ e.selected_event_date ? formatDateTime(e.selected_event_date) : formatDateTime(e.event_date) }}</p>
@@ -1038,7 +1135,7 @@ watch(selectedEventId, () => {
                     v-if="eventDateOptions(e).length > 1"
                     class="px-2 py-1 border border-gray-300 rounded-md text-xs bg-white max-w-[180px]"
                     :value="e.selected_event_date || ''"
-                    @change="updateEventParticipationDate(e.id, e.participation_status, ($event.target as HTMLSelectElement).value)"
+                    @change="updateEventParticipationDate(e.id, e.student_event_id, e.participation_status, ($event.target as HTMLSelectElement).value)"
                   >
                     <option disabled value="">参加日を選択</option>
                     <option v-for="d in eventDateOptions(e)" :key="`student-event-date-${e.id}-${d}`" :value="d">
@@ -1051,7 +1148,7 @@ watch(selectedEventId, () => {
                   <select
                     class="px-2 py-1 border border-gray-300 rounded-md text-xs bg-white"
                     :value="e.participation_status === 'registered' ? 'A_ENTRY' : (e.participation_status || 'A_ENTRY')"
-                    @change="updateEventParticipationStatus(e.id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL')"
+                    @change="updateEventParticipationStatus(e.id, e.student_event_id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL')"
                   >
                     <option value="A_ENTRY">A:エントリー</option>
                     <option value="B_WAITING">B:回答待ち</option>

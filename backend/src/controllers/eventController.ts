@@ -51,10 +51,61 @@ const ensureStudentEventsColumns = async () => {
     if (studentEventsColumnsReady) return;
     if (!studentEventsColumnsPromise) {
         studentEventsColumnsPromise = (async () => {
+            // Ensure selected_event_date column exists
             await pool.query(`
                 ALTER TABLE student_events
                 ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP
             `);
+
+            // Ensure surrogate primary key for student_events to allow multiple rows
+            // per (student_id, event_id) with different selected_event_date
+            await pool.query(`
+                ALTER TABLE student_events
+                ADD COLUMN IF NOT EXISTS id SERIAL
+            `);
+
+            // Drop legacy primary key on (student_id, event_id) if it exists
+            await pool.query(`
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints
+                        WHERE table_schema = 'public'
+                          AND table_name = 'student_events'
+                          AND constraint_type = 'PRIMARY KEY'
+                          AND constraint_name = 'student_events_pkey'
+                    ) THEN
+                        ALTER TABLE student_events DROP CONSTRAINT student_events_pkey;
+                    END IF;
+                END
+                $$;
+            `);
+
+            // Ensure primary key on id
+            await pool.query(`
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints
+                        WHERE table_schema = 'public'
+                          AND table_name = 'student_events'
+                          AND constraint_type = 'PRIMARY KEY'
+                    ) THEN
+                        ALTER TABLE student_events
+                        ADD CONSTRAINT student_events_pkey PRIMARY KEY (id);
+                    END IF;
+                END
+                $$;
+            `);
+
+            // Unique index so that the same student/event/date triplet is not duplicated
+            await pool.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_student_events_unique_triplet
+                ON student_events(student_id, event_id, selected_event_date)
+            `);
+
             studentEventsColumnsReady = true;
         })().finally(() => {
             studentEventsColumnsPromise = null;
@@ -257,6 +308,7 @@ export const getEventDetail = async (req: Request, res: Response) => {
         );
         const participantsRes = await pool.query(`
             SELECT 
+                se.id,
                 se.student_id,
                 se.status,
                 se.created_at,
@@ -295,9 +347,9 @@ export const updateParticipantStatus = async (req: Request, res: Response) => {
             `UPDATE student_events
              SET status = $1,
                  selected_event_date = COALESCE($2, selected_event_date)
-             WHERE event_id = $3 AND student_id = $4
+             WHERE id = $3 AND event_id = $4
              RETURNING *`,
-            [status, selected_event_date || null, id, studentId]
+            [status, selected_event_date || null, studentId, id]
         );
         res.json(result.rows[0]);
     } catch (err: any) {

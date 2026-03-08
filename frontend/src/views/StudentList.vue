@@ -97,6 +97,14 @@ const funnelKpi = ref({
   daily_settings: [] as Array<{ day: string; count: number }>,
   application_to_reservation_rate: 0,
   reservation_to_interview_rate: 0,
+  apply_to_reservation_lead_time_days_avg: null as number | null,
+  reservation_to_interview_lead_time_days_avg: null as number | null,
+  interview_completed_rate: 0,
+  no_show_rate: 0,
+  counts: {
+    interviewed_students: 0,
+    no_show_students: 0
+  },
   interview_to_proposal_rate: 0,
   proposal_to_join_rate: 0,
   lost_reason_ranking: [] as Array<{ reason_name: string; count: number }>
@@ -197,6 +205,20 @@ const normalizeHourDateTime = (value?: string | null) => {
 };
 
 const forceHourOnly = (value?: string | null) => toDateTimeHour(value);
+const hourOptions = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+const getDatePart = (value?: string | null) => {
+  const v = toDateTimeHour(value);
+  return v ? v.slice(0, 10) : '';
+};
+const getHourPart = (value?: string | null) => {
+  const v = toDateTimeHour(value);
+  return v ? v.slice(11, 13) : '10';
+};
+const mergeDateHour = (date: string, hour: string) => {
+  if (!date) return '';
+  const hh = (hour || '10').padStart(2, '0');
+  return `${date}T${hh}:00`;
+};
 
 const fetchStudents = async () => {
   try {
@@ -251,6 +273,18 @@ const fetchFunnelKpi = async () => {
       daily_settings: Array.isArray(res.data?.daily_settings) ? res.data.daily_settings : [],
       application_to_reservation_rate: Number(res.data?.application_to_reservation_rate || 0),
       reservation_to_interview_rate: Number(res.data?.reservation_to_interview_rate || 0),
+      apply_to_reservation_lead_time_days_avg: res.data?.apply_to_reservation_lead_time_days_avg !== null && res.data?.apply_to_reservation_lead_time_days_avg !== undefined
+        ? Number(res.data.apply_to_reservation_lead_time_days_avg)
+        : null,
+      reservation_to_interview_lead_time_days_avg: res.data?.reservation_to_interview_lead_time_days_avg !== null && res.data?.reservation_to_interview_lead_time_days_avg !== undefined
+        ? Number(res.data.reservation_to_interview_lead_time_days_avg)
+        : null,
+      interview_completed_rate: Number(res.data?.interview_completed_rate || 0),
+      no_show_rate: Number(res.data?.no_show_rate || 0),
+      counts: {
+        interviewed_students: Number(res.data?.counts?.interviewed_students || 0),
+        no_show_students: Number(res.data?.counts?.no_show_students || 0)
+      },
       interview_to_proposal_rate: Number(res.data?.interview_to_proposal_rate || 0),
       proposal_to_join_rate: Number(res.data?.proposal_to_join_rate || 0),
       lost_reason_ranking: Array.isArray(res.data?.lost_reason_ranking) ? res.data.lost_reason_ranking : []
@@ -900,14 +934,38 @@ watch(filteredStudents, () => {
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-9 gap-3 mb-6">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <p class="text-xs text-gray-500">申込→予約率</p>
           <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.application_to_reservation_rate.toFixed(2) }}%</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <p class="text-xs text-gray-500">申込→予約 リードタイム</p>
+          <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.apply_to_reservation_lead_time_days_avg ?? '-' }}日</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <p class="text-xs text-gray-500">予約→面談率</p>
           <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.reservation_to_interview_rate.toFixed(2) }}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <p class="text-xs text-gray-500">予約→面談 リードタイム</p>
+          <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.reservation_to_interview_lead_time_days_avg ?? '-' }}日</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <p class="text-xs text-gray-500">面談実施率</p>
+          <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.interview_completed_rate.toFixed(2) }}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <p class="text-xs text-gray-500">飛ばれ率</p>
+          <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.no_show_rate.toFixed(2) }}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <p class="text-xs text-gray-500">面談実施数</p>
+          <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.counts.interviewed_students }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <p class="text-xs text-gray-500">飛ばれ数</p>
+          <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.counts.no_show_students }}</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <p class="text-xs text-gray-500">面談→イベント提案率</p>
@@ -1408,11 +1466,39 @@ watch(filteredStudents, () => {
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">申込日（時間単位）</label>
-            <input v-model="newStudent.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" @change="newStudent.applied_at = forceHourOnly(newStudent.applied_at)">
+            <div class="grid grid-cols-12 gap-2">
+              <input
+                :value="getDatePart(newStudent.applied_at)"
+                type="date"
+                class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                @input="newStudent.applied_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(newStudent.applied_at))"
+              >
+              <select
+                :value="getHourPart(newStudent.applied_at)"
+                class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                @change="newStudent.applied_at = mergeDateHour(getDatePart(newStudent.applied_at), ($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="h in hourOptions" :key="`new-applied-hour-${h}`" :value="h">{{ h }}:00</option>
+              </select>
+            </div>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">面談決定日（時間単位）</label>
-            <input v-model="newStudent.meeting_decided_date" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" @change="newStudent.meeting_decided_date = forceHourOnly(newStudent.meeting_decided_date)">
+            <div class="grid grid-cols-12 gap-2">
+              <input
+                :value="getDatePart(newStudent.meeting_decided_date)"
+                type="date"
+                class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                @input="newStudent.meeting_decided_date = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(newStudent.meeting_decided_date))"
+              >
+              <select
+                :value="getHourPart(newStudent.meeting_decided_date)"
+                class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                @change="newStudent.meeting_decided_date = mergeDateHour(getDatePart(newStudent.meeting_decided_date), ($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="h in hourOptions" :key="`new-meeting-hour-${h}`" :value="h">{{ h }}:00</option>
+              </select>
+            </div>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">初回面談日</label>
@@ -1463,7 +1549,21 @@ watch(filteredStudents, () => {
               <label class="block text-xs text-gray-600 mb-1">流入元</label>
               <input v-model="funnelForm.source" type="text" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
               <label class="block text-xs text-gray-600 mb-1">申込日</label>
-              <input v-model="funnelForm.applied_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2" @change="funnelForm.applied_at = forceHourOnly(funnelForm.applied_at)">
+              <div class="grid grid-cols-12 gap-2 mb-2">
+                <input
+                  :value="getDatePart(funnelForm.applied_at)"
+                  type="date"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  @input="funnelForm.applied_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.applied_at))"
+                >
+                <select
+                  :value="getHourPart(funnelForm.applied_at)"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  @change="funnelForm.applied_at = mergeDateHour(getDatePart(funnelForm.applied_at), ($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="h in hourOptions" :key="`funnel-applied-hour-${h}`" :value="h">{{ h }}:00</option>
+                </select>
+              </div>
               <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitApplication">申込登録</button>
             </div>
 
@@ -1472,16 +1572,58 @@ watch(filteredStudents, () => {
               <label class="block text-xs text-gray-600 mb-1">予約ステータス</label>
               <input value="初回面談" type="text" disabled class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2 bg-gray-50 text-gray-600">
               <label class="block text-xs text-gray-600 mb-1">予約日（TimeRex予約日）</label>
-              <input v-model="funnelForm.reservation_date" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2" @change="funnelForm.reservation_date = forceHourOnly(funnelForm.reservation_date)">
+              <div class="grid grid-cols-12 gap-2 mb-2">
+                <input
+                  :value="getDatePart(funnelForm.reservation_date)"
+                  type="date"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  @input="funnelForm.reservation_date = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.reservation_date))"
+                >
+                <select
+                  :value="getHourPart(funnelForm.reservation_date)"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  @change="funnelForm.reservation_date = mergeDateHour(getDatePart(funnelForm.reservation_date), ($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="h in hourOptions" :key="`funnel-reservation-hour-${h}`" :value="h">{{ h }}:00</option>
+                </select>
+              </div>
               <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitReservation">予約登録</button>
             </div>
 
             <div class="border border-gray-200 rounded-lg p-3">
               <h3 class="font-semibold text-sm mb-2">3) 面談実施登録</h3>
               <label class="block text-xs text-gray-600 mb-1">面談予定日（実際の面談日）</label>
-              <input v-model="funnelForm.interview_scheduled_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2" @change="funnelForm.interview_scheduled_at = forceHourOnly(funnelForm.interview_scheduled_at)">
+              <div class="grid grid-cols-12 gap-2 mb-2">
+                <input
+                  :value="getDatePart(funnelForm.interview_scheduled_at)"
+                  type="date"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  @input="funnelForm.interview_scheduled_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.interview_scheduled_at))"
+                >
+                <select
+                  :value="getHourPart(funnelForm.interview_scheduled_at)"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  @change="funnelForm.interview_scheduled_at = mergeDateHour(getDatePart(funnelForm.interview_scheduled_at), ($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="h in hourOptions" :key="`funnel-scheduled-hour-${h}`" :value="h">{{ h }}:00</option>
+                </select>
+              </div>
               <label class="block text-xs text-gray-600 mb-1">面談実施日</label>
-              <input v-model="funnelForm.interview_interviewed_at" type="datetime-local" step="3600" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2" @change="funnelForm.interview_interviewed_at = forceHourOnly(funnelForm.interview_interviewed_at)">
+              <div class="grid grid-cols-12 gap-2 mb-2">
+                <input
+                  :value="getDatePart(funnelForm.interview_interviewed_at)"
+                  type="date"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  @input="funnelForm.interview_interviewed_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.interview_interviewed_at))"
+                >
+                <select
+                  :value="getHourPart(funnelForm.interview_interviewed_at)"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  @change="funnelForm.interview_interviewed_at = mergeDateHour(getDatePart(funnelForm.interview_interviewed_at), ($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="h in hourOptions" :key="`funnel-interviewed-hour-${h}`" :value="h">{{ h }}:00</option>
+                </select>
+              </div>
               <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitInterview">面談実施登録</button>
             </div>
 
