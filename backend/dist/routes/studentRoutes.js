@@ -14,6 +14,9 @@ router.get('/funnel/master', auth_1.authenticate, studentController_1.getFunnelM
 router.get('/source-categories', auth_1.authenticate, studentController_1.getSourceCategories);
 router.post('/source-categories', auth_1.authenticate, studentController_1.createSourceCategory);
 router.delete('/source-categories/:id', auth_1.authenticate, studentController_1.deleteSourceCategory);
+router.get('/graduation-year-categories', auth_1.authenticate, studentController_1.getGraduationYearCategories);
+router.post('/graduation-year-categories', auth_1.authenticate, studentController_1.createGraduationYearCategory);
+router.delete('/graduation-year-categories/:id', auth_1.authenticate, studentController_1.deleteGraduationYearCategory);
 router.post('/', auth_1.authenticate, studentController_1.createStudent);
 router.post('/import', auth_1.authenticate, studentController_1.importStudents);
 router.get('/:id/matcher-funnel', auth_1.authenticate, studentController_1.getMatcherFunnelByStudent);

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.getStudentEventProposals = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
+exports.deleteGraduationYearCategory = exports.createGraduationYearCategory = exports.getGraduationYearCategories = exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.getStudentEventProposals = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
 const db_1 = __importDefault(require("../config/db"));
 let interviewScheduleTableReady = false;
 let interviewScheduleTablePromise = null;
@@ -21,6 +21,8 @@ let studentExtendedColumnsReady = false;
 let studentExtendedColumnsPromise = null;
 let sourceCategoriesTableReady = false;
 let sourceCategoriesTablePromise = null;
+let graduationYearCategoriesTableReady = false;
+let graduationYearCategoriesTablePromise = null;
 let studentTaskColumnsReady = false;
 let studentTaskColumnsPromise = null;
 let salesFunnelTablesReady = false;
@@ -101,6 +103,25 @@ const ensureSourceCategoriesTable = () => __awaiter(void 0, void 0, void 0, func
     }
     yield sourceCategoriesTablePromise;
 });
+const ensureGraduationYearCategoriesTable = () => __awaiter(void 0, void 0, void 0, function* () {
+    if (graduationYearCategoriesTableReady)
+        return;
+    if (!graduationYearCategoriesTablePromise) {
+        graduationYearCategoriesTablePromise = (() => __awaiter(void 0, void 0, void 0, function* () {
+            yield db_1.default.query(`
+                CREATE TABLE IF NOT EXISTS graduation_year_categories (
+                    id SERIAL PRIMARY KEY,
+                    year INTEGER UNIQUE NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            graduationYearCategoriesTableReady = true;
+        }))().finally(() => {
+            graduationYearCategoriesTablePromise = null;
+        });
+    }
+    yield graduationYearCategoriesTablePromise;
+});
 const ensureStudentTaskColumns = () => __awaiter(void 0, void 0, void 0, function* () {
     if (studentTaskColumnsReady)
         return;
@@ -172,6 +193,14 @@ const ensureSalesFunnelTables = () => __awaiter(void 0, void 0, void 0, function
                 ADD COLUMN IF NOT EXISTS company VARCHAR(255)
             `);
             yield db_1.default.query(`
+                CREATE TABLE IF NOT EXISTS event_dates (
+                    id SERIAL PRIMARY KEY,
+                    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                    event_date TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            yield db_1.default.query(`
                 CREATE TABLE IF NOT EXISTS lost_reasons (
                     id SERIAL PRIMARY KEY,
                     reason_name VARCHAR(255) UNIQUE NOT NULL
@@ -185,9 +214,14 @@ const ensureSalesFunnelTables = () => __awaiter(void 0, void 0, void 0, function
                     proposed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     status VARCHAR(50) NOT NULL DEFAULT 'proposed',
                     lost_reason_id INTEGER REFERENCES lost_reasons(id) ON DELETE SET NULL,
+                    selected_event_date TIMESTAMP,
                     memo TEXT,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE event_proposals
+                ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP
             `);
             yield db_1.default.query(`
                 INSERT INTO lost_reasons (reason_name)
@@ -284,6 +318,26 @@ const normalizeProgressStage = (value) => {
         return 'トビ';
     return '面談調整中';
 };
+const normalizeToHour = (value) => {
+    const raw = normalizeNullableText(value);
+    if (!raw)
+        return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        return `${raw} 00:00:00`;
+    }
+    const direct = raw.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2})/);
+    if (direct) {
+        return `${direct[1]} ${direct[2]}:00:00`;
+    }
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime()))
+        return null;
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:00:00`;
+};
 const normalizeReferralStatus = (value) => {
     const raw = String(value !== null && value !== void 0 ? value : '').trim();
     if (!raw)
@@ -335,6 +389,15 @@ const ensureSourceCategoryFromStudent = (sourceCompany_1, ...args_1) => __awaite
         return;
     yield ensureSourceCategoriesTable();
     yield queryable.query('INSERT INTO source_categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING', [normalized]);
+});
+const ensureGraduationYearCategoryFromStudent = (graduationYear_1, ...args_1) => __awaiter(void 0, [graduationYear_1, ...args_1], void 0, function* (graduationYear, queryable = db_1.default) {
+    if (graduationYear === undefined || graduationYear === null || graduationYear === '')
+        return;
+    const year = Number(graduationYear);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100)
+        return;
+    yield ensureGraduationYearCategoriesTable();
+    yield queryable.query('INSERT INTO graduation_year_categories (year) VALUES ($1) ON CONFLICT (year) DO NOTHING', [year]);
 });
 const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const staffId = req.query.staffId;
@@ -421,7 +484,8 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         pushCol('next_action', next_action || null);
         pushCol('desired_industry', desired_industry || null);
         pushCol('desired_role', desired_role || null);
-        pushCol('graduation_year', normalizeGraduationYear(graduation_year));
+        const normalizedGraduationYear = normalizeGraduationYear(graduation_year);
+        pushCol('graduation_year', normalizedGraduationYear);
         pushCol('email', email || null);
         pushCol('phone', phone || null);
         pushCol('status', status || 'active');
@@ -429,14 +493,17 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         pushCol('staff_id', staff_id || null);
         pushCol('source_company', source_company || null);
         pushCol('interview_reason', interview_reason || null);
-        pushCol('meeting_decided_date', meeting_decided_date || null);
-        pushCol('first_interview_date', first_interview_date || null);
+        const normalizedMeetingDecidedDate = normalizeToHour(meeting_decided_date);
+        const normalizedFirstInterviewDate = normalizeToHour(first_interview_date);
+        pushCol('meeting_decided_date', normalizedMeetingDecidedDate);
+        pushCol('first_interview_date', normalizedFirstInterviewDate);
         pushCol('second_interview_date', second_interview_date || null);
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         const normalizedSourceCompany = normalizeNullableText(source_company);
         const result = yield db_1.default.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`, insertVals);
         const created = result.rows[0];
         yield ensureSourceCategoryFromStudent(normalizedSourceCompany);
+        yield ensureGraduationYearCategoryFromStudent(normalizedGraduationYear);
         yield db_1.default.query(`INSERT INTO matcher_funnel_logs (student_id, applied_at, reservation_status, reservation_created_at, interview_scheduled_at)
              VALUES ($1, COALESCE($2, CURRENT_TIMESTAMP), $3, $4, $5)
              ON CONFLICT (student_id)
@@ -446,10 +513,10 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
                reservation_created_at = COALESCE(EXCLUDED.reservation_created_at, matcher_funnel_logs.reservation_created_at),
                interview_scheduled_at = COALESCE(EXCLUDED.interview_scheduled_at, matcher_funnel_logs.interview_scheduled_at)`, [
             created.id,
-            normalizeNullableText((_a = req.body) === null || _a === void 0 ? void 0 : _a.applied_at),
+            normalizeToHour((_a = req.body) === null || _a === void 0 ? void 0 : _a.applied_at),
             'pending',
-            meeting_decided_date || null,
-            first_interview_date || null
+            normalizedMeetingDecidedDate,
+            normalizedFirstInterviewDate
         ]);
         yield db_1.default.query(`INSERT INTO applications (
                 student_id, student_name, source, applied_at, reservation_status, reservation_date
@@ -457,11 +524,11 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             created.id,
             created.name,
             normalizedSourceCompany,
-            normalizeNullableText(applied_at) || meeting_decided_date || null,
+            normalizeToHour(applied_at) || normalizedMeetingDecidedDate || null,
             '初回面談',
-            meeting_decided_date || null
+            normalizedMeetingDecidedDate
         ]);
-        const preContactDate = oneDayBefore(first_interview_date || null);
+        const preContactDate = oneDayBefore(normalizedFirstInterviewDate || null);
         if ((created === null || created === void 0 ? void 0 : created.id) && preContactDate) {
             yield db_1.default.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)', [created.id, preContactDate, '事前連絡']);
         }
@@ -962,7 +1029,8 @@ const updateStudentBasic = (req, res) => __awaiter(void 0, void 0, void 0, funct
         pushSet('faculty', faculty || null);
         pushSet('email', email || null);
         pushSet('phone', phone || null);
-        pushSet('graduation_year', normalizeGraduationYear(graduation_year));
+        const normalizedGraduationYear = normalizeGraduationYear(graduation_year);
+        pushSet('graduation_year', normalizedGraduationYear);
         pushSet('source_company', source_company || null);
         pushSet('interview_reason', interview_reason || null);
         pushSet('desired_industry', desired_industry || null);
@@ -981,6 +1049,8 @@ const updateStudentBasic = (req, res) => __awaiter(void 0, void 0, void 0, funct
             res.status(404).json({ error: 'Student not found' });
             return;
         }
+        yield ensureSourceCategoryFromStudent(source_company);
+        yield ensureGraduationYearCategoryFromStudent(normalizedGraduationYear);
         res.json(result.rows[0]);
     }
     catch (err) {
@@ -1156,7 +1226,7 @@ const registerMatcherApply = (req, res) => __awaiter(void 0, void 0, void 0, fun
     const { applied_at } = req.body || {};
     try {
         const row = yield upsertMatcherFunnelByStudentId(String(id), {
-            applied_at: normalizeNullableText(applied_at) || new Date().toISOString()
+            applied_at: normalizeToHour(applied_at) || normalizeToHour(new Date().toISOString())
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
@@ -1174,7 +1244,7 @@ const registerMatcherMessage = (req, res) => __awaiter(void 0, void 0, void 0, f
     const { message_sent_at } = req.body || {};
     try {
         const row = yield upsertMatcherFunnelByStudentId(String(id), {
-            message_sent_at: normalizeNullableText(message_sent_at) || new Date().toISOString()
+            message_sent_at: normalizeToHour(message_sent_at) || normalizeToHour(new Date().toISOString())
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
@@ -1192,9 +1262,9 @@ const registerMatcherReservation = (req, res) => __awaiter(void 0, void 0, void 
     const { reservation_created_at, reservation_status, interview_scheduled_at } = req.body || {};
     try {
         const row = yield upsertMatcherFunnelByStudentId(String(id), {
-            reservation_created_at: normalizeNullableText(reservation_created_at) || new Date().toISOString(),
+            reservation_created_at: normalizeToHour(reservation_created_at) || normalizeToHour(new Date().toISOString()),
             reservation_status: normalizeNullableText(reservation_status) || 'reserved',
-            interview_scheduled_at: normalizeNullableText(interview_scheduled_at)
+            interview_scheduled_at: normalizeToHour(interview_scheduled_at)
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
@@ -1212,9 +1282,9 @@ const registerMatcherInterview = (req, res) => __awaiter(void 0, void 0, void 0,
     const { interview_actual_at, interview_status, interview_scheduled_at } = req.body || {};
     try {
         const row = yield upsertMatcherFunnelByStudentId(String(id), {
-            interview_actual_at: normalizeNullableText(interview_actual_at),
+            interview_actual_at: normalizeToHour(interview_actual_at),
             interview_status: normalizeNullableText(interview_status) || 'completed',
-            interview_scheduled_at: normalizeNullableText(interview_scheduled_at)
+            interview_scheduled_at: normalizeToHour(interview_scheduled_at)
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
@@ -1283,7 +1353,21 @@ const getFunnelMasterData = (_req, res) => __awaiter(void 0, void 0, void 0, fun
     try {
         yield ensureSalesFunnelTables();
         const [eventsRes, reasonsRes] = yield Promise.all([
-            db_1.default.query('SELECT id, title AS event_name, event_date, company FROM events ORDER BY event_date DESC NULLS LAST, id DESC'),
+            db_1.default.query(`
+                SELECT
+                    e.id,
+                    e.title AS event_name,
+                    e.event_date,
+                    e.company,
+                    COALESCE(
+                        json_agg(ed.event_date ORDER BY ed.event_date ASC) FILTER (WHERE ed.event_date IS NOT NULL),
+                        '[]'::json
+                    ) AS event_dates
+                FROM events e
+                LEFT JOIN event_dates ed ON ed.event_id = e.id
+                GROUP BY e.id
+                ORDER BY e.event_date DESC NULLS LAST, e.id DESC
+            `),
             db_1.default.query('SELECT id, reason_name FROM lost_reasons ORDER BY id ASC')
         ]);
         res.json({
@@ -1315,11 +1399,11 @@ const createApplication = (req, res) => __awaiter(void 0, void 0, void 0, functi
             st.id,
             st.name,
             normalizeNullableText(source) || st.source_company || null,
-            normalizeNullableText(applied_at),
+            normalizeToHour(applied_at),
             normalizeNullableText(first_message_sent_at),
             normalizeNullableText(reservation_status),
-            normalizeNullableText(reservation_date),
-            normalizeNullableText(reservation_created_at)
+            normalizeToHour(reservation_date),
+            normalizeToHour(reservation_created_at)
         ]);
         res.status(201).json(result.rows[0]);
     }
@@ -1347,9 +1431,9 @@ const updateApplicationReservation = (req, res) => __awaiter(void 0, void 0, voi
              WHERE id = $5
              RETURNING *`, [
             normalizeNullableText(reservation_status),
-            normalizeNullableText(reservation_date),
-            normalizeNullableText(reservation_created_at),
-            normalizeNullableText(first_message_sent_at),
+            normalizeToHour(reservation_date),
+            normalizeToHour(reservation_created_at),
+            normalizeToHour(first_message_sent_at),
             app.id
         ]);
         res.json(result.rows[0]);
@@ -1368,8 +1452,8 @@ const createInterviewRecord = (req, res) => __awaiter(void 0, void 0, void 0, fu
              VALUES ($1, $2, $3, $4)
              RETURNING *`, [
             id,
-            normalizeNullableText(scheduled_at),
-            normalizeNullableText(interviewed_at),
+            normalizeToHour(scheduled_at),
+            normalizeToHour(interviewed_at),
             normalizeNullableText(status) || 'completed'
         ]);
         res.status(201).json(result.rows[0]);
@@ -1381,21 +1465,22 @@ const createInterviewRecord = (req, res) => __awaiter(void 0, void 0, void 0, fu
 exports.createInterviewRecord = createInterviewRecord;
 const createEventProposal = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { event_id, proposed_at, status, lost_reason_id, memo } = req.body || {};
+    const { event_id, proposed_at, status, lost_reason_id, selected_event_date, memo } = req.body || {};
     if (!event_id) {
         res.status(400).json({ error: 'event_id is required' });
         return;
     }
     try {
         yield ensureSalesFunnelTables();
-        const result = yield db_1.default.query(`INSERT INTO event_proposals (student_id, event_id, proposed_at, status, lost_reason_id, memo)
-             VALUES ($1, $2, COALESCE($3, CURRENT_TIMESTAMP), $4, $5, $6)
+        const result = yield db_1.default.query(`INSERT INTO event_proposals (student_id, event_id, proposed_at, status, lost_reason_id, selected_event_date, memo)
+             VALUES ($1, $2, COALESCE($3, CURRENT_TIMESTAMP), $4, $5, $6, $7)
              RETURNING *`, [
             id,
             Number(event_id),
             normalizeNullableText(proposed_at),
             normalizeNullableText(status) || 'proposed',
             lost_reason_id ? Number(lost_reason_id) : null,
+            normalizeToHour(selected_event_date),
             normalizeNullableText(memo)
         ]);
         res.status(201).json(result.rows[0]);
@@ -1416,6 +1501,7 @@ const getStudentEventProposals = (req, res) => __awaiter(void 0, void 0, void 0,
                 ep.proposed_at,
                 ep.status,
                 ep.lost_reason_id,
+                ep.selected_event_date,
                 ep.memo,
                 ep.created_at,
                 e.title AS event_name,
@@ -1660,8 +1746,9 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 values.push(val);
                 updateParts.push(`${col} = $${values.length}`);
             };
+            const normalizedGraduationYear = normalizeGraduationYear(s.graduation_year);
             pushSet('source_company', s.source_company || null);
-            pushSet('graduation_year', normalizeGraduationYear(s.graduation_year));
+            pushSet('graduation_year', normalizedGraduationYear);
             pushSet('staff_id', s.staff_id || null);
             pushSet('referral_status', normalizeReferralStatus(s.referral_status));
             pushSet('progress_stage', normalizeProgressStage(s.progress_stage));
@@ -1680,6 +1767,7 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
                     yield client.query(`UPDATE students SET ${updateParts.join(', ')} WHERE id = $${values.length}`, values);
                 }
                 yield ensureSourceCategoryFromStudent(s.source_company, client);
+                yield ensureGraduationYearCategoryFromStudent(normalizedGraduationYear, client);
                 if (s.task_due_date) {
                     const lastTask = yield client.query('SELECT id FROM student_tasks WHERE student_id = $1 ORDER BY created_at DESC LIMIT 1', [id]);
                     if (lastTask.rows.length > 0) {
@@ -1703,8 +1791,9 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
             pushInsert('name', name);
             pushInsert('university', university || null);
             pushInsert('prefecture', s.prefecture || null);
+            const normalizedInsertGraduationYear = normalizeGraduationYear(s.graduation_year);
             pushInsert('academic_track', normalizeAcademicTrack(s.academic_track));
-            pushInsert('graduation_year', normalizeGraduationYear(s.graduation_year));
+            pushInsert('graduation_year', normalizedInsertGraduationYear);
             pushInsert('staff_id', s.staff_id || null);
             pushInsert('source_company', s.source_company || null);
             pushInsert('referral_status', normalizeReferralStatus(s.referral_status));
@@ -1716,6 +1805,7 @@ const importStudents = (req, res) => __awaiter(void 0, void 0, void 0, function*
             const placeholders = insertCols.map((_, idx) => `$${idx + 1}`).join(', ');
             const insertedRes = yield client.query(`INSERT INTO students (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING id`, insertVals);
             yield ensureSourceCategoryFromStudent(s.source_company, client);
+            yield ensureGraduationYearCategoryFromStudent(normalizedInsertGraduationYear, client);
             if (s.task_due_date && ((_a = insertedRes.rows[0]) === null || _a === void 0 ? void 0 : _a.id)) {
                 yield client.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)', [insertedRes.rows[0].id, s.task_due_date, 'CSV更新タスク']);
             }
@@ -1799,3 +1889,62 @@ const deleteSourceCategory = (req, res) => __awaiter(void 0, void 0, void 0, fun
     }
 });
 exports.deleteSourceCategory = deleteSourceCategory;
+const getGraduationYearCategories = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield ensureGraduationYearCategoriesTable();
+        const result = yield db_1.default.query('SELECT id, year, created_at FROM graduation_year_categories ORDER BY year ASC');
+        res.json(result.rows);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.getGraduationYearCategories = getGraduationYearCategories;
+const createGraduationYearCategory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const authUser = req.user;
+    if ((authUser === null || authUser === void 0 ? void 0 : authUser.role) !== 'admin') {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+    }
+    const year = Number((_a = req.body) === null || _a === void 0 ? void 0 : _a.year);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+        res.status(400).json({ error: 'year is required (2000-2100)' });
+        return;
+    }
+    try {
+        yield ensureGraduationYearCategoriesTable();
+        const result = yield db_1.default.query('INSERT INTO graduation_year_categories (year) VALUES ($1) ON CONFLICT (year) DO NOTHING RETURNING id, year, created_at', [year]);
+        if (result.rows.length === 0) {
+            const existing = yield db_1.default.query('SELECT id, year, created_at FROM graduation_year_categories WHERE year = $1', [year]);
+            res.json(existing.rows[0]);
+            return;
+        }
+        res.status(201).json(result.rows[0]);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.createGraduationYearCategory = createGraduationYearCategory;
+const deleteGraduationYearCategory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authUser = req.user;
+    if ((authUser === null || authUser === void 0 ? void 0 : authUser.role) !== 'admin') {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+    }
+    const { id } = req.params;
+    try {
+        yield ensureGraduationYearCategoriesTable();
+        const result = yield db_1.default.query('DELETE FROM graduation_year_categories WHERE id = $1 RETURNING id', [id]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Category not found' });
+            return;
+        }
+        res.json({ success: true });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.deleteGraduationYearCategory = deleteGraduationYearCategory;

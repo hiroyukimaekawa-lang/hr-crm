@@ -33,7 +33,10 @@ import {
     getInterviewMetrics,
     getSourceCategories,
     createSourceCategory,
-    deleteSourceCategory
+    deleteSourceCategory,
+    getGraduationYearCategories,
+    createGraduationYearCategory,
+    deleteGraduationYearCategory
 } from '../controllers/studentController';
 import { authenticate } from '../middlewares/auth';
 
@@ -46,6 +49,9 @@ router.get('/funnel/master', authenticate, getFunnelMasterData);
 router.get('/source-categories', authenticate, getSourceCategories);
 router.post('/source-categories', authenticate, createSourceCategory);
 router.delete('/source-categories/:id', authenticate, deleteSourceCategory);
+router.get('/graduation-year-categories', authenticate, getGraduationYearCategories);
+router.post('/graduation-year-categories', authenticate, createGraduationYearCategory);
+router.delete('/graduation-year-categories/:id', authenticate, deleteGraduationYearCategory);
 router.post('/', authenticate, createStudent);
 router.post('/import', authenticate, importStudents);
 router.get('/:id/matcher-funnel', authenticate, getMatcherFunnelByStudent);

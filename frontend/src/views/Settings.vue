@@ -9,6 +9,12 @@ interface SourceCategory {
   created_at: string;
 }
 
+interface GraduationYearCategory {
+  id: number;
+  year: number;
+  created_at: string;
+}
+
 interface EventItem {
   id: number;
   title: string;
@@ -27,7 +33,9 @@ interface KpiCustomStep {
 const user = JSON.parse(localStorage.getItem('user') || '{"role":"staff"}');
 const activeSection = ref<'categories' | 'invite' | 'event-kpi'>('categories');
 const categories = ref<SourceCategory[]>([]);
+const graduationYearCategories = ref<GraduationYearCategory[]>([]);
 const newCategoryName = ref('');
+const newGraduationYear = ref('');
 const message = ref('');
 const inviteUrl = ref('');
 const inviteMessage = ref('');
@@ -49,6 +57,12 @@ const fetchCategories = async () => {
   categories.value = Array.isArray(res.data) ? res.data : [];
 };
 
+const fetchGraduationYearCategories = async () => {
+  const token = localStorage.getItem('token');
+  const res = await api.get('/api/students/graduation-year-categories', { headers: { Authorization: token } });
+  graduationYearCategories.value = Array.isArray(res.data) ? res.data : [];
+};
+
 const addCategory = async () => {
   if (!newCategoryName.value.trim()) return;
   const token = localStorage.getItem('token');
@@ -64,6 +78,24 @@ const deleteCategory = async (id: number) => {
   await api.delete(`/api/students/source-categories/${id}`, { headers: { Authorization: token } });
   message.value = 'カテゴリを削除しました。';
   await fetchCategories();
+};
+
+const addGraduationYearCategory = async () => {
+  const year = Number(newGraduationYear.value);
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) return;
+  const token = localStorage.getItem('token');
+  await api.post('/api/students/graduation-year-categories', { year }, { headers: { Authorization: token } });
+  newGraduationYear.value = '';
+  message.value = '卒業年度カテゴリを保存しました。';
+  await fetchGraduationYearCategories();
+};
+
+const deleteGraduationYearCategory = async (id: number) => {
+  if (!confirm('この卒業年度カテゴリを削除しますか？')) return;
+  const token = localStorage.getItem('token');
+  await api.delete(`/api/students/graduation-year-categories/${id}`, { headers: { Authorization: token } });
+  message.value = '卒業年度カテゴリを削除しました。';
+  await fetchGraduationYearCategories();
 };
 
 const createInvite = async () => {
@@ -190,6 +222,7 @@ const saveKpi = async () => {
 
 onMounted(async () => {
   await fetchCategories();
+  await fetchGraduationYearCategories();
   await fetchEvents();
 });
 </script>
@@ -258,6 +291,62 @@ onMounted(async () => {
                 </tr>
                 <tr v-if="categories.length === 0">
                   <td colSpan="3" class="px-3 py-8 text-center text-gray-400">カテゴリが未登録です。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-3">卒業年度カテゴリ登録</h2>
+          <p v-if="user.role !== 'admin'" class="text-sm text-gray-500">閲覧のみ可能です（管理者のみ追加・削除可能）。</p>
+          <div class="flex gap-2 max-w-xl">
+            <input
+              v-model="newGraduationYear"
+              type="number"
+              min="2000"
+              max="2100"
+              placeholder="例: 2027"
+              class="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
+              :disabled="user.role !== 'admin'"
+            />
+            <button
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              :disabled="user.role !== 'admin'"
+              @click="addGraduationYearCategory"
+            >
+              追加
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-3">登録済み卒業年度</h2>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">卒業年度</th>
+                  <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">登録日</th>
+                  <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr v-for="g in graduationYearCategories" :key="g.id">
+                  <td class="px-3 py-2 text-gray-900">{{ g.year }}年</td>
+                  <td class="px-3 py-2 text-gray-600">{{ new Date(g.created_at).toLocaleDateString('ja-JP') }}</td>
+                  <td class="px-3 py-2 text-right">
+                    <button
+                      class="px-3 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
+                      :disabled="user.role !== 'admin'"
+                      @click="deleteGraduationYearCategory(g.id)"
+                    >
+                      削除
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="graduationYearCategories.length === 0">
+                  <td colSpan="3" class="px-3 py-8 text-center text-gray-400">卒業年度が未登録です。</td>
                 </tr>
               </tbody>
             </table>

@@ -9,6 +9,8 @@ let studentExtendedColumnsReady = false;
 let studentExtendedColumnsPromise: Promise<void> | null = null;
 let sourceCategoriesTableReady = false;
 let sourceCategoriesTablePromise: Promise<void> | null = null;
+let graduationYearCategoriesTableReady = false;
+let graduationYearCategoriesTablePromise: Promise<void> | null = null;
 let studentTaskColumnsReady = false;
 let studentTaskColumnsPromise: Promise<void> | null = null;
 let salesFunnelTablesReady = false;
@@ -90,6 +92,25 @@ const ensureSourceCategoriesTable = async () => {
     await sourceCategoriesTablePromise;
 };
 
+const ensureGraduationYearCategoriesTable = async () => {
+    if (graduationYearCategoriesTableReady) return;
+    if (!graduationYearCategoriesTablePromise) {
+        graduationYearCategoriesTablePromise = (async () => {
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS graduation_year_categories (
+                    id SERIAL PRIMARY KEY,
+                    year INTEGER UNIQUE NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            graduationYearCategoriesTableReady = true;
+        })().finally(() => {
+            graduationYearCategoriesTablePromise = null;
+        });
+    }
+    await graduationYearCategoriesTablePromise;
+};
+
 const ensureStudentTaskColumns = async () => {
     if (studentTaskColumnsReady) return;
     if (!studentTaskColumnsPromise) {
@@ -160,6 +181,14 @@ const ensureSalesFunnelTables = async () => {
                 ADD COLUMN IF NOT EXISTS company VARCHAR(255)
             `);
             await pool.query(`
+                CREATE TABLE IF NOT EXISTS event_dates (
+                    id SERIAL PRIMARY KEY,
+                    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                    event_date TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            await pool.query(`
                 CREATE TABLE IF NOT EXISTS lost_reasons (
                     id SERIAL PRIMARY KEY,
                     reason_name VARCHAR(255) UNIQUE NOT NULL
@@ -173,9 +202,14 @@ const ensureSalesFunnelTables = async () => {
                     proposed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     status VARCHAR(50) NOT NULL DEFAULT 'proposed',
                     lost_reason_id INTEGER REFERENCES lost_reasons(id) ON DELETE SET NULL,
+                    selected_event_date TIMESTAMP,
                     memo TEXT,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
+            `);
+            await pool.query(`
+                ALTER TABLE event_proposals
+                ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP
             `);
             await pool.query(`
                 INSERT INTO lost_reasons (reason_name)
@@ -343,6 +377,20 @@ const ensureSourceCategoryFromStudent = async (
     );
 };
 
+const ensureGraduationYearCategoryFromStudent = async (
+    graduationYear: any,
+    queryable: Pick<PoolClient, 'query'> | typeof pool = pool
+) => {
+    if (graduationYear === undefined || graduationYear === null || graduationYear === '') return;
+    const year = Number(graduationYear);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) return;
+    await ensureGraduationYearCategoriesTable();
+    await queryable.query(
+        'INSERT INTO graduation_year_categories (year) VALUES ($1) ON CONFLICT (year) DO NOTHING',
+        [year]
+    );
+};
+
 export const getStudents = async (req: Request, res: Response) => {
     const staffId = req.query.staffId;
     const authUser = (req as any).user as { sub?: string; role?: string } | undefined;
@@ -455,7 +503,8 @@ export const createStudent = async (req: Request, res: Response) => {
         pushCol('next_action', next_action || null);
         pushCol('desired_industry', desired_industry || null);
         pushCol('desired_role', desired_role || null);
-        pushCol('graduation_year', normalizeGraduationYear(graduation_year));
+        const normalizedGraduationYear = normalizeGraduationYear(graduation_year);
+        pushCol('graduation_year', normalizedGraduationYear);
         pushCol('email', email || null);
         pushCol('phone', phone || null);
         pushCol('status', status || 'active');
@@ -477,6 +526,7 @@ export const createStudent = async (req: Request, res: Response) => {
         );
         const created = result.rows[0];
         await ensureSourceCategoryFromStudent(normalizedSourceCompany);
+        await ensureGraduationYearCategoryFromStudent(normalizedGraduationYear);
         await pool.query(
             `INSERT INTO matcher_funnel_logs (student_id, applied_at, reservation_status, reservation_created_at, interview_scheduled_at)
              VALUES ($1, COALESCE($2, CURRENT_TIMESTAMP), $3, $4, $5)
@@ -1066,7 +1116,8 @@ export const updateStudentBasic = async (req: Request, res: Response) => {
         pushSet('faculty', faculty || null);
         pushSet('email', email || null);
         pushSet('phone', phone || null);
-        pushSet('graduation_year', normalizeGraduationYear(graduation_year));
+        const normalizedGraduationYear = normalizeGraduationYear(graduation_year);
+        pushSet('graduation_year', normalizedGraduationYear);
         pushSet('source_company', source_company || null);
         pushSet('interview_reason', interview_reason || null);
         pushSet('desired_industry', desired_industry || null);
@@ -1089,6 +1140,8 @@ export const updateStudentBasic = async (req: Request, res: Response) => {
             res.status(404).json({ error: 'Student not found' });
             return;
         }
+        await ensureSourceCategoryFromStudent(source_company);
+        await ensureGraduationYearCategoryFromStudent(normalizedGraduationYear);
         res.json(result.rows[0]);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -1404,7 +1457,21 @@ export const getFunnelMasterData = async (_req: Request, res: Response) => {
     try {
         await ensureSalesFunnelTables();
         const [eventsRes, reasonsRes] = await Promise.all([
-            pool.query('SELECT id, title AS event_name, event_date, company FROM events ORDER BY event_date DESC NULLS LAST, id DESC'),
+            pool.query(`
+                SELECT
+                    e.id,
+                    e.title AS event_name,
+                    e.event_date,
+                    e.company,
+                    COALESCE(
+                        json_agg(ed.event_date ORDER BY ed.event_date ASC) FILTER (WHERE ed.event_date IS NOT NULL),
+                        '[]'::json
+                    ) AS event_dates
+                FROM events e
+                LEFT JOIN event_dates ed ON ed.event_id = e.id
+                GROUP BY e.id
+                ORDER BY e.event_date DESC NULLS LAST, e.id DESC
+            `),
             pool.query('SELECT id, reason_name FROM lost_reasons ORDER BY id ASC')
         ]);
         res.json({
@@ -1517,7 +1584,7 @@ export const createInterviewRecord = async (req: Request, res: Response) => {
 
 export const createEventProposal = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { event_id, proposed_at, status, lost_reason_id, memo } = req.body || {};
+    const { event_id, proposed_at, status, lost_reason_id, selected_event_date, memo } = req.body || {};
     if (!event_id) {
         res.status(400).json({ error: 'event_id is required' });
         return;
@@ -1525,8 +1592,8 @@ export const createEventProposal = async (req: Request, res: Response) => {
     try {
         await ensureSalesFunnelTables();
         const result = await pool.query(
-            `INSERT INTO event_proposals (student_id, event_id, proposed_at, status, lost_reason_id, memo)
-             VALUES ($1, $2, COALESCE($3, CURRENT_TIMESTAMP), $4, $5, $6)
+            `INSERT INTO event_proposals (student_id, event_id, proposed_at, status, lost_reason_id, selected_event_date, memo)
+             VALUES ($1, $2, COALESCE($3, CURRENT_TIMESTAMP), $4, $5, $6, $7)
              RETURNING *`,
             [
                 id,
@@ -1534,6 +1601,7 @@ export const createEventProposal = async (req: Request, res: Response) => {
                 normalizeNullableText(proposed_at),
                 normalizeNullableText(status) || 'proposed',
                 lost_reason_id ? Number(lost_reason_id) : null,
+                normalizeToHour(selected_event_date),
                 normalizeNullableText(memo)
             ]
         );
@@ -1555,6 +1623,7 @@ export const getStudentEventProposals = async (req: Request, res: Response) => {
                 ep.proposed_at,
                 ep.status,
                 ep.lost_reason_id,
+                ep.selected_event_date,
                 ep.memo,
                 ep.created_at,
                 e.title AS event_name,
@@ -1806,8 +1875,9 @@ export const importStudents = async (req: Request, res: Response) => {
                 updateParts.push(`${col} = $${values.length}`);
             };
 
+            const normalizedGraduationYear = normalizeGraduationYear(s.graduation_year);
             pushSet('source_company', s.source_company || null);
-            pushSet('graduation_year', normalizeGraduationYear(s.graduation_year));
+            pushSet('graduation_year', normalizedGraduationYear);
             pushSet('staff_id', s.staff_id || null);
             pushSet('referral_status', normalizeReferralStatus(s.referral_status));
             pushSet('progress_stage', normalizeProgressStage(s.progress_stage));
@@ -1829,6 +1899,7 @@ export const importStudents = async (req: Request, res: Response) => {
                     );
                 }
                 await ensureSourceCategoryFromStudent(s.source_company, client);
+                await ensureGraduationYearCategoryFromStudent(normalizedGraduationYear, client);
 
                 if (s.task_due_date) {
                     const lastTask = await client.query(
@@ -1862,8 +1933,9 @@ export const importStudents = async (req: Request, res: Response) => {
             pushInsert('name', name);
             pushInsert('university', university || null);
             pushInsert('prefecture', s.prefecture || null);
+            const normalizedInsertGraduationYear = normalizeGraduationYear(s.graduation_year);
             pushInsert('academic_track', normalizeAcademicTrack(s.academic_track));
-            pushInsert('graduation_year', normalizeGraduationYear(s.graduation_year));
+            pushInsert('graduation_year', normalizedInsertGraduationYear);
             pushInsert('staff_id', s.staff_id || null);
             pushInsert('source_company', s.source_company || null);
             pushInsert('referral_status', normalizeReferralStatus(s.referral_status));
@@ -1879,6 +1951,7 @@ export const importStudents = async (req: Request, res: Response) => {
                 insertVals
             );
             await ensureSourceCategoryFromStudent(s.source_company, client);
+            await ensureGraduationYearCategoryFromStudent(normalizedInsertGraduationYear, client);
 
             if (s.task_due_date && insertedRes.rows[0]?.id) {
                 await client.query(
@@ -1953,6 +2026,64 @@ export const deleteSourceCategory = async (req: Request, res: Response) => {
     try {
         await ensureSourceCategoriesTable();
         const result = await pool.query('DELETE FROM source_categories WHERE id = $1 RETURNING id', [id]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Category not found' });
+            return;
+        }
+        res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const getGraduationYearCategories = async (_req: Request, res: Response) => {
+    try {
+        await ensureGraduationYearCategoriesTable();
+        const result = await pool.query('SELECT id, year, created_at FROM graduation_year_categories ORDER BY year ASC');
+        res.json(result.rows);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const createGraduationYearCategory = async (req: Request, res: Response) => {
+    const authUser = (req as any).user as { role?: string } | undefined;
+    if (authUser?.role !== 'admin') {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+    }
+    const year = Number(req.body?.year);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+        res.status(400).json({ error: 'year is required (2000-2100)' });
+        return;
+    }
+    try {
+        await ensureGraduationYearCategoriesTable();
+        const result = await pool.query(
+            'INSERT INTO graduation_year_categories (year) VALUES ($1) ON CONFLICT (year) DO NOTHING RETURNING id, year, created_at',
+            [year]
+        );
+        if (result.rows.length === 0) {
+            const existing = await pool.query('SELECT id, year, created_at FROM graduation_year_categories WHERE year = $1', [year]);
+            res.json(existing.rows[0]);
+            return;
+        }
+        res.status(201).json(result.rows[0]);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const deleteGraduationYearCategory = async (req: Request, res: Response) => {
+    const authUser = (req as any).user as { role?: string } | undefined;
+    if (authUser?.role !== 'admin') {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+    }
+    const { id } = req.params;
+    try {
+        await ensureGraduationYearCategoriesTable();
+        const result = await pool.query('DELETE FROM graduation_year_categories WHERE id = $1 RETURNING id', [id]);
         if (result.rows.length === 0) {
             res.status(404).json({ error: 'Category not found' });
             return;

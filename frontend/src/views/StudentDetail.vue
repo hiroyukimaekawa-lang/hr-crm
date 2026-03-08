@@ -41,6 +41,7 @@ const proposalLostReasons = ref<any[]>([]);
 const eventProposals = ref<any[]>([]);
 const proposalForm = ref({
   event_id: '',
+  selected_event_date: '',
   status: 'proposed',
   lost_reason_id: '',
   memo: ''
@@ -269,12 +270,14 @@ const submitEventProposal = async () => {
   const token = localStorage.getItem('token');
   await api.post(`/api/students/${studentId}/funnel/event-proposal`, {
     event_id: Number(proposalForm.value.event_id),
+    selected_event_date: proposalForm.value.selected_event_date || null,
     status: proposalForm.value.status || 'proposed',
     lost_reason_id: proposalForm.value.lost_reason_id ? Number(proposalForm.value.lost_reason_id) : null,
     memo: proposalForm.value.memo || null
   }, { headers: { Authorization: token } });
   proposalForm.value = {
     event_id: '',
+    selected_event_date: '',
     status: 'proposed',
     lost_reason_id: '',
     memo: ''
@@ -494,6 +497,21 @@ const formatDateTime = (value?: string | null) => {
 };
 
 const tags = computed(() => Array.isArray(student.value?.tags) ? student.value.tags : []);
+const selectedProposalEvent = computed(() => {
+  const id = Number(proposalForm.value.event_id || 0);
+  if (!id) return null;
+  return proposalEvents.value.find((e: any) => Number(e.id) === id) || null;
+});
+const selectedProposalEventDates = computed(() => {
+  const e: any = selectedProposalEvent.value;
+  if (!e) return [] as string[];
+  const dates = Array.isArray(e.event_dates)
+    ? e.event_dates.filter((d: any) => !!d).map((d: any) => String(d))
+    : [];
+  if (dates.length > 0) return dates;
+  if (e.event_date) return [String(e.event_date)];
+  return [] as string[];
+});
 const isPinned = computed(() => getPinnedStudent()?.id === Number(studentId));
 
 const pinCurrentStudent = () => {
@@ -538,6 +556,17 @@ onBeforeUnmount(() => {
 onBeforeRouteLeave((_to, _from, next) => {
   persistDraft();
   next();
+});
+
+watch(() => proposalForm.value.event_id, () => {
+  const dates = selectedProposalEventDates.value;
+  if (dates.length === 0) {
+    proposalForm.value.selected_event_date = '';
+    return;
+  }
+  if (!proposalForm.value.selected_event_date || !dates.includes(proposalForm.value.selected_event_date)) {
+    proposalForm.value.selected_event_date = dates[0] || '';
+  }
 });
 
 watch(
@@ -905,6 +934,7 @@ watch(
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="font-semibold text-gray-900">{{ p.event_name || '-' }}</span>
                   <span class="text-xs text-gray-500">{{ formatDateTime(p.proposed_at) }}</span>
+                  <span v-if="p.selected_event_date" class="text-xs text-blue-600">参加日: {{ formatDateTime(p.selected_event_date) }}</span>
                   <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{{ p.status || '-' }}</span>
                   <span v-if="p.lost_reason_name" class="text-xs text-red-600">失注理由: {{ p.lost_reason_name }}</span>
                 </div>
@@ -918,6 +948,10 @@ watch(
                 <option v-for="e in proposalEvents" :key="`proposal-event-${e.id}`" :value="String(e.id)">
                   {{ e.event_name || e.title }}（{{ e.event_date ? formatDateTime(e.event_date) : '-' }}）
                 </option>
+              </select>
+              <select v-model="proposalForm.selected_event_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" :disabled="!proposalForm.event_id">
+                <option value="">参加日程を選択</option>
+                <option v-for="d in selectedProposalEventDates" :key="`proposal-date-${d}`" :value="d">{{ formatDateTime(d) }}</option>
               </select>
               <select v-model="proposalForm.status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                 <option value="proposed">提案済み</option>

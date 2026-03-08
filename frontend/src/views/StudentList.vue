@@ -56,6 +56,11 @@ interface SourceCategory {
   name: string;
 }
 
+interface GraduationYearCategory {
+  id: number;
+  year: number;
+}
+
 type ExportColumnKey =
   | 'source_company'
   | 'name'
@@ -86,6 +91,7 @@ const exportColumnOptions: Array<{ key: ExportColumnKey; label: string }> = [
 const students = ref<Student[]>([]);
 const staffUsers = ref<StaffUser[]>([]);
 const sourceCategories = ref<SourceCategory[]>([]);
+const graduationYearCategories = ref<GraduationYearCategory[]>([]);
 const funnelKpi = ref({
   daily_applications: [] as Array<{ day: string; count: number }>,
   daily_settings: [] as Array<{ day: string; count: number }>,
@@ -221,6 +227,16 @@ const fetchSourceCategories = async () => {
     const token = localStorage.getItem('token');
     const res = await api.get('/api/students/source-categories', { headers: { Authorization: token } });
     sourceCategories.value = Array.isArray(res.data) ? res.data : [];
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+const fetchGraduationYearCategories = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    const res = await api.get('/api/students/graduation-year-categories', { headers: { Authorization: token } });
+    graduationYearCategories.value = Array.isArray(res.data) ? res.data : [];
   } catch (err) {
     console.error(err);
   }
@@ -468,6 +484,17 @@ const graduationYearOptions = computed(() => {
     if (s.graduation_year) set.add(String(s.graduation_year));
   });
   return ['ALL', ...Array.from(set).sort()];
+});
+
+const registrationGraduationYearOptions = computed(() => {
+  const set = new Set<string>();
+  graduationYearCategories.value.forEach((g) => {
+    if (g?.year) set.add(String(g.year));
+  });
+  students.value.forEach((s) => {
+    if (s.graduation_year) set.add(String(s.graduation_year));
+  });
+  return Array.from(set).sort((a, b) => Number(a) - Number(b));
 });
 
 const filteredStudents = computed(() => {
@@ -805,6 +832,7 @@ const onCsvFileChange = async (event: Event) => {
 onMounted(() => {
   fetchStudents();
   fetchSourceCategories();
+  fetchGraduationYearCategories();
   fetchFunnelKpi();
   if (user.role === 'admin') {
     fetchStaffUsers();
@@ -1404,7 +1432,10 @@ watch(filteredStudents, () => {
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">卒業年</label>
-            <input v-model="newStudent.graduation_year" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <select v-model="newStudent.graduation_year" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">未設定</option>
+              <option v-for="y in registrationGraduationYearOptions" :key="`grad-create-${y}`" :value="y">{{ y }}年</option>
+            </select>
           </div>
         </div>
           <div class="mt-6 flex justify-end gap-3">
