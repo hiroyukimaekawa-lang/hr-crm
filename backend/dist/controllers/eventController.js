@@ -17,6 +17,8 @@ const db_1 = __importDefault(require("../config/db"));
 let eventDatesTableReady = false;
 let eventDatesTablePromise = null;
 let cachedEventColumns = null;
+let studentEventsColumnsReady = false;
+let studentEventsColumnsPromise = null;
 const ensureEventDatesTable = () => __awaiter(void 0, void 0, void 0, function* () {
     if (eventDatesTableReady)
         return;
@@ -56,6 +58,22 @@ const ensureEventDatesTable = () => __awaiter(void 0, void 0, void 0, function* 
         });
     }
     yield eventDatesTablePromise;
+});
+const ensureStudentEventsColumns = () => __awaiter(void 0, void 0, void 0, function* () {
+    if (studentEventsColumnsReady)
+        return;
+    if (!studentEventsColumnsPromise) {
+        studentEventsColumnsPromise = (() => __awaiter(void 0, void 0, void 0, function* () {
+            yield db_1.default.query(`
+                ALTER TABLE student_events
+                ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP
+            `);
+            studentEventsColumnsReady = true;
+        }))().finally(() => {
+            studentEventsColumnsPromise = null;
+        });
+    }
+    yield studentEventsColumnsPromise;
 });
 const normalizeEventDates = (event_dates, event_date) => {
     const raw = Array.isArray(event_dates) ? event_dates : [];
@@ -229,6 +247,7 @@ const getEventDetail = (req, res) => __awaiter(void 0, void 0, void 0, function*
     const { id } = req.params;
     try {
         yield ensureEventDatesTable();
+        yield ensureStudentEventsColumns();
         const eventRes = yield db_1.default.query('SELECT * FROM events WHERE id = $1', [id]);
         const eventDatesRes = yield db_1.default.query('SELECT event_date FROM event_dates WHERE event_id = $1 ORDER BY event_date ASC', [id]);
         const participantsRes = yield db_1.default.query(`
@@ -236,6 +255,7 @@ const getEventDetail = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 se.student_id,
                 se.status,
                 se.created_at,
+                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
                 s.name,
                 s.university,
                 s.email,
@@ -260,9 +280,14 @@ const getEventDetail = (req, res) => __awaiter(void 0, void 0, void 0, function*
 exports.getEventDetail = getEventDetail;
 const updateParticipantStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id, studentId } = req.params;
-    const { status } = req.body;
+    const { status, selected_event_date } = req.body;
     try {
-        const result = yield db_1.default.query('UPDATE student_events SET status = $1 WHERE event_id = $2 AND student_id = $3 RETURNING *', [status, id, studentId]);
+        yield ensureStudentEventsColumns();
+        const result = yield db_1.default.query(`UPDATE student_events
+             SET status = $1,
+                 selected_event_date = COALESCE($2, selected_event_date)
+             WHERE event_id = $3 AND student_id = $4
+             RETURNING *`, [status, selected_event_date || null, id, studentId]);
         res.json(result.rows[0]);
     }
     catch (err) {

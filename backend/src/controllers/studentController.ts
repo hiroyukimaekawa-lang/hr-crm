@@ -17,6 +17,8 @@ let salesFunnelTablesReady = false;
 let salesFunnelTablesPromise: Promise<void> | null = null;
 let matcherFunnelTableReady = false;
 let matcherFunnelTablePromise: Promise<void> | null = null;
+let studentEventsColumnsReady = false;
+let studentEventsColumnsPromise: Promise<void> | null = null;
 
 const ensureInterviewScheduleTables = async () => {
     if (interviewScheduleTableReady) return;
@@ -254,6 +256,22 @@ const ensureMatcherFunnelTable = async () => {
         });
     }
     await matcherFunnelTablePromise;
+};
+
+const ensureStudentEventsColumns = async () => {
+    if (studentEventsColumnsReady) return;
+    if (!studentEventsColumnsPromise) {
+        studentEventsColumnsPromise = (async () => {
+            await pool.query(`
+                ALTER TABLE student_events
+                ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP
+            `);
+            studentEventsColumnsReady = true;
+        })().finally(() => {
+            studentEventsColumnsPromise = null;
+        });
+    }
+    await studentEventsColumnsPromise;
 };
 
 const getStudentColumns = async () => {
@@ -577,11 +595,23 @@ export const getStudentDetail = async (req: Request, res: Response) => {
         await ensureInterviewScheduleTables();
         await ensureStudentTaskColumns();
         await ensureMatcherFunnelTable();
+        await ensureStudentEventsColumns();
         const studentRes = await pool.query('SELECT * FROM students WHERE id = $1', [id]);
         const eventsRes = await pool.query(`
-            SELECT e.*, se.status as participation_status, se.created_at as participation_created_at
+            SELECT
+                e.*,
+                to_char(e.event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as event_date,
+                COALESCE(eds.event_dates, '[]'::json) as event_dates,
+                se.status as participation_status,
+                se.created_at as participation_created_at,
+                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
             FROM events e
             JOIN student_events se ON e.id = se.event_id
+            LEFT JOIN LATERAL (
+                SELECT json_agg(to_char(ed.event_date, 'YYYY-MM-DD"T"HH24:MI:SS') ORDER BY ed.event_date ASC) as event_dates
+                FROM event_dates ed
+                WHERE ed.event_id = e.id
+            ) eds ON true
             WHERE se.student_id = $1
             ORDER BY se.created_at DESC
         `, [id]);
@@ -1020,14 +1050,18 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
 
 export const linkEvent = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { event_id, status } = req.body;
+    const { event_id, status, selected_event_date } = req.body;
     try {
+        await ensureStudentEventsColumns();
         const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING', 'XA_CANCEL'].includes(status) ? status : 'A_ENTRY';
         await pool.query(
-            `INSERT INTO student_events (student_id, event_id, status)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (student_id, event_id) DO UPDATE SET status = EXCLUDED.status`,
-            [id, event_id, safeStatus]
+            `INSERT INTO student_events (student_id, event_id, status, selected_event_date)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (student_id, event_id)
+             DO UPDATE SET
+                status = EXCLUDED.status,
+                selected_event_date = COALESCE(EXCLUDED.selected_event_date, student_events.selected_event_date)`,
+            [id, event_id, safeStatus, normalizeToHour(selected_event_date)]
         );
         res.json({ success: true });
     } catch (err: any) {

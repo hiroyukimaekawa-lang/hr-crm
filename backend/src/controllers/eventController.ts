@@ -4,6 +4,8 @@ import pool from '../config/db';
 let eventDatesTableReady = false;
 let eventDatesTablePromise: Promise<void> | null = null;
 let cachedEventColumns: Set<string> | null = null;
+let studentEventsColumnsReady = false;
+let studentEventsColumnsPromise: Promise<void> | null = null;
 
 const ensureEventDatesTable = async () => {
     if (eventDatesTableReady) return;
@@ -43,6 +45,22 @@ const ensureEventDatesTable = async () => {
         });
     }
     await eventDatesTablePromise;
+};
+
+const ensureStudentEventsColumns = async () => {
+    if (studentEventsColumnsReady) return;
+    if (!studentEventsColumnsPromise) {
+        studentEventsColumnsPromise = (async () => {
+            await pool.query(`
+                ALTER TABLE student_events
+                ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP
+            `);
+            studentEventsColumnsReady = true;
+        })().finally(() => {
+            studentEventsColumnsPromise = null;
+        });
+    }
+    await studentEventsColumnsPromise;
 };
 
 const normalizeEventDates = (event_dates: any, event_date: any): string[] => {
@@ -231,6 +249,7 @@ export const getEventDetail = async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
         await ensureEventDatesTable();
+        await ensureStudentEventsColumns();
         const eventRes = await pool.query('SELECT * FROM events WHERE id = $1', [id]);
         const eventDatesRes = await pool.query(
             'SELECT event_date FROM event_dates WHERE event_id = $1 ORDER BY event_date ASC',
@@ -241,6 +260,7 @@ export const getEventDetail = async (req: Request, res: Response) => {
                 se.student_id,
                 se.status,
                 se.created_at,
+                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
                 s.name,
                 s.university,
                 s.email,
@@ -268,11 +288,16 @@ export const getEventDetail = async (req: Request, res: Response) => {
 
 export const updateParticipantStatus = async (req: Request, res: Response) => {
     const { id, studentId } = req.params;
-    const { status } = req.body;
+    const { status, selected_event_date } = req.body;
     try {
+        await ensureStudentEventsColumns();
         const result = await pool.query(
-            'UPDATE student_events SET status = $1 WHERE event_id = $2 AND student_id = $3 RETURNING *',
-            [status, id, studentId]
+            `UPDATE student_events
+             SET status = $1,
+                 selected_event_date = COALESCE($2, selected_event_date)
+             WHERE event_id = $3 AND student_id = $4
+             RETURNING *`,
+            [status, selected_event_date || null, id, studentId]
         );
         res.json(result.rows[0]);
     } catch (err: any) {

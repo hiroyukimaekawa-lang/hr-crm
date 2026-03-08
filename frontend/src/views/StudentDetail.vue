@@ -57,6 +57,7 @@ const newLog = ref('');
 const newLogType = ref<'面談' | 'エントリー' | 'その他'>('面談');
 const newLogEventId = ref('');
 const selectedEventId = ref('');
+const selectedEventDate = ref('');
 const selectedEventStatus = ref<'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL'>('A_ENTRY');
 const editingStatus = ref(false);
 const referralStatusDraft = ref('不明');
@@ -101,6 +102,7 @@ const restoreDraft = () => {
     if (d.newLogType !== undefined) newLogType.value = d.newLogType || '面談';
     if (d.newLogEventId !== undefined) newLogEventId.value = d.newLogEventId || '';
     if (d.selectedEventId !== undefined) selectedEventId.value = d.selectedEventId || '';
+    if (d.selectedEventDate !== undefined) selectedEventDate.value = d.selectedEventDate || '';
     if (d.selectedEventStatus !== undefined) selectedEventStatus.value = d.selectedEventStatus || 'A_ENTRY';
     if (d.editingStatus !== undefined) editingStatus.value = !!d.editingStatus;
     if (d.referralStatusDraft !== undefined) referralStatusDraft.value = d.referralStatusDraft || '不明';
@@ -128,6 +130,7 @@ const persistDraft = () => {
       newLogType: newLogType.value,
       newLogEventId: newLogEventId.value,
       selectedEventId: selectedEventId.value,
+      selectedEventDate: selectedEventDate.value,
       selectedEventStatus: selectedEventStatus.value,
       editingStatus: editingStatus.value,
       referralStatusDraft: referralStatusDraft.value,
@@ -372,9 +375,11 @@ const linkEvent = async () => {
   const token = localStorage.getItem('token');
   await api.post(`/api/students/${studentId}/events`, {
     event_id: selectedEventId.value,
+    selected_event_date: selectedEventDate.value || null,
     status: selectedEventStatus.value
   }, { headers: { Authorization: token } });
   selectedEventId.value = '';
+  selectedEventDate.value = '';
   selectedEventStatus.value = 'A_ENTRY';
   persistDraft();
   fetchDetail();
@@ -384,6 +389,42 @@ const updateEventParticipationStatus = async (eventId: number, status: 'A_ENTRY'
   const token = localStorage.getItem('token');
   await api.put(`/api/events/${eventId}/participants/${studentId}`, { status }, { headers: { Authorization: token } });
   fetchDetail();
+};
+
+const updateEventParticipationDate = async (eventId: number, currentStatus: string, date: string) => {
+  const token = localStorage.getItem('token');
+  await api.put(
+    `/api/events/${eventId}/participants/${studentId}`,
+    { status: currentStatus || 'A_ENTRY', selected_event_date: date || null },
+    { headers: { Authorization: token } }
+  );
+  fetchDetail();
+};
+
+const selectedLinkEvent = computed(() => {
+  const id = Number(selectedEventId.value || 0);
+  if (!id) return null;
+  return availableEvents.value.find((e: any) => Number(e.id) === id) || null;
+});
+
+const selectedLinkEventDates = computed(() => {
+  const e: any = selectedLinkEvent.value;
+  if (!e) return [] as string[];
+  const dates = Array.isArray(e.event_dates)
+    ? e.event_dates.filter((d: any) => !!d).map((d: any) => String(d))
+    : [];
+  if (dates.length > 0) return dates;
+  if (e.event_date) return [String(e.event_date)];
+  return [] as string[];
+});
+
+const eventDateOptions = (event: any) => {
+  const dates = Array.isArray(event?.event_dates)
+    ? event.event_dates.filter((d: any) => !!d).map((d: any) => String(d))
+    : [];
+  if (dates.length > 0) return dates;
+  if (event?.event_date) return [String(event.event_date)];
+  return [] as string[];
 };
 
 const participationStatusClass = (status?: string) => {
@@ -579,6 +620,7 @@ watch(
     newLogType,
     newLogEventId,
     selectedEventId,
+    selectedEventDate,
     selectedEventStatus,
     editingStatus,
     referralStatusDraft,
@@ -591,6 +633,17 @@ watch(
   },
   { deep: true }
 );
+
+watch(selectedEventId, () => {
+  const list = selectedLinkEventDates.value;
+  if (list.length === 0) {
+    selectedEventDate.value = '';
+    return;
+  }
+  if (!selectedEventDate.value || !list.includes(selectedEventDate.value)) {
+    selectedEventDate.value = list[0] || '';
+  }
+});
 </script>
 
 <template>
@@ -978,9 +1031,20 @@ watch(
               <div v-for="e in studentEvents" :key="e.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div>
                   <span class="text-sm font-medium text-gray-800">{{ e.title }}</span>
-                  <p class="text-xs text-gray-500">{{ new Date(e.event_date).toLocaleDateString('ja-JP') }}</p>
+                  <p class="text-xs text-gray-500">{{ e.selected_event_date ? formatDateTime(e.selected_event_date) : formatDateTime(e.event_date) }}</p>
                 </div>
                 <div class="flex items-center gap-2">
+                  <select
+                    v-if="eventDateOptions(e).length > 1"
+                    class="px-2 py-1 border border-gray-300 rounded-md text-xs bg-white max-w-[180px]"
+                    :value="e.selected_event_date || ''"
+                    @change="updateEventParticipationDate(e.id, e.participation_status, ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option disabled value="">参加日を選択</option>
+                    <option v-for="d in eventDateOptions(e)" :key="`student-event-date-${e.id}-${d}`" :value="d">
+                      {{ formatDateTime(d) }}
+                    </option>
+                  </select>
                   <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="participationStatusClass(e.participation_status)">
                     {{ participationStatusLabel(e.participation_status) }}
                   </span>
@@ -1007,6 +1071,13 @@ watch(
                 <select v-model="selectedEventId" class="sm:col-span-6 w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                   <option disabled value="">選択してください</option>
                   <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
+                </select>
+                <select
+                  v-if="selectedLinkEventDates.length > 1"
+                  v-model="selectedEventDate"
+                  class="sm:col-span-6 w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option v-for="d in selectedLinkEventDates" :key="`add-link-date-${d}`" :value="d">{{ formatDateTime(d) }}</option>
                 </select>
                 <select v-model="selectedEventStatus" class="sm:col-span-4 w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="A_ENTRY">A:エントリー</option>
