@@ -6,8 +6,19 @@ import Layout from '../components/Layout.vue';
 const sourceCompanyFilter = ref('ALL');
 const funnelKpi = ref({
   daily_applications: [] as Array<{ day: string; count: number }>,
+  daily_settings: [] as Array<{ day: string; count: number }>,
   application_to_reservation_rate: 0,
   reservation_to_interview_rate: 0,
+  apply_to_reservation_lead_time_days_avg: null as number | null,
+  reservation_to_interview_lead_time_days_avg: null as number | null,
+  interview_completed_rate: 0,
+  no_show_rate: 0,
+  reschedule_rate: 0,
+  counts: {
+    interviewed_students: 0,
+    no_show_students: 0,
+    rescheduled_students: 0
+  },
   interview_to_proposal_rate: 0,
   proposal_to_join_rate: 0,
   lost_reason_ranking: [] as Array<{ reason_name: string; count: number }>
@@ -15,9 +26,18 @@ const funnelKpi = ref({
 const funnelBySource = ref<Array<{
   source_company: string;
   daily_applications: number;
+  daily_settings: number;
   avg_daily_applications: number;
   application_to_reservation_rate: number;
   reservation_to_interview_rate: number;
+  apply_to_reservation_lead_time_days_avg: number | null;
+  reservation_to_interview_lead_time_days_avg: number | null;
+  interview_completed_rate: number;
+  no_show_rate: number;
+  reschedule_rate: number;
+  interviewed_students: number;
+  no_show_students: number;
+  rescheduled_students: number;
   interview_to_proposal_rate: number;
   proposal_to_join_rate: number;
 }>>([]);
@@ -52,8 +72,23 @@ const fetchFunnelKpi = async () => {
   ]);
   funnelKpi.value = {
     daily_applications: Array.isArray(res.data?.daily_applications) ? res.data.daily_applications : [],
+    daily_settings: Array.isArray(res.data?.daily_settings) ? res.data.daily_settings : [],
     application_to_reservation_rate: Number(res.data?.application_to_reservation_rate || 0),
     reservation_to_interview_rate: Number(res.data?.reservation_to_interview_rate || 0),
+    apply_to_reservation_lead_time_days_avg: res.data?.apply_to_reservation_lead_time_days_avg !== null && res.data?.apply_to_reservation_lead_time_days_avg !== undefined
+      ? Number(res.data.apply_to_reservation_lead_time_days_avg)
+      : null,
+    reservation_to_interview_lead_time_days_avg: res.data?.reservation_to_interview_lead_time_days_avg !== null && res.data?.reservation_to_interview_lead_time_days_avg !== undefined
+      ? Number(res.data.reservation_to_interview_lead_time_days_avg)
+      : null,
+    interview_completed_rate: Number(res.data?.interview_completed_rate || 0),
+    no_show_rate: Number(res.data?.no_show_rate || 0),
+    reschedule_rate: Number(res.data?.reschedule_rate || 0),
+    counts: {
+      interviewed_students: Number(res.data?.counts?.interviewed_students || 0),
+      no_show_students: Number(res.data?.counts?.no_show_students || 0),
+      rescheduled_students: Number(res.data?.counts?.rescheduled_students || 0)
+    },
     interview_to_proposal_rate: Number(res.data?.interview_to_proposal_rate || 0),
     proposal_to_join_rate: Number(res.data?.proposal_to_join_rate || 0),
     lost_reason_ranking: Array.isArray(res.data?.lost_reason_ranking) ? res.data.lost_reason_ranking : []
@@ -62,9 +97,22 @@ const fetchFunnelKpi = async () => {
     ? bySourceRes.data.map((r: any) => ({
         source_company: String(r.source_company || '未設定'),
         daily_applications: Number(r.daily_applications || 0),
+        daily_settings: Number(r.daily_settings || 0),
         avg_daily_applications: Number(r.avg_daily_applications || 0),
         application_to_reservation_rate: Number(r.application_to_reservation_rate || 0),
         reservation_to_interview_rate: Number(r.reservation_to_interview_rate || 0),
+        apply_to_reservation_lead_time_days_avg: r.apply_to_reservation_lead_time_days_avg !== null && r.apply_to_reservation_lead_time_days_avg !== undefined
+          ? Number(r.apply_to_reservation_lead_time_days_avg)
+          : null,
+        reservation_to_interview_lead_time_days_avg: r.reservation_to_interview_lead_time_days_avg !== null && r.reservation_to_interview_lead_time_days_avg !== undefined
+          ? Number(r.reservation_to_interview_lead_time_days_avg)
+          : null,
+        interview_completed_rate: Number(r.interview_completed_rate || 0),
+        no_show_rate: Number(r.no_show_rate || 0),
+        reschedule_rate: Number(r.reschedule_rate || 0),
+        interviewed_students: Number(r.interviewed_students || 0),
+        no_show_students: Number(r.no_show_students || 0),
+        rescheduled_students: Number(r.rescheduled_students || 0),
         interview_to_proposal_rate: Number(r.interview_to_proposal_rate || 0),
         proposal_to_join_rate: Number(r.proposal_to_join_rate || 0)
       }))
@@ -107,10 +155,44 @@ const dailyFunnelRows = computed(() => {
   }));
 });
 
-const dailyInflowCount = computed(() => {
+const dailyApplicationCount = computed(() => {
   const today = new Date().toISOString().slice(0, 10);
   const row = dailyFunnelRows.value.find((r) => r.day === today);
   return row?.applications || 0;
+});
+
+const dailySettingRows = computed(() => {
+  const settingMap = new Map<string, number>();
+  funnelKpi.value.daily_settings.forEach((r) => {
+    const day = String(r.day || '').slice(0, 10);
+    if (day) settingMap.set(day, Number(r.count || 0));
+  });
+  const keys = Array.from(new Set([...settingMap.keys()])).sort((a, b) => (a < b ? 1 : -1));
+  return keys.slice(0, 31).map((day) => ({
+    day,
+    settings: settingMap.get(day) || 0
+  }));
+});
+
+const dailySettingCount = computed(() => {
+  const today = new Date().toISOString().slice(0, 10);
+  const row = dailySettingRows.value.find((r) => r.day === today);
+  return row?.settings || 0;
+});
+
+const dailyApplicationSettingRows = computed(() => {
+  const appMap = new Map<string, number>();
+  const settingMap = new Map<string, number>();
+  dailyFunnelRows.value.forEach((r) => appMap.set(r.day, Number(r.applications || 0)));
+  dailySettingRows.value.forEach((r) => settingMap.set(r.day, Number(r.settings || 0)));
+  const keys = Array.from(new Set([...appMap.keys(), ...settingMap.keys()]))
+    .sort((a, b) => (a < b ? 1 : -1))
+    .slice(0, 31);
+  return keys.map((day) => ({
+    day,
+    applications: appMap.get(day) || 0,
+    settings: settingMap.get(day) || 0
+  }));
 });
 
 const averageDailyInflow = computed(() => {
@@ -126,18 +208,36 @@ const averageDailyInflow = computed(() => {
 const selectedFunnelMetrics = computed(() => {
   if (sourceCompanyFilter.value === 'ALL') {
     return {
-      daily_applications: dailyInflowCount.value,
+      daily_applications: dailyApplicationCount.value,
+      daily_settings: dailySettingCount.value,
       application_to_reservation_rate: funnelKpi.value.application_to_reservation_rate,
       reservation_to_interview_rate: funnelKpi.value.reservation_to_interview_rate,
+      apply_to_reservation_lead_time_days_avg: funnelKpi.value.apply_to_reservation_lead_time_days_avg,
+      reservation_to_interview_lead_time_days_avg: funnelKpi.value.reservation_to_interview_lead_time_days_avg,
+      interview_completed_rate: funnelKpi.value.interview_completed_rate,
+      no_show_rate: funnelKpi.value.no_show_rate,
+      reschedule_rate: funnelKpi.value.reschedule_rate,
+      interviewed_students: funnelKpi.value.counts.interviewed_students,
+      no_show_students: funnelKpi.value.counts.no_show_students,
+      rescheduled_students: funnelKpi.value.counts.rescheduled_students,
       interview_to_proposal_rate: funnelKpi.value.interview_to_proposal_rate,
       proposal_to_join_rate: funnelKpi.value.proposal_to_join_rate
     };
   }
   const row = funnelBySource.value.find((r) => r.source_company === sourceCompanyFilter.value);
   return {
-      daily_applications: Number(row?.daily_applications || 0),
+    daily_applications: Number(row?.daily_applications || 0),
+    daily_settings: Number(row?.daily_settings || 0),
     application_to_reservation_rate: Number(row?.application_to_reservation_rate || 0),
     reservation_to_interview_rate: Number(row?.reservation_to_interview_rate || 0),
+    apply_to_reservation_lead_time_days_avg: row?.apply_to_reservation_lead_time_days_avg ?? null,
+    reservation_to_interview_lead_time_days_avg: row?.reservation_to_interview_lead_time_days_avg ?? null,
+    interview_completed_rate: Number(row?.interview_completed_rate || 0),
+    no_show_rate: Number(row?.no_show_rate || 0),
+    reschedule_rate: Number(row?.reschedule_rate || 0),
+    interviewed_students: Number(row?.interviewed_students || 0),
+    no_show_students: Number(row?.no_show_students || 0),
+    rescheduled_students: Number(row?.rescheduled_students || 0),
     interview_to_proposal_rate: Number(row?.interview_to_proposal_rate || 0),
     proposal_to_join_rate: Number(row?.proposal_to_join_rate || 0)
   };
@@ -180,6 +280,13 @@ const onSelectSource = async (source: string) => {
   sourceCompanyFilter.value = source;
   await fetchInterviewMetrics();
 };
+
+const formatDate = (v?: string | null) => {
+  if (!v) return '-';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+};
 </script>
 
 <template>
@@ -190,22 +297,50 @@ const onSelectSource = async (source: string) => {
         <p class="text-gray-500 mt-2">流入KPIと流入経路ごとの面談リードタイムを確認できます。</p>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-6 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-6">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <p class="text-sm text-gray-500">平均デイリー流入数</p>
+          <p class="text-sm text-gray-500">平均デイリー申込数</p>
           <p class="text-2xl font-bold text-gray-900">{{ averageDailyInflow }}</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <p class="text-sm text-gray-500">現状流入数</p>
-          <p class="text-2xl font-bold text-gray-900">{{ selectedFunnelMetrics.daily_applications }}</p>
+          <p class="text-sm text-gray-500">デイリー面談設定数</p>
+          <p class="text-2xl font-bold text-gray-900">{{ selectedFunnelMetrics.daily_settings }}</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <p class="text-sm text-gray-500">申込→予約率</p>
           <p class="text-2xl font-bold text-gray-900">{{ selectedFunnelMetrics.application_to_reservation_rate.toFixed(2) }}%</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">申込→予約 リードタイム</p>
+          <p class="text-2xl font-bold text-gray-900">{{ selectedFunnelMetrics.apply_to_reservation_lead_time_days_avg ?? '-' }}日</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <p class="text-sm text-gray-500">予約→面談率</p>
           <p class="text-2xl font-bold text-gray-900">{{ selectedFunnelMetrics.reservation_to_interview_rate.toFixed(2) }}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">予約→面談 リードタイム</p>
+          <p class="text-2xl font-bold text-gray-900">{{ selectedFunnelMetrics.reservation_to_interview_lead_time_days_avg ?? '-' }}日</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">面談実施率</p>
+          <p class="text-2xl font-bold text-gray-900">{{ selectedFunnelMetrics.interview_completed_rate.toFixed(2) }}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">飛ばれ率</p>
+          <p class="text-2xl font-bold text-gray-900">{{ selectedFunnelMetrics.no_show_rate.toFixed(2) }}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">リスケ率</p>
+          <p class="text-2xl font-bold text-gray-900">{{ selectedFunnelMetrics.reschedule_rate.toFixed(2) }}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">面談実施数</p>
+          <p class="text-2xl font-bold text-gray-900">{{ selectedFunnelMetrics.interviewed_students }}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">飛ばれ数</p>
+          <p class="text-2xl font-bold text-gray-900">{{ selectedFunnelMetrics.no_show_students }}</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <p class="text-sm text-gray-500">面談→イベント提案率</p>
@@ -287,6 +422,31 @@ const onSelectSource = async (source: string) => {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mt-6">
+        <h3 class="text-sm font-semibold text-gray-800 mb-2">日別申込/設定数（直近31日）</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[360px] text-xs">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left text-gray-500">日付</th>
+                <th class="px-3 py-2 text-right text-gray-500">申込数</th>
+                <th class="px-3 py-2 text-right text-gray-500">設定数</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="d in dailyApplicationSettingRows" :key="`lead-daily-${d.day}`">
+                <td class="px-3 py-2 text-gray-700">{{ formatDate(d.day) }}</td>
+                <td class="px-3 py-2 text-right text-gray-900">{{ d.applications }}</td>
+                <td class="px-3 py-2 text-right text-gray-900">{{ d.settings }}</td>
+              </tr>
+              <tr v-if="dailyApplicationSettingRows.length === 0">
+                <td class="px-3 py-3 text-gray-400 text-center" colSpan="3">データがありません</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

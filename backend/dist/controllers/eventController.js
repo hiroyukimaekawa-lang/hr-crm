@@ -64,9 +64,55 @@ const ensureStudentEventsColumns = () => __awaiter(void 0, void 0, void 0, funct
         return;
     if (!studentEventsColumnsPromise) {
         studentEventsColumnsPromise = (() => __awaiter(void 0, void 0, void 0, function* () {
+            // Ensure selected_event_date column exists
             yield db_1.default.query(`
                 ALTER TABLE student_events
                 ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP
+            `);
+            // Ensure surrogate primary key for student_events to allow multiple rows
+            // per (student_id, event_id) with different selected_event_date
+            yield db_1.default.query(`
+                ALTER TABLE student_events
+                ADD COLUMN IF NOT EXISTS id SERIAL
+            `);
+            // Drop legacy primary key on (student_id, event_id) if it exists
+            yield db_1.default.query(`
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints
+                        WHERE table_schema = 'public'
+                          AND table_name = 'student_events'
+                          AND constraint_type = 'PRIMARY KEY'
+                          AND constraint_name = 'student_events_pkey'
+                    ) THEN
+                        ALTER TABLE student_events DROP CONSTRAINT student_events_pkey;
+                    END IF;
+                END
+                $$;
+            `);
+            // Ensure primary key on id
+            yield db_1.default.query(`
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints
+                        WHERE table_schema = 'public'
+                          AND table_name = 'student_events'
+                          AND constraint_type = 'PRIMARY KEY'
+                    ) THEN
+                        ALTER TABLE student_events
+                        ADD CONSTRAINT student_events_pkey PRIMARY KEY (id);
+                    END IF;
+                END
+                $$;
+            `);
+            // Unique index so that the same student/event/date triplet is not duplicated
+            yield db_1.default.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_student_events_unique_triplet
+                ON student_events(student_id, event_id, selected_event_date)
             `);
             studentEventsColumnsReady = true;
         }))().finally(() => {
@@ -252,6 +298,7 @@ const getEventDetail = (req, res) => __awaiter(void 0, void 0, void 0, function*
         const eventDatesRes = yield db_1.default.query('SELECT event_date FROM event_dates WHERE event_id = $1 ORDER BY event_date ASC', [id]);
         const participantsRes = yield db_1.default.query(`
             SELECT 
+                se.id,
                 se.student_id,
                 se.status,
                 se.created_at,
@@ -286,8 +333,8 @@ const updateParticipantStatus = (req, res) => __awaiter(void 0, void 0, void 0, 
         const result = yield db_1.default.query(`UPDATE student_events
              SET status = $1,
                  selected_event_date = COALESCE($2, selected_event_date)
-             WHERE event_id = $3 AND student_id = $4
-             RETURNING *`, [status, selected_event_date || null, id, studentId]);
+             WHERE id = $3 AND event_id = $4
+             RETURNING *`, [status, selected_event_date || null, studentId, id]);
         res.json(result.rows[0]);
     }
     catch (err) {

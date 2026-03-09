@@ -46,6 +46,7 @@ const newEvent = ref({
 });
 const showCreate = ref(false);
 const selectedCalendarEvent = ref<EventItem | null>(null);
+const eventParticipantNames = ref<Record<number, string[]>>({});
 const router = useRouter();
 const calendarBaseMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
@@ -71,6 +72,26 @@ const fetchEvents = async () => {
   const token = localStorage.getItem('token');
   const res = await api.get('/api/events', { headers: { Authorization: token } });
   events.value = res.data;
+  const detailResults = await Promise.all(
+    events.value.map(async (e) => {
+      try {
+        const detail = await api.get(`/api/events/${e.id}`, { headers: { Authorization: token } });
+        const names: string[] = Array.isArray(detail.data?.participants)
+          ? detail.data.participants
+              .map((p: any) => String(p?.name || '').trim())
+              .filter((n: string) => !!n)
+          : [];
+        return { eventId: e.id, names: Array.from(new Set<string>(names)) };
+      } catch {
+        return { eventId: e.id, names: [] as string[] };
+      }
+    })
+  );
+  const map: Record<number, string[]> = {};
+  detailResults.forEach((r) => {
+    map[r.eventId] = r.names;
+  });
+  eventParticipantNames.value = map;
 };
 
 const createEvent = async () => {
@@ -130,11 +151,6 @@ const formatDateKey = (value: string | Date) => {
 
 const currentMonthBase = computed(() => new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth(), 1));
 
-const nextMonthBase = computed(() => {
-  const base = currentMonthBase.value;
-  return new Date(base.getFullYear(), base.getMonth() + 1, 1);
-});
-
 const eventsByDate = computed(() => {
   const map: Record<string, EventItem[]> = {};
   events.value.forEach(e => {
@@ -192,8 +208,14 @@ const getCalendarCellsForMonth = (base: Date) => {
 };
 
 const currentMonthCells = computed(() => getCalendarCellsForMonth(currentMonthBase.value));
-const nextMonthCells = computed(() => getCalendarCellsForMonth(nextMonthBase.value));
 const monthLabel = (value: Date) => new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'long' }).format(value);
+
+const participantPreview = (eventId: number) => {
+  const names = eventParticipantNames.value[eventId] || [];
+  if (names.length === 0) return '参加者なし';
+  if (names.length <= 2) return names.join(' / ');
+  return `${names.slice(0, 2).join(' / ')} +${names.length - 2}名`;
+};
 
 const prevMonth = () => {
   calendarBaseMonth.value = new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth() - 1, 1);
@@ -233,7 +255,7 @@ onMounted(fetchEvents);
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-bold text-gray-900">イベント開催カレンダー（今月・来月）</h2>
+          <h2 class="text-lg font-bold text-gray-900">イベント開催カレンダー（今月）</h2>
           <div class="flex items-center gap-2">
             <button @click="prevMonth" class="p-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
               <ChevronLeft class="w-4 h-4" />
@@ -243,61 +265,32 @@ onMounted(fetchEvents);
             </button>
           </div>
         </div>
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <section>
-            <h3 class="text-sm font-semibold text-gray-700 mb-2">{{ monthLabel(currentMonthBase) }}</h3>
-            <div class="grid grid-cols-7 text-xs text-gray-500 mb-2">
-              <div class="py-1 text-center">日</div><div class="py-1 text-center">月</div><div class="py-1 text-center">火</div><div class="py-1 text-center">水</div><div class="py-1 text-center">木</div><div class="py-1 text-center">金</div><div class="py-1 text-center">土</div>
-            </div>
-            <div class="grid grid-cols-7 border border-gray-200 rounded-lg overflow-hidden">
-              <div v-for="cell in currentMonthCells" :key="`current-${cell.key}`" class="min-h-[72px] border-r border-b border-gray-200 p-2 text-xs" :class="{ 'bg-gray-50': !cell.date }">
-                <template v-if="cell.date">
-                  <div class="text-gray-700">{{ cell.date.getDate() }}</div>
-                  <div v-if="getEventsForDate(cell.key).length" class="mt-1 space-y-1">
-                    <div
-                      v-for="ev in getEventsForDate(cell.key).slice(0, 2)"
-                      :key="ev.id"
-                      class="truncate px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100"
-                      @click="openEventDetailPanel(ev)"
-                    >
-                      {{ ev.title }}
-                    </div>
-                    <div v-if="getEventsForDate(cell.key).length > 2" class="text-[10px] text-gray-500">
-                      +{{ getEventsForDate(cell.key).length - 2 }}件
-                    </div>
+        <section>
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">{{ monthLabel(currentMonthBase) }}</h3>
+          <div class="grid grid-cols-7 text-xs text-gray-500 mb-2">
+            <div class="py-1 text-center">日</div><div class="py-1 text-center">月</div><div class="py-1 text-center">火</div><div class="py-1 text-center">水</div><div class="py-1 text-center">木</div><div class="py-1 text-center">金</div><div class="py-1 text-center">土</div>
+          </div>
+          <div class="grid grid-cols-7 border border-gray-200 rounded-lg overflow-hidden">
+            <div v-for="cell in currentMonthCells" :key="`current-${cell.key}`" class="min-h-[72px] border-r border-b border-gray-200 p-2 text-xs" :class="{ 'bg-gray-50': !cell.date }">
+              <template v-if="cell.date">
+                <div class="text-gray-700">{{ cell.date.getDate() }}</div>
+                <div v-if="getEventsForDate(cell.key).length" class="mt-1 space-y-1">
+                  <div
+                    v-for="ev in getEventsForDate(cell.key).slice(0, 2)"
+                    :key="ev.id"
+                    class="truncate px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100"
+                    @click="openEventDetailPanel(ev)"
+                  >
+                    {{ ev.title }} - {{ participantPreview(ev.id) }}
                   </div>
-                </template>
-              </div>
-            </div>
-          </section>
-
-          <section>
-            <h3 class="text-sm font-semibold text-gray-700 mb-2">{{ monthLabel(nextMonthBase) }}</h3>
-            <div class="grid grid-cols-7 text-xs text-gray-500 mb-2">
-              <div class="py-1 text-center">日</div><div class="py-1 text-center">月</div><div class="py-1 text-center">火</div><div class="py-1 text-center">水</div><div class="py-1 text-center">木</div><div class="py-1 text-center">金</div><div class="py-1 text-center">土</div>
-            </div>
-            <div class="grid grid-cols-7 border border-gray-200 rounded-lg overflow-hidden">
-              <div v-for="cell in nextMonthCells" :key="`next-${cell.key}`" class="min-h-[72px] border-r border-b border-gray-200 p-2 text-xs" :class="{ 'bg-gray-50': !cell.date }">
-                <template v-if="cell.date">
-                  <div class="text-gray-700">{{ cell.date.getDate() }}</div>
-                  <div v-if="getEventsForDate(cell.key).length" class="mt-1 space-y-1">
-                    <div
-                      v-for="ev in getEventsForDate(cell.key).slice(0, 2)"
-                      :key="ev.id"
-                      class="truncate px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100"
-                      @click="openEventDetailPanel(ev)"
-                    >
-                      {{ ev.title }}
-                    </div>
-                    <div v-if="getEventsForDate(cell.key).length > 2" class="text-[10px] text-gray-500">
-                      +{{ getEventsForDate(cell.key).length - 2 }}件
-                    </div>
+                  <div v-if="getEventsForDate(cell.key).length > 2" class="text-[10px] text-gray-500">
+                    +{{ getEventsForDate(cell.key).length - 2 }}件
                   </div>
-                </template>
-              </div>
+                </div>
+              </template>
             </div>
-          </section>
-        </div>
+          </div>
+        </section>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

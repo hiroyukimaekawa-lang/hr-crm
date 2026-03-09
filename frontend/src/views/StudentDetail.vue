@@ -29,9 +29,7 @@ const interviewSchedules = ref<any[]>([]);
 const matcherFunnel = ref<any | null>(null);
 const matcherForm = ref({
   applied_at: '',
-  message_sent_at: '',
   reservation_created_at: '',
-  reservation_status: 'reserved',
   interview_scheduled_at: '',
   interview_actual_at: '',
   interview_status: 'completed'
@@ -39,12 +37,13 @@ const matcherForm = ref({
 const hourOptions = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 const proposalEvents = ref<any[]>([]);
 const proposalLostReasons = ref<any[]>([]);
+const participationReasons = ['興味がある', '日程が合う', '友人と参加', '選考対策になる', 'その他'];
 const eventProposals = ref<any[]>([]);
 const proposalForm = ref({
   event_id: '',
   selected_event_date: '',
   status: 'proposed',
-  lost_reason_id: '',
+  reason: '',
   memo: ''
 });
 const expandedLogId = ref<number | null>(null);
@@ -181,9 +180,7 @@ const fetchDetail = async () => {
   matcherFunnel.value = res.data.matcher_funnel || null;
   matcherForm.value = {
     applied_at: toDateTimeLocalHour(res.data.matcher_funnel?.applied_at || student.value?.created_at),
-    message_sent_at: toDateTimeLocalHour(res.data.matcher_funnel?.message_sent_at),
     reservation_created_at: toDateTimeLocalHour(res.data.matcher_funnel?.reservation_created_at || student.value?.meeting_decided_date),
-    reservation_status: res.data.matcher_funnel?.reservation_status || 'reserved',
     interview_scheduled_at: toDateTimeLocalHour(res.data.matcher_funnel?.interview_scheduled_at || student.value?.first_interview_date),
     interview_actual_at: toDateTimeLocalHour(res.data.matcher_funnel?.interview_actual_at),
     interview_status: res.data.matcher_funnel?.interview_status || 'completed'
@@ -229,36 +226,47 @@ const mergeDateHour = (date: string, hour: string) => {
 
 const registerMatcherApply = async () => {
   const token = localStorage.getItem('token');
-  await api.post(`/api/students/${studentId}/matcher-funnel/apply`, {
-    applied_at: normalizeHourDateTime(matcherForm.value.applied_at)
+  const appliedAt = normalizeHourDateTime(matcherForm.value.applied_at);
+  await api.post(`/api/students/${studentId}/funnel/application`, {
+    source: student.value?.source_company || null,
+    applied_at: appliedAt
   }, { headers: { Authorization: token } });
-  fetchDetail();
-};
-
-const registerMatcherMessage = async () => {
-  const token = localStorage.getItem('token');
-  await api.post(`/api/students/${studentId}/matcher-funnel/message`, {
-    message_sent_at: normalizeHourDateTime(matcherForm.value.message_sent_at)
+  await api.post(`/api/students/${studentId}/matcher-funnel/apply`, {
+    applied_at: appliedAt
   }, { headers: { Authorization: token } });
   fetchDetail();
 };
 
 const registerMatcherReservation = async () => {
   const token = localStorage.getItem('token');
+  const reservationCreatedAt = normalizeHourDateTime(matcherForm.value.reservation_created_at);
+  const interviewScheduledAt = normalizeHourDateTime(matcherForm.value.interview_scheduled_at);
+  await api.put(`/api/students/${studentId}/funnel/reservation`, {
+    reservation_status: '初回面談',
+    reservation_created_at: reservationCreatedAt,
+    reservation_date: interviewScheduledAt
+  }, { headers: { Authorization: token } });
   await api.post(`/api/students/${studentId}/matcher-funnel/reservation`, {
-    reservation_created_at: normalizeHourDateTime(matcherForm.value.reservation_created_at),
-    reservation_status: matcherForm.value.reservation_status || 'reserved',
-    interview_scheduled_at: normalizeHourDateTime(matcherForm.value.interview_scheduled_at)
+    reservation_created_at: reservationCreatedAt,
+    reservation_status: '初回面談',
+    interview_scheduled_at: interviewScheduledAt
   }, { headers: { Authorization: token } });
   fetchDetail();
 };
 
 const registerMatcherInterview = async () => {
   const token = localStorage.getItem('token');
+  const interviewActualAt = normalizeHourDateTime(matcherForm.value.interview_actual_at);
+  const interviewScheduledAt = normalizeHourDateTime(matcherForm.value.interview_scheduled_at);
+  await api.post(`/api/students/${studentId}/funnel/interview`, {
+    scheduled_at: interviewScheduledAt,
+    interviewed_at: interviewActualAt,
+    status: matcherForm.value.interview_status || 'completed'
+  }, { headers: { Authorization: token } });
   await api.post(`/api/students/${studentId}/matcher-funnel/interview`, {
-    interview_actual_at: normalizeHourDateTime(matcherForm.value.interview_actual_at),
+    interview_actual_at: interviewActualAt,
     interview_status: matcherForm.value.interview_status || 'completed',
-    interview_scheduled_at: normalizeHourDateTime(matcherForm.value.interview_scheduled_at)
+    interview_scheduled_at: interviewScheduledAt
   }, { headers: { Authorization: token } });
   fetchDetail();
 };
@@ -285,18 +293,22 @@ const fetchEventProposals = async () => {
 const submitEventProposal = async () => {
   if (!proposalForm.value.event_id) return;
   const token = localStorage.getItem('token');
+  const selectedReason = proposalForm.value.reason || '';
+  const matchedLostReason = proposalLostReasons.value.find((r: any) => String(r.reason_name || '') === selectedReason);
+  const lostReasonId = proposalForm.value.status === 'lost' && matchedLostReason ? Number(matchedLostReason.id) : null;
   await api.post(`/api/students/${studentId}/funnel/event-proposal`, {
     event_id: Number(proposalForm.value.event_id),
     selected_event_date: proposalForm.value.selected_event_date || null,
     status: proposalForm.value.status || 'proposed',
-    lost_reason_id: proposalForm.value.lost_reason_id ? Number(proposalForm.value.lost_reason_id) : null,
+    lost_reason_id: lostReasonId,
+    reason: selectedReason || null,
     memo: proposalForm.value.memo || null
   }, { headers: { Authorization: token } });
   proposalForm.value = {
     event_id: '',
     selected_event_date: '',
     status: 'proposed',
-    lost_reason_id: '',
+    reason: '',
     memo: ''
   };
   await fetchEventProposals();
@@ -579,6 +591,13 @@ const selectedProposalEventDates = computed(() => {
   if (dates.length > 0) return dates;
   if (e.event_date) return [String(e.event_date)];
   return [] as string[];
+});
+const unifiedReasonOptions = computed(() => {
+  const all = [
+    ...proposalLostReasons.value.map((r: any) => String(r.reason_name || '').trim()).filter(Boolean),
+    ...participationReasons
+  ];
+  return Array.from(new Set(all));
 });
 const isPinned = computed(() => getPinnedStudent()?.id === Number(studentId));
 
@@ -969,10 +988,12 @@ watch(selectedEventId, () => {
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="text-lg font-bold text-gray-900 mb-4">Matcher面談ファネル</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div class="border border-gray-200 rounded-lg p-3">
-                <p class="text-sm font-semibold mb-2">1) 申込</p>
-                <div class="grid grid-cols-12 gap-2 mb-2">
+            <p class="text-xs text-gray-500 mb-4">申込 → 予約（初回面談） → 初回面談実施 の3ステップで管理します。</p>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div class="border border-gray-200 rounded-lg p-4 bg-gray-50/60">
+                <p class="text-sm font-semibold text-gray-900 mb-3">1) 申込登録</p>
+                <label class="block text-xs text-gray-500 mb-1">申込日</label>
+                <div class="grid grid-cols-12 gap-2 mb-3">
                   <input
                     :value="getDatePart(matcherForm.applied_at)"
                     type="date"
@@ -987,30 +1008,13 @@ watch(selectedEventId, () => {
                     <option v-for="h in hourOptions" :key="`matcher-apply-hour-${h}`" :value="h">{{ h }}:00</option>
                   </select>
                 </div>
-                <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherApply">申込登録</button>
+                <button class="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherApply">申込登録</button>
               </div>
-              <div class="border border-gray-200 rounded-lg p-3">
-                <p class="text-sm font-semibold mb-2">2) メッセージ送信</p>
-                <div class="grid grid-cols-12 gap-2 mb-2">
-                  <input
-                    :value="getDatePart(matcherForm.message_sent_at)"
-                    type="date"
-                    class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    @input="matcherForm.message_sent_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.message_sent_at))"
-                  />
-                  <select
-                    :value="getHourPart(matcherForm.message_sent_at)"
-                    class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    @change="matcherForm.message_sent_at = mergeDateHour(getDatePart(matcherForm.message_sent_at), ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option v-for="h in hourOptions" :key="`matcher-msg-hour-${h}`" :value="h">{{ h }}:00</option>
-                  </select>
-                </div>
-                <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherMessage">メッセージ送信登録</button>
-              </div>
-              <div class="border border-gray-200 rounded-lg p-3">
-                <p class="text-sm font-semibold mb-2">3) 予約</p>
-                <div class="grid grid-cols-12 gap-2 mb-2">
+
+              <div class="border border-gray-200 rounded-lg p-4 bg-gray-50/60">
+                <p class="text-sm font-semibold text-gray-900 mb-3">2) 予約登録（初回面談）</p>
+                <label class="block text-xs text-gray-500 mb-1">予約作成日（TimeRex）</label>
+                <div class="grid grid-cols-12 gap-2 mb-3">
                   <input
                     :value="getDatePart(matcherForm.reservation_created_at)"
                     type="date"
@@ -1025,13 +1029,8 @@ watch(selectedEventId, () => {
                     <option v-for="h in hourOptions" :key="`matcher-reserve-hour-${h}`" :value="h">{{ h }}:00</option>
                   </select>
                 </div>
-                <select v-model="matcherForm.reservation_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2">
-                  <option value="pending">pending</option>
-                  <option value="reserved">reserved</option>
-                  <option value="cancel">cancel</option>
-                  <option value="no_response">no_response</option>
-                </select>
-                <div class="grid grid-cols-12 gap-2 mb-2">
+                <label class="block text-xs text-gray-500 mb-1">初回面談予定日</label>
+                <div class="grid grid-cols-12 gap-2 mb-3">
                   <input
                     :value="getDatePart(matcherForm.interview_scheduled_at)"
                     type="date"
@@ -1046,11 +1045,14 @@ watch(selectedEventId, () => {
                     <option v-for="h in hourOptions" :key="`matcher-scheduled-hour-${h}`" :value="h">{{ h }}:00</option>
                   </select>
                 </div>
-                <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherReservation">予約登録</button>
+                <p class="text-xs text-gray-500 mb-3">予約ステータス: 初回面談</p>
+                <button class="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherReservation">予約登録</button>
               </div>
-              <div class="border border-gray-200 rounded-lg p-3">
-                <p class="text-sm font-semibold mb-2">4) 面談実施</p>
-                <div class="grid grid-cols-12 gap-2 mb-2">
+
+              <div class="border border-gray-200 rounded-lg p-4 bg-gray-50/60">
+                <p class="text-sm font-semibold text-gray-900 mb-3">3) 初回面談実施登録</p>
+                <label class="block text-xs text-gray-500 mb-1">初回面談実施日</label>
+                <div class="grid grid-cols-12 gap-2 mb-3">
                   <input
                     :value="getDatePart(matcherForm.interview_actual_at)"
                     type="date"
@@ -1065,14 +1067,14 @@ watch(selectedEventId, () => {
                     <option v-for="h in hourOptions" :key="`matcher-actual-hour-${h}`" :value="h">{{ h }}:00</option>
                   </select>
                 </div>
-                <select v-model="matcherForm.interview_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2">
-                  <option value="scheduled">scheduled</option>
-                  <option value="completed">completed</option>
-                  <option value="no_show">no_show</option>
-                  <option value="rescheduled">rescheduled</option>
-                  <option value="cancel">cancel</option>
+                <label class="block text-xs text-gray-500 mb-1">面談結果</label>
+                <select v-model="matcherForm.interview_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-3">
+                  <option value="completed">実施</option>
+                  <option value="no_show">飛ばれ</option>
+                  <option value="rescheduled">リスケ</option>
+                  <option value="cancel">キャンセル</option>
                 </select>
-                <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherInterview">面談実施登録</button>
+                <button class="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherInterview">面談実施登録</button>
               </div>
             </div>
           </div>
@@ -1086,7 +1088,7 @@ watch(selectedEventId, () => {
                   <span class="text-xs text-gray-500">{{ formatDateTime(p.proposed_at) }}</span>
                   <span v-if="p.selected_event_date" class="text-xs text-blue-600">参加日: {{ formatDateTime(p.selected_event_date) }}</span>
                   <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{{ p.status || '-' }}</span>
-                  <span v-if="p.lost_reason_name" class="text-xs text-red-600">失注理由: {{ p.lost_reason_name }}</span>
+                  <span v-if="p.reason || p.lost_reason_name" class="text-xs text-gray-700">理由: {{ p.reason || p.lost_reason_name }}</span>
                 </div>
                 <p v-if="p.memo" class="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{{ p.memo }}</p>
               </div>
@@ -1108,9 +1110,9 @@ watch(selectedEventId, () => {
                 <option value="joined">参加</option>
                 <option value="lost">失注</option>
               </select>
-              <select v-model="proposalForm.lost_reason_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                <option value="">失注理由（任意）</option>
-                <option v-for="r in proposalLostReasons" :key="`proposal-lost-${r.id}`" :value="String(r.id)">{{ r.reason_name }}</option>
+              <select v-model="proposalForm.reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="">理由（任意）</option>
+                <option v-for="reason in unifiedReasonOptions" :key="`proposal-reason-${reason}`" :value="reason">{{ reason }}</option>
               </select>
               <input v-model="proposalForm.memo" type="text" placeholder="メモ（任意）" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>

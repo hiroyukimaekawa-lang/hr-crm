@@ -214,6 +214,10 @@ const ensureSalesFunnelTables = async () => {
                 ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP
             `);
             await pool.query(`
+                ALTER TABLE event_proposals
+                ADD COLUMN IF NOT EXISTS reason TEXT
+            `);
+            await pool.query(`
                 INSERT INTO lost_reasons (reason_name)
                 VALUES
                     ('日程が合わない'),
@@ -1619,7 +1623,33 @@ export const updateApplicationReservation = async (req: Request, res: Response) 
             [id]
         );
         if (appRes.rows.length === 0) {
-            res.status(404).json({ error: 'Application not found for student' });
+            const studentRes = await pool.query(
+                'SELECT id, name, source_company, created_at FROM students WHERE id = $1 LIMIT 1',
+                [id]
+            );
+            if (studentRes.rows.length === 0) {
+                res.status(404).json({ error: 'Student not found' });
+                return;
+            }
+            const st = studentRes.rows[0];
+            const inserted = await pool.query(
+                `INSERT INTO applications (
+                    student_id, student_name, source, applied_at,
+                    reservation_status, reservation_date, reservation_created_at, first_message_sent_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING *`,
+                [
+                    st.id,
+                    st.name,
+                    normalizeNullableText(st.source_company),
+                    normalizeToHour(reservation_created_at) || normalizeToHour(reservation_date) || st.created_at || new Date().toISOString(),
+                    normalizeNullableText(reservation_status),
+                    normalizeToHour(reservation_date),
+                    normalizeToHour(reservation_created_at),
+                    normalizeToHour(first_message_sent_at)
+                ]
+            );
+            res.json(inserted.rows[0]);
             return;
         }
         const app = appRes.rows[0];
@@ -1669,7 +1699,7 @@ export const createInterviewRecord = async (req: Request, res: Response) => {
 
 export const createEventProposal = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { event_id, proposed_at, status, lost_reason_id, selected_event_date, memo } = req.body || {};
+    const { event_id, proposed_at, status, lost_reason_id, selected_event_date, memo, reason } = req.body || {};
     if (!event_id) {
         res.status(400).json({ error: 'event_id is required' });
         return;
@@ -1677,8 +1707,8 @@ export const createEventProposal = async (req: Request, res: Response) => {
     try {
         await ensureSalesFunnelTables();
         const result = await pool.query(
-            `INSERT INTO event_proposals (student_id, event_id, proposed_at, status, lost_reason_id, selected_event_date, memo)
-             VALUES ($1, $2, COALESCE($3, CURRENT_TIMESTAMP), $4, $5, $6, $7)
+            `INSERT INTO event_proposals (student_id, event_id, proposed_at, status, lost_reason_id, selected_event_date, memo, reason)
+             VALUES ($1, $2, COALESCE($3, CURRENT_TIMESTAMP), $4, $5, $6, $7, $8)
              RETURNING *`,
             [
                 id,
@@ -1687,7 +1717,8 @@ export const createEventProposal = async (req: Request, res: Response) => {
                 normalizeNullableText(status) || 'proposed',
                 lost_reason_id ? Number(lost_reason_id) : null,
                 normalizeToHour(selected_event_date),
-                normalizeNullableText(memo)
+                normalizeNullableText(memo),
+                normalizeNullableText(reason)
             ]
         );
         res.status(201).json(result.rows[0]);
@@ -1710,6 +1741,7 @@ export const getStudentEventProposals = async (req: Request, res: Response) => {
                 ep.lost_reason_id,
                 ep.selected_event_date,
                 ep.memo,
+                ep.reason,
                 ep.created_at,
                 e.title AS event_name,
                 e.event_date,
@@ -1784,6 +1816,15 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                       AND COALESCE(i.status, '') = 'no_show'
                     GROUP BY 1
                 ),
+                interview_rescheduled_s AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(DISTINCT i.student_id)::int AS cnt
+                    FROM interviews i
+                    JOIN students s ON s.id = i.student_id
+                    WHERE i.student_id IS NOT NULL
+                      AND COALESCE(i.status, '') = 'rescheduled'
+                    GROUP BY 1
+                ),
                 proposal_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT ep.student_id)::int AS cnt
@@ -1823,6 +1864,14 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     ) t
                     GROUP BY source_company
                 ),
+                daily_setting AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(*)::int AS cnt
+                    FROM applications a
+                    JOIN students s ON s.id = a.student_id
+                    WHERE DATE(COALESCE(a.reservation_date, a.reservation_created_at)) = CURRENT_DATE
+                    GROUP BY 1
+                ),
                 app_to_reserve_lt AS (
                     SELECT
                         COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
@@ -1855,12 +1904,14 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                 SELECT
                     src.source_company,
                     COALESCE(daily_app.cnt, 0)::int AS daily_applications,
+                    COALESCE(daily_setting.cnt, 0)::int AS daily_settings,
                     COALESCE(daily_avg.avg_daily_applications, 0)::numeric(10,2) AS avg_daily_applications,
                     COALESCE(app_s.cnt, 0)::int AS applications_students,
                     COALESCE(reserve_s.cnt, 0)::int AS reserved_students,
                     COALESCE(interview_s.cnt, 0)::int AS interview_scheduled_students,
                     COALESCE(interview_completed_s.cnt, 0)::int AS interviewed_students,
                     COALESCE(interview_no_show_s.cnt, 0)::int AS no_show_students,
+                    COALESCE(interview_rescheduled_s.cnt, 0)::int AS rescheduled_students,
                     COALESCE(proposal_s.cnt, 0)::int AS proposed_students,
                     COALESCE(join_s.cnt, 0)::int AS joined_students,
                     app_to_reserve_lt.days AS apply_to_reservation_lead_time_days_avg,
@@ -1870,16 +1921,19 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     ROUND((COALESCE(proposal_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_completed_s.cnt, 0), 0)) * 100, 2) AS interview_to_proposal_rate,
                     ROUND((COALESCE(join_s.cnt, 0)::numeric / NULLIF(COALESCE(proposal_s.cnt, 0), 0)) * 100, 2) AS proposal_to_join_rate,
                     ROUND((COALESCE(interview_completed_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS interview_completed_rate,
-                    ROUND((COALESCE(interview_no_show_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS no_show_rate
+                    ROUND((COALESCE(interview_no_show_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS no_show_rate,
+                    ROUND((COALESCE(interview_rescheduled_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS reschedule_rate
                 FROM src
                 LEFT JOIN app_s ON app_s.source_company = src.source_company
                 LEFT JOIN reserve_s ON reserve_s.source_company = src.source_company
                 LEFT JOIN interview_s ON interview_s.source_company = src.source_company
                 LEFT JOIN interview_completed_s ON interview_completed_s.source_company = src.source_company
                 LEFT JOIN interview_no_show_s ON interview_no_show_s.source_company = src.source_company
+                LEFT JOIN interview_rescheduled_s ON interview_rescheduled_s.source_company = src.source_company
                 LEFT JOIN proposal_s ON proposal_s.source_company = src.source_company
                 LEFT JOIN join_s ON join_s.source_company = src.source_company
                 LEFT JOIN daily_app ON daily_app.source_company = src.source_company
+                LEFT JOIN daily_setting ON daily_setting.source_company = src.source_company
                 LEFT JOIN daily_avg ON daily_avg.source_company = src.source_company
                 LEFT JOIN app_to_reserve_lt ON app_to_reserve_lt.source_company = src.source_company
                 LEFT JOIN reserve_to_interview_lt ON reserve_to_interview_lt.source_company = src.source_company
@@ -1938,6 +1992,12 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     WHERE student_id IS NOT NULL
                       AND COALESCE(status, '') = 'no_show'
                 ),
+                interview_rescheduled_s AS (
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
+                      AND COALESCE(status, '') = 'rescheduled'
+                ),
                 apply_to_reserve_lt AS (
                     SELECT ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(reservation_created_at, reservation_date) - applied_at)) / 86400.0)::numeric, 2) AS days
                     FROM applications
@@ -1974,17 +2034,19 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     interview_s.cnt AS interview_scheduled_students,
                     interview_completed_s.cnt AS interviewed_students,
                     interview_no_show_s.cnt AS no_show_students,
+                    interview_rescheduled_s.cnt AS rescheduled_students,
                     proposal_s.cnt AS proposed_students,
                     join_s.cnt AS joined_students,
                     apply_to_reserve_lt.days AS apply_to_reservation_lead_time_days_avg,
                     reserve_to_interview_lt.days AS reservation_to_interview_lead_time_days_avg
-                FROM app_s, reserve_s, interview_s, interview_completed_s, interview_no_show_s, proposal_s, join_s, apply_to_reserve_lt, reserve_to_interview_lt
+                FROM app_s, reserve_s, interview_s, interview_completed_s, interview_no_show_s, interview_rescheduled_s, proposal_s, join_s, apply_to_reserve_lt, reserve_to_interview_lt
             `),
             pool.query(`
                 SELECT COALESCE(lr.reason_name, '未設定') AS reason_name, COUNT(*)::int AS count
                 FROM event_proposals ep
                 LEFT JOIN lost_reasons lr ON lr.id = ep.lost_reason_id
                 WHERE ep.lost_reason_id IS NOT NULL
+                  AND COALESCE(ep.status, '') IN ('lost', '失注')
                 GROUP BY COALESCE(lr.reason_name, '未設定')
                 ORDER BY count DESC, reason_name ASC
                 LIMIT 10
@@ -1996,6 +2058,7 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
         const interviewScheduledStudents = Number(s.interview_scheduled_students || 0);
         const interviewedStudents = Number(s.interviewed_students || 0);
         const noShowStudents = Number(s.no_show_students || 0);
+        const rescheduledStudents = Number(s.rescheduled_students || 0);
         const proposedStudents = Number(s.proposed_students || 0);
         const joinedStudents = Number(s.joined_students || 0);
         const rate = (a: number, b: number) => (b > 0 ? Number(((a / b) * 100).toFixed(2)) : 0);
@@ -2010,6 +2073,7 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
             reservation_to_interview_lead_time_days_avg: s.reservation_to_interview_lead_time_days_avg !== null ? Number(s.reservation_to_interview_lead_time_days_avg) : null,
             interview_completed_rate: rate(interviewedStudents, interviewScheduledStudents),
             no_show_rate: rate(noShowStudents, interviewScheduledStudents),
+            reschedule_rate: rate(rescheduledStudents, interviewScheduledStudents),
             lost_reason_ranking: lostRes.rows,
             counts: {
                 applications_students: applicationsStudents,
@@ -2017,6 +2081,7 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                 interview_scheduled_students: interviewScheduledStudents,
                 interviewed_students: interviewedStudents,
                 no_show_students: noShowStudents,
+                rescheduled_students: rescheduledStudents,
                 proposed_students: proposedStudents,
                 joined_students: joinedStudents
             }

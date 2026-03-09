@@ -38,6 +38,7 @@ interface Student {
   staff_name?: string;
   meeting_decided_date?: string | null;
   first_interview_date?: string | null;
+  created_at?: string | null;
   matcher_applied_at?: string | null;
   matcher_reservation_created_at?: string | null;
   matcher_interview_scheduled_at?: string | null;
@@ -299,9 +300,9 @@ const openFunnelModal = (student: Student) => {
   funnelError.value = '';
   funnelForm.value = {
     source: normalizeSourceCompany(student.source_company) || '',
-    applied_at: toDateTimeHour(student.matcher_applied_at || student.meeting_decided_date),
-    reservation_date: toDateTimeHour(student.meeting_decided_date),
-    interview_scheduled_at: toDateTimeHour(student.first_interview_date),
+    applied_at: toDateTimeHour(student.matcher_applied_at || student.meeting_decided_date || student.created_at),
+    reservation_date: toDateTimeHour(student.matcher_reservation_created_at || student.meeting_decided_date),
+    interview_scheduled_at: toDateTimeHour(student.matcher_interview_scheduled_at || student.first_interview_date),
     interview_interviewed_at: '',
     interview_status: 'completed'
   };
@@ -934,7 +935,7 @@ watch(filteredStudents, () => {
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-9 gap-3 mb-6">
+      <div v-if="false" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-9 gap-3 mb-6">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <p class="text-xs text-gray-500">申込→予約率</p>
           <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.application_to_reservation_rate.toFixed(2) }}%</p>
@@ -984,7 +985,7 @@ watch(filteredStudents, () => {
         </div>
       </div>
 
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+      <div v-if="false" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
         <h3 class="text-sm font-semibold text-gray-800 mb-2">日別申込/設定数（直近31日）</h3>
         <div class="overflow-x-auto">
           <table class="w-full min-w-[360px] text-xs">

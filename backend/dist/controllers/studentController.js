@@ -226,6 +226,10 @@ const ensureSalesFunnelTables = () => __awaiter(void 0, void 0, void 0, function
                 ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP
             `);
             yield db_1.default.query(`
+                ALTER TABLE event_proposals
+                ADD COLUMN IF NOT EXISTS reason TEXT
+            `);
+            yield db_1.default.query(`
                 INSERT INTO lost_reasons (reason_name)
                 VALUES
                     ('日程が合わない'),
@@ -274,9 +278,55 @@ const ensureStudentEventsColumns = () => __awaiter(void 0, void 0, void 0, funct
         return;
     if (!studentEventsColumnsPromise) {
         studentEventsColumnsPromise = (() => __awaiter(void 0, void 0, void 0, function* () {
+            // Ensure selected_event_date column exists
             yield db_1.default.query(`
                 ALTER TABLE student_events
                 ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP
+            `);
+            // Ensure surrogate primary key for student_events to allow multiple rows
+            // per (student_id, event_id) with different selected_event_date
+            yield db_1.default.query(`
+                ALTER TABLE student_events
+                ADD COLUMN IF NOT EXISTS id SERIAL
+            `);
+            // Drop legacy primary key on (student_id, event_id) if it exists
+            yield db_1.default.query(`
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints
+                        WHERE table_schema = 'public'
+                          AND table_name = 'student_events'
+                          AND constraint_type = 'PRIMARY KEY'
+                          AND constraint_name = 'student_events_pkey'
+                    ) THEN
+                        ALTER TABLE student_events DROP CONSTRAINT student_events_pkey;
+                    END IF;
+                END
+                $$;
+            `);
+            // Ensure primary key on id
+            yield db_1.default.query(`
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints
+                        WHERE table_schema = 'public'
+                          AND table_name = 'student_events'
+                          AND constraint_type = 'PRIMARY KEY'
+                    ) THEN
+                        ALTER TABLE student_events
+                        ADD CONSTRAINT student_events_pkey PRIMARY KEY (id);
+                    END IF;
+                END
+                $$;
+            `);
+            // Unique index so that the same student/event/date triplet is not duplicated
+            yield db_1.default.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_student_events_unique_triplet
+                ON student_events(student_id, event_id, selected_event_date)
             `);
             studentEventsColumnsReady = true;
         }))().finally(() => {
@@ -571,6 +621,7 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 e.*,
                 to_char(e.event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as event_date,
                 COALESCE(eds.event_dates, '[]'::json) as event_dates,
+                se.id as student_event_id,
                 se.status as participation_status,
                 se.created_at as participation_created_at,
                 to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
@@ -993,10 +1044,9 @@ const linkEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING', 'XA_CANCEL'].includes(status) ? status : 'A_ENTRY';
         yield db_1.default.query(`INSERT INTO student_events (student_id, event_id, status, selected_event_date)
              VALUES ($1, $2, $3, $4)
-             ON CONFLICT (student_id, event_id)
+             ON CONFLICT (student_id, event_id, selected_event_date)
              DO UPDATE SET
-                status = EXCLUDED.status,
-                selected_event_date = COALESCE(EXCLUDED.selected_event_date, student_events.selected_event_date)`, [id, event_id, safeStatus, normalizeToHour(selected_event_date)]);
+                status = EXCLUDED.status`, [id, event_id, safeStatus, normalizeToHour(selected_event_date)]);
         res.json({ success: true });
     }
     catch (err) {
@@ -1453,7 +1503,27 @@ const updateApplicationReservation = (req, res) => __awaiter(void 0, void 0, voi
         yield ensureSalesFunnelTables();
         const appRes = yield db_1.default.query('SELECT * FROM applications WHERE student_id = $1 ORDER BY applied_at DESC NULLS LAST, id DESC LIMIT 1', [id]);
         if (appRes.rows.length === 0) {
-            res.status(404).json({ error: 'Application not found for student' });
+            const studentRes = yield db_1.default.query('SELECT id, name, source_company, created_at FROM students WHERE id = $1 LIMIT 1', [id]);
+            if (studentRes.rows.length === 0) {
+                res.status(404).json({ error: 'Student not found' });
+                return;
+            }
+            const st = studentRes.rows[0];
+            const inserted = yield db_1.default.query(`INSERT INTO applications (
+                    student_id, student_name, source, applied_at,
+                    reservation_status, reservation_date, reservation_created_at, first_message_sent_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING *`, [
+                st.id,
+                st.name,
+                normalizeNullableText(st.source_company),
+                normalizeToHour(reservation_created_at) || normalizeToHour(reservation_date) || st.created_at || new Date().toISOString(),
+                normalizeNullableText(reservation_status),
+                normalizeToHour(reservation_date),
+                normalizeToHour(reservation_created_at),
+                normalizeToHour(first_message_sent_at)
+            ]);
+            res.json(inserted.rows[0]);
             return;
         }
         const app = appRes.rows[0];
@@ -1499,15 +1569,15 @@ const createInterviewRecord = (req, res) => __awaiter(void 0, void 0, void 0, fu
 exports.createInterviewRecord = createInterviewRecord;
 const createEventProposal = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { event_id, proposed_at, status, lost_reason_id, selected_event_date, memo } = req.body || {};
+    const { event_id, proposed_at, status, lost_reason_id, selected_event_date, memo, reason } = req.body || {};
     if (!event_id) {
         res.status(400).json({ error: 'event_id is required' });
         return;
     }
     try {
         yield ensureSalesFunnelTables();
-        const result = yield db_1.default.query(`INSERT INTO event_proposals (student_id, event_id, proposed_at, status, lost_reason_id, selected_event_date, memo)
-             VALUES ($1, $2, COALESCE($3, CURRENT_TIMESTAMP), $4, $5, $6, $7)
+        const result = yield db_1.default.query(`INSERT INTO event_proposals (student_id, event_id, proposed_at, status, lost_reason_id, selected_event_date, memo, reason)
+             VALUES ($1, $2, COALESCE($3, CURRENT_TIMESTAMP), $4, $5, $6, $7, $8)
              RETURNING *`, [
             id,
             Number(event_id),
@@ -1515,7 +1585,8 @@ const createEventProposal = (req, res) => __awaiter(void 0, void 0, void 0, func
             normalizeNullableText(status) || 'proposed',
             lost_reason_id ? Number(lost_reason_id) : null,
             normalizeToHour(selected_event_date),
-            normalizeNullableText(memo)
+            normalizeNullableText(memo),
+            normalizeNullableText(reason)
         ]);
         res.status(201).json(result.rows[0]);
     }
@@ -1537,6 +1608,7 @@ const getStudentEventProposals = (req, res) => __awaiter(void 0, void 0, void 0,
                 ep.lost_reason_id,
                 ep.selected_event_date,
                 ep.memo,
+                ep.reason,
                 ep.created_at,
                 e.title AS event_name,
                 e.event_date,
@@ -1610,6 +1682,15 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                       AND COALESCE(i.status, '') = 'no_show'
                     GROUP BY 1
                 ),
+                interview_rescheduled_s AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(DISTINCT i.student_id)::int AS cnt
+                    FROM interviews i
+                    JOIN students s ON s.id = i.student_id
+                    WHERE i.student_id IS NOT NULL
+                      AND COALESCE(i.status, '') = 'rescheduled'
+                    GROUP BY 1
+                ),
                 proposal_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT ep.student_id)::int AS cnt
@@ -1649,6 +1730,14 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     ) t
                     GROUP BY source_company
                 ),
+                daily_setting AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(*)::int AS cnt
+                    FROM applications a
+                    JOIN students s ON s.id = a.student_id
+                    WHERE DATE(COALESCE(a.reservation_date, a.reservation_created_at)) = CURRENT_DATE
+                    GROUP BY 1
+                ),
                 app_to_reserve_lt AS (
                     SELECT
                         COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
@@ -1681,12 +1770,14 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 SELECT
                     src.source_company,
                     COALESCE(daily_app.cnt, 0)::int AS daily_applications,
+                    COALESCE(daily_setting.cnt, 0)::int AS daily_settings,
                     COALESCE(daily_avg.avg_daily_applications, 0)::numeric(10,2) AS avg_daily_applications,
                     COALESCE(app_s.cnt, 0)::int AS applications_students,
                     COALESCE(reserve_s.cnt, 0)::int AS reserved_students,
                     COALESCE(interview_s.cnt, 0)::int AS interview_scheduled_students,
                     COALESCE(interview_completed_s.cnt, 0)::int AS interviewed_students,
                     COALESCE(interview_no_show_s.cnt, 0)::int AS no_show_students,
+                    COALESCE(interview_rescheduled_s.cnt, 0)::int AS rescheduled_students,
                     COALESCE(proposal_s.cnt, 0)::int AS proposed_students,
                     COALESCE(join_s.cnt, 0)::int AS joined_students,
                     app_to_reserve_lt.days AS apply_to_reservation_lead_time_days_avg,
@@ -1696,16 +1787,19 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     ROUND((COALESCE(proposal_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_completed_s.cnt, 0), 0)) * 100, 2) AS interview_to_proposal_rate,
                     ROUND((COALESCE(join_s.cnt, 0)::numeric / NULLIF(COALESCE(proposal_s.cnt, 0), 0)) * 100, 2) AS proposal_to_join_rate,
                     ROUND((COALESCE(interview_completed_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS interview_completed_rate,
-                    ROUND((COALESCE(interview_no_show_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS no_show_rate
+                    ROUND((COALESCE(interview_no_show_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS no_show_rate,
+                    ROUND((COALESCE(interview_rescheduled_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS reschedule_rate
                 FROM src
                 LEFT JOIN app_s ON app_s.source_company = src.source_company
                 LEFT JOIN reserve_s ON reserve_s.source_company = src.source_company
                 LEFT JOIN interview_s ON interview_s.source_company = src.source_company
                 LEFT JOIN interview_completed_s ON interview_completed_s.source_company = src.source_company
                 LEFT JOIN interview_no_show_s ON interview_no_show_s.source_company = src.source_company
+                LEFT JOIN interview_rescheduled_s ON interview_rescheduled_s.source_company = src.source_company
                 LEFT JOIN proposal_s ON proposal_s.source_company = src.source_company
                 LEFT JOIN join_s ON join_s.source_company = src.source_company
                 LEFT JOIN daily_app ON daily_app.source_company = src.source_company
+                LEFT JOIN daily_setting ON daily_setting.source_company = src.source_company
                 LEFT JOIN daily_avg ON daily_avg.source_company = src.source_company
                 LEFT JOIN app_to_reserve_lt ON app_to_reserve_lt.source_company = src.source_company
                 LEFT JOIN reserve_to_interview_lt ON reserve_to_interview_lt.source_company = src.source_company
@@ -1763,6 +1857,12 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     WHERE student_id IS NOT NULL
                       AND COALESCE(status, '') = 'no_show'
                 ),
+                interview_rescheduled_s AS (
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
+                      AND COALESCE(status, '') = 'rescheduled'
+                ),
                 apply_to_reserve_lt AS (
                     SELECT ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(reservation_created_at, reservation_date) - applied_at)) / 86400.0)::numeric, 2) AS days
                     FROM applications
@@ -1799,17 +1899,19 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     interview_s.cnt AS interview_scheduled_students,
                     interview_completed_s.cnt AS interviewed_students,
                     interview_no_show_s.cnt AS no_show_students,
+                    interview_rescheduled_s.cnt AS rescheduled_students,
                     proposal_s.cnt AS proposed_students,
                     join_s.cnt AS joined_students,
                     apply_to_reserve_lt.days AS apply_to_reservation_lead_time_days_avg,
                     reserve_to_interview_lt.days AS reservation_to_interview_lead_time_days_avg
-                FROM app_s, reserve_s, interview_s, interview_completed_s, interview_no_show_s, proposal_s, join_s, apply_to_reserve_lt, reserve_to_interview_lt
+                FROM app_s, reserve_s, interview_s, interview_completed_s, interview_no_show_s, interview_rescheduled_s, proposal_s, join_s, apply_to_reserve_lt, reserve_to_interview_lt
             `),
             db_1.default.query(`
                 SELECT COALESCE(lr.reason_name, '未設定') AS reason_name, COUNT(*)::int AS count
                 FROM event_proposals ep
                 LEFT JOIN lost_reasons lr ON lr.id = ep.lost_reason_id
                 WHERE ep.lost_reason_id IS NOT NULL
+                  AND COALESCE(ep.status, '') IN ('lost', '失注')
                 GROUP BY COALESCE(lr.reason_name, '未設定')
                 ORDER BY count DESC, reason_name ASC
                 LIMIT 10
@@ -1821,6 +1923,7 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         const interviewScheduledStudents = Number(s.interview_scheduled_students || 0);
         const interviewedStudents = Number(s.interviewed_students || 0);
         const noShowStudents = Number(s.no_show_students || 0);
+        const rescheduledStudents = Number(s.rescheduled_students || 0);
         const proposedStudents = Number(s.proposed_students || 0);
         const joinedStudents = Number(s.joined_students || 0);
         const rate = (a, b) => (b > 0 ? Number(((a / b) * 100).toFixed(2)) : 0);
@@ -1835,6 +1938,7 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             reservation_to_interview_lead_time_days_avg: s.reservation_to_interview_lead_time_days_avg !== null ? Number(s.reservation_to_interview_lead_time_days_avg) : null,
             interview_completed_rate: rate(interviewedStudents, interviewScheduledStudents),
             no_show_rate: rate(noShowStudents, interviewScheduledStudents),
+            reschedule_rate: rate(rescheduledStudents, interviewScheduledStudents),
             lost_reason_ranking: lostRes.rows,
             counts: {
                 applications_students: applicationsStudents,
@@ -1842,6 +1946,7 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 interview_scheduled_students: interviewScheduledStudents,
                 interviewed_students: interviewedStudents,
                 no_show_students: noShowStudents,
+                rescheduled_students: rescheduledStudents,
                 proposed_students: proposedStudents,
                 joined_students: joinedStudents
             }
