@@ -335,13 +335,16 @@ const submitReservation = async () => {
   try {
     const token = localStorage.getItem('token');
     const reservationDate = normalizeHourDateTime(funnelForm.value.reservation_date);
+    const scheduledDate = normalizeHourDateTime(funnelForm.value.interview_scheduled_at);
     await api.put(`/api/students/${selectedFunnelStudent.value.id}/funnel/reservation`, {
       reservation_status: '初回面談',
-      reservation_date: reservationDate
+      reservation_date: reservationDate,
+      reservation_created_at: reservationDate
     }, { headers: { Authorization: token } });
     await api.post(`/api/students/${selectedFunnelStudent.value.id}/matcher-funnel/reservation`, {
       reservation_created_at: reservationDate,
-      reservation_status: 'reserved'
+      reservation_status: '初回面談',
+      interview_scheduled_at: scheduledDate
     }, { headers: { Authorization: token } });
     await fetchStudents();
     await fetchFunnelKpi();
@@ -356,7 +359,7 @@ const submitInterview = async () => {
   if (!selectedFunnelStudent.value) return;
   try {
     const token = localStorage.getItem('token');
-    const scheduledAt = normalizeHourDateTime(funnelForm.value.interview_scheduled_at);
+    const scheduledAt = normalizeHourDateTime(funnelForm.value.interview_scheduled_at || funnelForm.value.reservation_date);
     const interviewedAt = normalizeHourDateTime(funnelForm.value.interview_interviewed_at);
     await api.post(`/api/students/${selectedFunnelStudent.value.id}/funnel/interview`, {
       scheduled_at: scheduledAt,

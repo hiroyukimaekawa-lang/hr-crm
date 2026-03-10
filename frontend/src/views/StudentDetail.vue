@@ -27,6 +27,9 @@ const interviewLogs = ref<any[]>([]);
 const tasks = ref<any[]>([]);
 const interviewSchedules = ref<any[]>([]);
 const matcherFunnel = ref<any | null>(null);
+const showMatcherFunnel = ref(false);
+const showEventOverviewPanel = ref(false);
+const expandedOverviewEventId = ref<number | null>(null);
 const matcherForm = ref({
   applied_at: '',
   reservation_created_at: '',
@@ -576,6 +579,55 @@ const formatDateTime = (value?: string | null) => {
   return d.toLocaleString('ja-JP');
 };
 
+const parseLocalDate = (value?: string | Date | null) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  const s = String(value).trim().replace('Z', '');
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    Number(m[4] || 0),
+    Number(m[5] || 0),
+    Number(m[6] || 0)
+  );
+};
+
+const eventDateList = (event: any) => {
+  const dates = Array.isArray(event?.event_dates) && event.event_dates.length > 0
+    ? event.event_dates
+    : (event?.event_date ? [event.event_date] : []);
+  return dates.map((d: any) => String(d)).filter(Boolean);
+};
+
+const upcomingEvents = computed(() => {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return availableEvents.value
+    .filter((event: any) => {
+      const dates = eventDateList(event);
+      if (dates.length === 0) return true;
+      return dates.some((d: string) => {
+        const parsed = parseLocalDate(d);
+        return parsed ? parsed >= todayStart : false;
+      });
+    })
+    .sort((a: any, b: any) => {
+      const ad = eventDateList(a).map((d: string) => parseLocalDate(d)).find(Boolean) as Date | undefined;
+      const bd = eventDateList(b).map((d: string) => parseLocalDate(d)).find(Boolean) as Date | undefined;
+      return (ad?.getTime() || Number.MAX_SAFE_INTEGER) - (bd?.getTime() || Number.MAX_SAFE_INTEGER);
+    });
+});
+
+const toggleOverviewEvent = (eventId: number) => {
+  expandedOverviewEventId.value = expandedOverviewEventId.value === eventId ? null : eventId;
+};
+
 const tags = computed(() => Array.isArray(student.value?.tags) ? student.value.tags : []);
 const selectedProposalEvent = computed(() => {
   const id = Number(proposalForm.value.event_id || 0);
@@ -704,6 +756,18 @@ watch(selectedEventId, () => {
           <p class="text-gray-500">学生詳細情報・面談履歴</p>
         </div>
         <div class="ml-auto flex items-center gap-2">
+          <button
+            class="px-3 py-2 text-sm border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+            @click="showMatcherFunnel = true"
+          >
+            面談ファネルを開く
+          </button>
+          <button
+            class="px-3 py-2 text-sm border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+            @click="showEventOverviewPanel = true"
+          >
+            イベント概要を開く
+          </button>
           <button
             v-if="!isPinned"
             class="px-3 py-2 text-sm border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50"
@@ -986,98 +1050,6 @@ watch(selectedEventId, () => {
             </div>
           </div>
 
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="text-lg font-bold text-gray-900 mb-4">Matcher面談ファネル</h2>
-            <p class="text-xs text-gray-500 mb-4">申込 → 予約（初回面談） → 初回面談実施 の3ステップで管理します。</p>
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div class="border border-gray-200 rounded-lg p-4 bg-gray-50/60">
-                <p class="text-sm font-semibold text-gray-900 mb-3">1) 申込登録</p>
-                <label class="block text-xs text-gray-500 mb-1">申込日</label>
-                <div class="grid grid-cols-12 gap-2 mb-3">
-                  <input
-                    :value="getDatePart(matcherForm.applied_at)"
-                    type="date"
-                    class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    @input="matcherForm.applied_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.applied_at))"
-                  />
-                  <select
-                    :value="getHourPart(matcherForm.applied_at)"
-                    class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    @change="matcherForm.applied_at = mergeDateHour(getDatePart(matcherForm.applied_at), ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option v-for="h in hourOptions" :key="`matcher-apply-hour-${h}`" :value="h">{{ h }}:00</option>
-                  </select>
-                </div>
-                <button class="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherApply">申込登録</button>
-              </div>
-
-              <div class="border border-gray-200 rounded-lg p-4 bg-gray-50/60">
-                <p class="text-sm font-semibold text-gray-900 mb-3">2) 予約登録（初回面談）</p>
-                <label class="block text-xs text-gray-500 mb-1">予約作成日（TimeRex）</label>
-                <div class="grid grid-cols-12 gap-2 mb-3">
-                  <input
-                    :value="getDatePart(matcherForm.reservation_created_at)"
-                    type="date"
-                    class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    @input="matcherForm.reservation_created_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.reservation_created_at))"
-                  />
-                  <select
-                    :value="getHourPart(matcherForm.reservation_created_at)"
-                    class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    @change="matcherForm.reservation_created_at = mergeDateHour(getDatePart(matcherForm.reservation_created_at), ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option v-for="h in hourOptions" :key="`matcher-reserve-hour-${h}`" :value="h">{{ h }}:00</option>
-                  </select>
-                </div>
-                <label class="block text-xs text-gray-500 mb-1">初回面談予定日</label>
-                <div class="grid grid-cols-12 gap-2 mb-3">
-                  <input
-                    :value="getDatePart(matcherForm.interview_scheduled_at)"
-                    type="date"
-                    class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    @input="matcherForm.interview_scheduled_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.interview_scheduled_at))"
-                  />
-                  <select
-                    :value="getHourPart(matcherForm.interview_scheduled_at)"
-                    class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    @change="matcherForm.interview_scheduled_at = mergeDateHour(getDatePart(matcherForm.interview_scheduled_at), ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option v-for="h in hourOptions" :key="`matcher-scheduled-hour-${h}`" :value="h">{{ h }}:00</option>
-                  </select>
-                </div>
-                <p class="text-xs text-gray-500 mb-3">予約ステータス: 初回面談</p>
-                <button class="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherReservation">予約登録</button>
-              </div>
-
-              <div class="border border-gray-200 rounded-lg p-4 bg-gray-50/60">
-                <p class="text-sm font-semibold text-gray-900 mb-3">3) 初回面談実施登録</p>
-                <label class="block text-xs text-gray-500 mb-1">初回面談実施日</label>
-                <div class="grid grid-cols-12 gap-2 mb-3">
-                  <input
-                    :value="getDatePart(matcherForm.interview_actual_at)"
-                    type="date"
-                    class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    @input="matcherForm.interview_actual_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.interview_actual_at))"
-                  />
-                  <select
-                    :value="getHourPart(matcherForm.interview_actual_at)"
-                    class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    @change="matcherForm.interview_actual_at = mergeDateHour(getDatePart(matcherForm.interview_actual_at), ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option v-for="h in hourOptions" :key="`matcher-actual-hour-${h}`" :value="h">{{ h }}:00</option>
-                  </select>
-                </div>
-                <label class="block text-xs text-gray-500 mb-1">面談結果</label>
-                <select v-model="matcherForm.interview_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-3">
-                  <option value="completed">実施</option>
-                  <option value="no_show">飛ばれ</option>
-                  <option value="rescheduled">リスケ</option>
-                  <option value="cancel">キャンセル</option>
-                </select>
-                <button class="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="registerMatcherInterview">面談実施登録</button>
-              </div>
-            </div>
-          </div>
 
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="text-lg font-bold text-gray-900 mb-4">イベント提案管理（複数登録）</h2>
@@ -1274,6 +1246,187 @@ watch(selectedEventId, () => {
         </div>
       </div>
     </div>
+
+    <teleport to="body">
+      <div
+        v-if="showMatcherFunnel"
+        class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+        @click.self="showMatcherFunnel = false"
+      >
+        <div class="w-full max-w-6xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-gray-200 p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-2xl font-extrabold text-gray-900">Matcher面談ファネル</h2>
+            <button class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="showMatcherFunnel = false">閉じる</button>
+          </div>
+          <p class="text-sm text-gray-600 mb-4">申込 → 予約（初回面談） → 初回面談実施 を順番に登録します。</p>
+
+          <div class="mb-6 rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+            <div class="flex items-center justify-between gap-2 text-xs sm:text-sm font-semibold text-slate-700">
+              <span class="inline-flex items-center gap-2"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white">1</span>申込</span>
+              <span class="h-1 flex-1 bg-slate-300 rounded-full"></span>
+              <span class="inline-flex items-center gap-2"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-white">2</span>予約</span>
+              <span class="h-1 flex-1 bg-slate-300 rounded-full"></span>
+              <span class="inline-flex items-center gap-2"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white">3</span>面談実施</span>
+            </div>
+          </div>
+
+          <div class="flex flex-col lg:flex-row lg:items-stretch gap-4">
+            <div class="flex-1 rounded-2xl border border-blue-200 bg-blue-50/40 p-5 shadow-sm">
+              <p class="text-xl font-extrabold text-gray-900 mb-3">1) 申込登録</p>
+              <label class="block text-sm font-medium text-gray-700 mb-2">申込日</label>
+              <div class="grid grid-cols-12 gap-2 mb-4">
+                <input
+                  :value="getDatePart(matcherForm.applied_at)"
+                  type="date"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  @input="matcherForm.applied_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.applied_at))"
+                />
+                <select
+                  :value="getHourPart(matcherForm.applied_at)"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  @change="matcherForm.applied_at = mergeDateHour(getDatePart(matcherForm.applied_at), ($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="h in hourOptions" :key="`matcher-apply-hour-${h}`" :value="h">{{ h }}:00</option>
+                </select>
+              </div>
+              <button class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors" @click="registerMatcherApply">申込登録</button>
+            </div>
+
+            <div class="hidden lg:flex items-center text-3xl font-black text-slate-300 px-1">→</div>
+
+            <div class="flex-1 rounded-2xl border border-amber-200 bg-amber-50/50 p-5 shadow-sm">
+              <p class="text-xl font-extrabold text-gray-900 mb-3">2) 予約登録（初回面談）</p>
+              <label class="block text-sm font-medium text-gray-700 mb-2">予約作成日（TimeRex）</label>
+              <div class="grid grid-cols-12 gap-2 mb-4">
+                <input
+                  :value="getDatePart(matcherForm.reservation_created_at)"
+                  type="date"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  @input="matcherForm.reservation_created_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.reservation_created_at))"
+                />
+                <select
+                  :value="getHourPart(matcherForm.reservation_created_at)"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  @change="matcherForm.reservation_created_at = mergeDateHour(getDatePart(matcherForm.reservation_created_at), ($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="h in hourOptions" :key="`matcher-reserve-hour-${h}`" :value="h">{{ h }}:00</option>
+                </select>
+              </div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">初回面談予定日</label>
+              <div class="grid grid-cols-12 gap-2 mb-4">
+                <input
+                  :value="getDatePart(matcherForm.interview_scheduled_at)"
+                  type="date"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  @input="matcherForm.interview_scheduled_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.interview_scheduled_at))"
+                />
+                <select
+                  :value="getHourPart(matcherForm.interview_scheduled_at)"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  @change="matcherForm.interview_scheduled_at = mergeDateHour(getDatePart(matcherForm.interview_scheduled_at), ($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="h in hourOptions" :key="`matcher-scheduled-hour-${h}`" :value="h">{{ h }}:00</option>
+                </select>
+              </div>
+              <div class="mb-4">
+                <span class="inline-flex items-center px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-sm font-semibold border border-amber-200">予約ステータス: 初回面談</span>
+              </div>
+              <button class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 transition-colors" @click="registerMatcherReservation">予約登録</button>
+            </div>
+
+            <div class="hidden lg:flex items-center text-3xl font-black text-slate-300 px-1">→</div>
+
+            <div class="flex-1 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
+              <p class="text-xl font-extrabold text-gray-900 mb-3">3) 初回面談実施登録</p>
+              <label class="block text-sm font-medium text-gray-700 mb-2">初回面談実施日</label>
+              <div class="grid grid-cols-12 gap-2 mb-4">
+                <input
+                  :value="getDatePart(matcherForm.interview_actual_at)"
+                  type="date"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  @input="matcherForm.interview_actual_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.interview_actual_at))"
+                />
+                <select
+                  :value="getHourPart(matcherForm.interview_actual_at)"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  @change="matcherForm.interview_actual_at = mergeDateHour(getDatePart(matcherForm.interview_actual_at), ($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="h in hourOptions" :key="`matcher-actual-hour-${h}`" :value="h">{{ h }}:00</option>
+                </select>
+              </div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">面談結果</label>
+              <select v-model="matcherForm.interview_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-4">
+                <option value="completed">実施</option>
+                <option value="no_show">飛ばれ</option>
+                <option value="rescheduled">リスケ</option>
+                <option value="cancel">キャンセル</option>
+              </select>
+              <button class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors" @click="registerMatcherInterview">面談実施登録</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <teleport to="body">
+      <aside
+        v-if="showEventOverviewPanel"
+        class="fixed right-0 top-0 z-40 h-full w-full max-w-xl bg-white shadow-2xl border-l border-gray-200 flex flex-col"
+      >
+        <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h3 class="text-lg font-bold text-gray-900">開催中・未終了イベント概要</h3>
+            <p class="text-xs text-gray-500">イベント名を開いて詳細を確認</p>
+          </div>
+          <button class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="showEventOverviewPanel = false">閉じる</button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+          <div
+            v-for="ev in upcomingEvents"
+            :key="`upcoming-${ev.id}`"
+            class="border border-gray-200 rounded-xl bg-gray-50/50"
+          >
+            <button
+              class="w-full px-4 py-3 flex items-center justify-between gap-3 text-left"
+              @click="toggleOverviewEvent(ev.id)"
+            >
+              <div class="min-w-0">
+                <p class="text-base font-bold text-gray-900 truncate">{{ ev.title }}</p>
+                <p class="text-xs text-gray-500 mt-0.5">クリックで概要を表示</p>
+              </div>
+              <component :is="expandedOverviewEventId === ev.id ? ChevronUp : ChevronDown" class="w-5 h-5 text-gray-500 shrink-0" />
+            </button>
+
+            <div v-if="expandedOverviewEventId === ev.id" class="px-4 pb-4 border-t border-gray-200">
+              <div class="pt-3">
+                <span class="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">提案候補</span>
+              </div>
+              <p class="text-xs text-gray-500 mt-3 mb-1">開催日</p>
+              <div class="text-sm text-gray-800 mb-2">
+                <div v-for="d in eventDateList(ev)" :key="`upcoming-date-${ev.id}-${d}`">{{ formatDateTime(d) }}</div>
+                <div v-if="eventDateList(ev).length === 0">未設定</div>
+              </div>
+              <p class="text-xs text-gray-500 mb-1">開催場所</p>
+              <p class="text-sm text-gray-800 mb-2">{{ ev.location || '未設定' }}</p>
+              <p class="text-xs text-gray-500 mb-1">概要</p>
+              <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ ev.description || '概要未設定' }}</p>
+              <a
+                v-if="ev.lp_url"
+                :href="ev.lp_url"
+                target="_blank"
+                rel="noreferrer"
+                class="inline-block mt-2 text-sm text-blue-600 hover:underline"
+              >
+                LPを開く
+              </a>
+            </div>
+          </div>
+          <div v-if="upcomingEvents.length === 0" class="text-sm text-gray-400 text-center py-8">
+            提案候補イベントはありません
+          </div>
+        </div>
+      </aside>
+    </teleport>
 
     <teleport to="body">
       <div v-if="editingBasic" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[90]">

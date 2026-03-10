@@ -1345,15 +1345,22 @@ const registerMatcherReservation = (req, res) => __awaiter(void 0, void 0, void 
     const { id } = req.params;
     const { reservation_created_at, reservation_status, interview_scheduled_at } = req.body || {};
     try {
+        const normalizedReservationCreatedAt = normalizeToHour(reservation_created_at) || normalizeToHour(new Date().toISOString());
+        const normalizedInterviewScheduledAt = normalizeToHour(interview_scheduled_at);
         const row = yield upsertMatcherFunnelByStudentId(String(id), {
-            reservation_created_at: normalizeToHour(reservation_created_at) || normalizeToHour(new Date().toISOString()),
+            reservation_created_at: normalizedReservationCreatedAt,
             reservation_status: normalizeNullableText(reservation_status) || 'reserved',
-            interview_scheduled_at: normalizeToHour(interview_scheduled_at)
+            interview_scheduled_at: normalizedInterviewScheduledAt
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
             return;
         }
+        yield db_1.default.query(`UPDATE students
+             SET meeting_decided_date = COALESCE($1, meeting_decided_date),
+                 first_interview_date = COALESCE($2, first_interview_date),
+                 next_meeting_date = COALESCE($2, next_meeting_date, $1)
+             WHERE id = $3`, [normalizedReservationCreatedAt, normalizedInterviewScheduledAt, id]);
         res.json(row);
     }
     catch (err) {
@@ -1365,15 +1372,24 @@ const registerMatcherInterview = (req, res) => __awaiter(void 0, void 0, void 0,
     const { id } = req.params;
     const { interview_actual_at, interview_status, interview_scheduled_at } = req.body || {};
     try {
+        const normalizedInterviewActualAt = normalizeToHour(interview_actual_at);
+        const normalizedInterviewScheduledAt = normalizeToHour(interview_scheduled_at);
         const row = yield upsertMatcherFunnelByStudentId(String(id), {
-            interview_actual_at: normalizeToHour(interview_actual_at),
+            interview_actual_at: normalizedInterviewActualAt,
             interview_status: normalizeNullableText(interview_status) || 'completed',
-            interview_scheduled_at: normalizeToHour(interview_scheduled_at)
+            interview_scheduled_at: normalizedInterviewScheduledAt
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
             return;
         }
+        yield db_1.default.query(`UPDATE students
+             SET first_interview_date = COALESCE($1, first_interview_date),
+                 next_meeting_date = CASE
+                    WHEN COALESCE($2, '') = 'completed' THEN NULL
+                    ELSE COALESCE($1, next_meeting_date)
+                 END
+             WHERE id = $3`, [normalizedInterviewScheduledAt, normalizeNullableText(interview_status), id]);
         res.json(row);
     }
     catch (err) {
@@ -1501,6 +1517,9 @@ const updateApplicationReservation = (req, res) => __awaiter(void 0, void 0, voi
     const { reservation_status, reservation_date, reservation_created_at, first_message_sent_at } = req.body || {};
     try {
         yield ensureSalesFunnelTables();
+        const normalizedReservationDate = normalizeToHour(reservation_date);
+        const normalizedReservationCreatedAt = normalizeToHour(reservation_created_at);
+        const normalizedFirstMessageSentAt = normalizeToHour(first_message_sent_at);
         const appRes = yield db_1.default.query('SELECT * FROM applications WHERE student_id = $1 ORDER BY applied_at DESC NULLS LAST, id DESC LIMIT 1', [id]);
         if (appRes.rows.length === 0) {
             const studentRes = yield db_1.default.query('SELECT id, name, source_company, created_at FROM students WHERE id = $1 LIMIT 1', [id]);
@@ -1517,12 +1536,16 @@ const updateApplicationReservation = (req, res) => __awaiter(void 0, void 0, voi
                 st.id,
                 st.name,
                 normalizeNullableText(st.source_company),
-                normalizeToHour(reservation_created_at) || normalizeToHour(reservation_date) || st.created_at || new Date().toISOString(),
+                normalizedReservationCreatedAt || normalizedReservationDate || st.created_at || new Date().toISOString(),
                 normalizeNullableText(reservation_status),
-                normalizeToHour(reservation_date),
-                normalizeToHour(reservation_created_at),
-                normalizeToHour(first_message_sent_at)
+                normalizedReservationDate,
+                normalizedReservationCreatedAt,
+                normalizedFirstMessageSentAt
             ]);
+            yield db_1.default.query(`UPDATE students
+                 SET meeting_decided_date = COALESCE($1, meeting_decided_date),
+                     next_meeting_date = COALESCE(next_meeting_date, $1)
+                 WHERE id = $2`, [normalizedReservationCreatedAt || normalizedReservationDate, id]);
             res.json(inserted.rows[0]);
             return;
         }
@@ -1535,11 +1558,15 @@ const updateApplicationReservation = (req, res) => __awaiter(void 0, void 0, voi
              WHERE id = $5
              RETURNING *`, [
             normalizeNullableText(reservation_status),
-            normalizeToHour(reservation_date),
-            normalizeToHour(reservation_created_at),
-            normalizeToHour(first_message_sent_at),
+            normalizedReservationDate,
+            normalizedReservationCreatedAt,
+            normalizedFirstMessageSentAt,
             app.id
         ]);
+        yield db_1.default.query(`UPDATE students
+             SET meeting_decided_date = COALESCE($1, meeting_decided_date),
+                 next_meeting_date = COALESCE(next_meeting_date, $1)
+             WHERE id = $2`, [normalizedReservationCreatedAt || normalizedReservationDate, id]);
         res.json(result.rows[0]);
     }
     catch (err) {
@@ -1552,14 +1579,20 @@ const createInterviewRecord = (req, res) => __awaiter(void 0, void 0, void 0, fu
     const { scheduled_at, interviewed_at, status } = req.body || {};
     try {
         yield ensureSalesFunnelTables();
+        const normalizedScheduledAt = normalizeToHour(scheduled_at);
+        const normalizedInterviewedAt = normalizeToHour(interviewed_at);
         const result = yield db_1.default.query(`INSERT INTO interviews (student_id, scheduled_at, interviewed_at, status)
              VALUES ($1, $2, $3, $4)
              RETURNING *`, [
             id,
-            normalizeToHour(scheduled_at),
-            normalizeToHour(interviewed_at),
+            normalizedScheduledAt,
+            normalizedInterviewedAt,
             normalizeNullableText(status) || 'completed'
         ]);
+        yield db_1.default.query(`UPDATE students
+             SET first_interview_date = COALESCE($1, first_interview_date),
+                 next_meeting_date = COALESCE($1, next_meeting_date)
+             WHERE id = $2`, [normalizedScheduledAt, id]);
         res.status(201).json(result.rows[0]);
     }
     catch (err) {
