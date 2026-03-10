@@ -68,6 +68,17 @@ const parseLocalDate = (value?: string | Date) => {
   return new Date(yyyy, mm, dd, hh, mi, ss);
 };
 
+interface Participant {
+  id?: number;
+  student_id: number;
+  status: string;
+  selected_event_date?: string | null;
+  name: string;
+  university?: string;
+  staff_name?: string;
+}
+
+
 const fetchEvents = async () => {
   const token = localStorage.getItem('token');
   const res = await api.get('/api/events', { headers: { Authorization: token } });
@@ -225,13 +236,51 @@ const nextMonth = () => {
   calendarBaseMonth.value = new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth() + 1, 1);
 };
 
-const openEventDetailPanel = (event: EventItem) => {
+const openEventDetailPanel = async (event: EventItem, dateKey?: string) => {
   selectedCalendarEvent.value = event;
+  selectedEventDate.value = dateKey || '';
+  selectedEventParticipants.value = [];
+  isLoadingParticipants.value = true;
+  try {
+    const token = localStorage.getItem('token');
+    const res = await api.get(`/api/events/${event.id}`, { headers: { Authorization: token } });
+    if (res.data && Array.isArray(res.data.participants)) {
+      selectedEventParticipants.value = res.data.participants;
+    }
+  } catch (error) {
+    console.error('Failed to load participants', error);
+  } finally {
+    isLoadingParticipants.value = false;
+  }
 };
 
 const closeEventDetailPanel = () => {
   selectedCalendarEvent.value = null;
+  selectedEventDate.value = '';
+  selectedEventParticipants.value = [];
 };
+
+const selectedEventDate = ref<string>('');
+const selectedEventParticipants = ref<Participant[]>([]);
+const isLoadingParticipants = ref(false);
+
+const filteredParticipants = computed(() => {
+  if (!selectedEventDate.value) return selectedEventParticipants.value;
+  return selectedEventParticipants.value.filter(p => {
+    if (!p.selected_event_date) return false;
+    const key = formatDateKey(p.selected_event_date);
+    return key === selectedEventDate.value;
+  });
+});
+
+const participantStatusCounts = computed(() => {
+  const counts: Record<string, number> = {};
+  filteredParticipants.value.forEach(p => {
+    const s = p.status || '未定義';
+    counts[s] = (counts[s] || 0) + 1;
+  });
+  return counts;
+});
 
 onMounted(fetchEvents);
 </script>
@@ -279,7 +328,7 @@ onMounted(fetchEvents);
                     v-for="ev in getEventsForDate(cell.key).slice(0, 2)"
                     :key="ev.id"
                     class="truncate px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100"
-                    @click="openEventDetailPanel(ev)"
+                    @click="openEventDetailPanel(ev, cell.key)"
                   >
                     {{ ev.title }} - {{ participantPreview(ev.id) }}
                   </div>
@@ -470,6 +519,63 @@ onMounted(fetchEvents);
           <div><p class="text-gray-500">LPリンク</p>
             <a v-if="selectedCalendarEvent.lp_url" :href="selectedCalendarEvent.lp_url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-700 break-all">{{ selectedCalendarEvent.lp_url }}</a>
             <p v-else class="text-gray-900">未設定</p>
+          </div>
+
+          <div class="mt-8 border-t border-gray-100 pt-6">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">
+              {{ selectedEventDate ? selectedEventDate + 'の' : '全日程の' }}参加者一覧
+            </h3>
+
+            <div v-if="isLoadingParticipants" class="text-gray-500 text-sm py-4">
+              読み込み中...
+            </div>
+            <div v-else-if="filteredParticipants.length === 0" class="text-gray-500 text-sm py-4">
+              参加者はいません
+            </div>
+            <div v-else>
+              <div class="flex gap-4 mb-4">
+                <div class="bg-gray-50 px-4 py-2 rounded-lg">
+                  <span class="text-xs text-gray-500 block">合計人数</span>
+                  <span class="text-lg font-bold text-gray-900">{{ filteredParticipants.length }}名</span>
+                </div>
+                <div class="bg-gray-50 px-4 py-2 rounded-lg flex-1">
+                  <span class="text-xs text-gray-500 block mb-1">内訳</span>
+                  <div class="flex flex-wrap gap-x-4 gap-y-1">
+                    <span v-for="(count, status) in participantStatusCounts" :key="status" class="text-sm">
+                      <span class="text-gray-600">{{ status }}:</span> 
+                      <span class="font-semibold text-gray-900 ml-1">{{ count }}名</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="overflow-x-auto border border-gray-200 rounded-lg">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-4 py-3 text-left font-medium text-gray-500">名前</th>
+                      <th class="px-4 py-3 text-left font-medium text-gray-500">大学</th>
+                      <th class="px-4 py-3 text-left font-medium text-gray-500">担当</th>
+                      <th class="px-4 py-3 text-left font-medium text-gray-500">ステータス</th>
+                      <th class="px-4 py-3 text-left font-medium text-gray-500">参加日程</th>
+                    </tr>
+                  </thead>
+                  <tbody class="bg-white divide-y divide-gray-200">
+                    <tr v-for="p in filteredParticipants" :key="p.id || p.student_id" class="hover:bg-gray-50">
+                      <td class="px-4 py-3 font-medium text-gray-900">{{ p.name }}</td>
+                      <td class="px-4 py-3 text-gray-600">{{ p.university || '-' }}</td>
+                      <td class="px-4 py-3 text-gray-600">{{ p.staff_name || '-' }}</td>
+                      <td class="px-4 py-3">
+                        <span class="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">{{ p.status }}</span>
+                      </td>
+                      <td class="px-4 py-3 text-gray-600">
+                        {{ p.selected_event_date ? formatDateKey(p.selected_event_date) : '-' }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
