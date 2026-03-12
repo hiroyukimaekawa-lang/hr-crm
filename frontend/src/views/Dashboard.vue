@@ -41,6 +41,20 @@ interface EventParticipant {
   staff_name?: string;
 }
 
+interface KgiProgress {
+  event_id: number;
+  event_title: string;
+  deadline: string | null;
+  days_remaining: number;
+  target_entry: number;
+  kpi_target_entry: number;
+  kpi_rate: number;
+  current_entry: number;
+  target_seats: number;
+  current_seats: number;
+  daily_entry_gap: number;
+}
+
 const students = ref<Student[]>([]);
 const events = ref<EventItem[]>([]);
 const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
@@ -58,6 +72,18 @@ const monthlyFilters = ref({
   selected_event_date: '',
   status: ''
 });
+const monthlySortField = ref<'status' | null>(null);
+const monthlySortOrder = ref<'asc' | 'desc'>('asc');
+const STATUS_ORDER_MAP: Record<string, number> = {
+  A_ENTRY: 1, registered: 1,
+  B_WAITING: 2,
+  C_WAITING: 3,
+  attended: 4,
+  D_PASS: 5,
+  E_FAIL: 6,
+  XA_CANCEL: 7,
+  canceled: 8
+};
 type YomiKey = 'A' | 'B' | 'C' | 'XA';
 const interviewMetrics = ref({
   first_lead_time_days_avg: null as number | null,
@@ -124,6 +150,14 @@ const funnelKpi = ref({
   lostReasonRanking: [] as Array<{ reason_name: string; count: number }>
 });
 
+const kgiProgress = ref<KgiProgress[]>([]);
+
+const fetchKgiProgress = async () => {
+  const token = localStorage.getItem('token');
+  const res = await api.get('/api/events/kgi-progress', { headers: { Authorization: token } });
+  kgiProgress.value = Array.isArray(res.data) ? res.data : [];
+};
+
 const fetchData = async () => {
   try {
     const token = localStorage.getItem('token');
@@ -135,10 +169,12 @@ const fetchData = async () => {
     events.value = eventRes.data;
     fetchInterviewMetrics().catch((err) => console.error(err));
     fetchFunnelKpi().catch((err) => console.error(err));
+    fetchKgiProgress().catch((err) => console.error(err));
   } catch (err) {
     console.error(err);
   }
 };
+
 
 const fetchFunnelKpi = async () => {
   const token = localStorage.getItem('token');
@@ -524,18 +560,41 @@ const monthlyYomiByEvent = computed(() => {
     }));
 });
 
-const monthlyAttendanceCount = computed(() => {
-  const month = selectedMonthKey.value;
-  return eventYomiRows.value
-    .filter((row) => String(row.event_date || '').slice(0, 7) === month)
-    .reduce((sum, row) => sum + Number(row.total || 0), 0);
-});
+const monthlyAttendanceCount = computed(() =>
+  monthlyYomiByEvent.value.reduce((sum, row) => sum + Number(row.total || 0), 0)
+);
+
+const exportMonthlyParticipantsCsv = () => {
+  const headers = ['イベント名', '学生名', '大学', '担当', '申込日', '参加日程', 'ステータス'];
+  const rows = filteredMonthlyParticipants.value.map(p => [
+    p.event_title || '',
+    p.name || '',
+    p.university || '',
+    p.staff_name || '',
+    formatDateKey(p.created_at),
+    formatDateKey(p.selected_event_date || p.single_event_date),
+    yomiStatusLabel(p.status)
+  ]);
+  const csv = [headers, ...rows]
+    .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const month = `${calendarBaseMonth.value.getFullYear()}${String(calendarBaseMonth.value.getMonth() + 1).padStart(2, '0')}`;
+  a.download = `参加者一覧_${month}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
 
 const filteredMonthlyParticipants = computed(() => {
-  return selectedMonthlyParticipants.value.filter(p => {
+  const filtered = selectedMonthlyParticipants.value.filter(p => {
     const pDate = formatDateKey(p.selected_event_date || p.single_event_date);
     const cDate = formatDateKey(p.created_at);
-    
     const matchEvent = !monthlyFilters.value.event_title || (p.event_title || '').includes(monthlyFilters.value.event_title);
     const matchName = !monthlyFilters.value.name || p.name.includes(monthlyFilters.value.name);
     const matchUniv = !monthlyFilters.value.university || (p.university || '').includes(monthlyFilters.value.university);
@@ -543,8 +602,13 @@ const filteredMonthlyParticipants = computed(() => {
     const matchCreatedAt = !monthlyFilters.value.created_at || cDate.includes(monthlyFilters.value.created_at);
     const matchEventDate = !monthlyFilters.value.selected_event_date || pDate.includes(monthlyFilters.value.selected_event_date);
     const matchStatus = !monthlyFilters.value.status || monthlyFilters.value.status === 'ALL' || normalizedYomiKey(p.status) === monthlyFilters.value.status;
-    
     return matchEvent && matchName && matchUniv && matchStaff && matchCreatedAt && matchEventDate && matchStatus;
+  });
+  if (!monthlySortField.value) return filtered;
+  return [...filtered].sort((a, b) => {
+    const aOrder = STATUS_ORDER_MAP[a.status] ?? 99;
+    const bOrder = STATUS_ORDER_MAP[b.status] ?? 99;
+    return monthlySortOrder.value === 'asc' ? aOrder - bOrder : bOrder - aOrder;
   });
 });
 
@@ -558,6 +622,62 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
       <div class="mb-8">
         <h1 class="text-3xl font-bold text-gray-900">ダッシュボード</h1>
         <p class="text-gray-500 mt-2">最新の統計と活動状況を確認できます。</p>
+      </div>
+
+      <!-- KGI Daily Progress Widget -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">デイリーKGI進捗</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">イベント名</th>
+                <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">締日</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">残日数</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">目標着座</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">現着座</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">目標エントリー</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">現エントリー</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">デイリー必要数</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr v-for="row in kgiProgress" :key="`kgi-${row.event_id}`" class="hover:bg-gray-50">
+                <td class="px-3 py-2 text-gray-900 max-w-[200px] truncate" :title="row.event_title">{{ row.event_title }}</td>
+                <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
+                  <span :class="row.days_remaining <= 0 ? 'text-gray-400' : ''">
+                    {{ row.deadline ? new Date(row.deadline).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' }) : '-' }}
+                  </span>
+                </td>
+                <td class="px-3 py-2 text-right whitespace-nowrap">
+                  <span :class="row.days_remaining <= 0 ? 'text-gray-400' : 'font-semibold text-gray-700'">{{ row.deadline ? row.days_remaining : '-' }}</span>
+                </td>
+                <td class="px-3 py-2 text-right text-gray-600">{{ row.target_seats || '-' }}</td>
+                <td class="px-3 py-2 text-right text-gray-600">{{ row.current_seats }}</td>
+                <td class="px-3 py-2 text-right text-gray-700 font-semibold">
+                  <span>{{ row.target_entry || row.kpi_target_entry || '-' }}</span>
+                  <span v-if="row.target_entry && row.kpi_target_entry && row.target_entry !== row.kpi_target_entry" class="text-[10px] text-gray-400 ml-1">(KPI:{{ row.kpi_target_entry }})</span>
+                </td>
+                <td class="px-3 py-2 text-right text-gray-700 font-semibold">{{ row.current_entry }}</td>
+                <td class="px-3 py-2 text-right whitespace-nowrap">
+                  <span
+                    class="font-bold"
+                    :class="{
+                      'text-gray-400': row.days_remaining <= 0,
+                      'text-green-600': row.days_remaining > 0 && row.daily_entry_gap >= 0,
+                      'text-yellow-600': row.days_remaining > 0 && row.daily_entry_gap < 0 && row.daily_entry_gap >= -3,
+                      'text-red-600': row.days_remaining > 0 && row.daily_entry_gap < -3
+                    }"
+                  >{{ row.days_remaining <= 0 ? '締切済' : row.daily_entry_gap }}</span>
+                  <span v-if="row.days_remaining > 0 && row.kpi_rate" class="text-[10px] text-gray-400 ml-1">(着座率{{ row.kpi_rate }}%)</span>
+                </td>
+              </tr>
+              <tr v-if="kgiProgress.length === 0">
+                <td colspan="8" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
@@ -799,9 +919,18 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
         <div class="flex items-center justify-between mb-6 shrink-0">
           <div>
             <h2 class="text-xl font-bold text-gray-900">{{ calendarBaseMonth.getMonth() + 1 }}月の全イベント参加者一覧</h2>
-            <p class="text-sm text-gray-500 mt-1">対象月のすべてのイベント参加者（合計: {{ selectedMonthlyParticipants.length }}名）</p>
+            <p class="text-sm text-gray-500 mt-1">対象月のすべてのイベント参加者（合計: {{ filteredMonthlyParticipants.length }}名）</p>
           </div>
-          <button class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50" @click="closeMonthlyAttendanceModal">閉じる</button>
+          <div class="flex items-center gap-2">
+            <button
+              @click="exportMonthlyParticipantsCsv"
+              class="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold flex items-center gap-1.5"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              CSVダウンロード
+            </button>
+            <button class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50" @click="closeMonthlyAttendanceModal">閉じる</button>
+          </div>
         </div>
         
         <div class="flex-1 overflow-y-auto w-full">
@@ -836,7 +965,17 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                       <input v-model="monthlyFilters.selected_event_date" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
                     </th>
                     <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[100px]">
-                      <div class="mb-1 uppercase">ステータス</div>
+                      <div class="mb-1 flex items-center justify-center gap-1">
+                        <button
+                          class="uppercase flex items-center gap-0.5 hover:text-gray-900"
+                          @click="() => { if (monthlySortField === 'status') { if (monthlySortOrder === 'asc') { monthlySortOrder = 'desc'; } else { monthlySortField = null; monthlySortOrder = 'asc'; } } else { monthlySortField = 'status'; monthlySortOrder = 'asc'; } }"
+                        >
+                          ステータス
+                          <span v-if="monthlySortField === 'status' && monthlySortOrder === 'asc'">▲</span>
+                          <span v-else-if="monthlySortField === 'status' && monthlySortOrder === 'desc'">▼</span>
+                          <span v-else class="opacity-30">▲</span>
+                        </button>
+                      </div>
                       <select v-model="monthlyFilters.status" class="w-full px-1 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal bg-white">
                         <option value="">すべて</option>
                         <option value="A">A:エントリー</option>

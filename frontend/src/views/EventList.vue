@@ -47,6 +47,8 @@ const newEvent = ref({
 const showCreate = ref(false);
 const selectedCalendarEvent = ref<EventItem | null>(null);
 const eventParticipantNames = ref<Record<number, string[]>>({});
+// 全参加者データ（日付×ステータスでフィルタ用）
+const eventParticipantsMap = ref<Record<number, Participant[]>>({});
 const router = useRouter();
 const calendarBaseMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
@@ -87,22 +89,32 @@ const fetchEvents = async () => {
     events.value.map(async (e) => {
       try {
         const detail = await api.get(`/api/events/${e.id}`, { headers: { Authorization: token } });
-        const names: string[] = Array.isArray(detail.data?.participants)
-          ? detail.data.participants
-              .map((p: any) => String(p?.name || '').trim())
-              .filter((n: string) => !!n)
+        const participants: Participant[] = Array.isArray(detail.data?.participants)
+          ? detail.data.participants.map((p: any) => ({
+              id: p.id,
+              student_id: p.student_id,
+              status: String(p.status || ''),
+              selected_event_date: p.selected_event_date || null,
+              name: String(p.name || ''),
+              university: String(p.university || ''),
+              staff_name: String(p.staff_name || '')
+            }))
           : [];
-        return { eventId: e.id, names: Array.from(new Set<string>(names)) };
+        const names = participants.map(p => p.name).filter(Boolean);
+        return { eventId: e.id, names: Array.from(new Set<string>(names)), participants };
       } catch {
-        return { eventId: e.id, names: [] as string[] };
+        return { eventId: e.id, names: [] as string[], participants: [] as Participant[] };
       }
     })
   );
-  const map: Record<number, string[]> = {};
+  const nameMap: Record<number, string[]> = {};
+  const participantMap: Record<number, Participant[]> = {};
   detailResults.forEach((r) => {
-    map[r.eventId] = r.names;
+    nameMap[r.eventId] = r.names;
+    participantMap[r.eventId] = r.participants;
   });
-  eventParticipantNames.value = map;
+  eventParticipantNames.value = nameMap;
+  eventParticipantsMap.value = participantMap;
 };
 
 const createEvent = async () => {
@@ -265,12 +277,15 @@ const selectedEventParticipants = ref<Participant[]>([]);
 const isLoadingParticipants = ref(false);
 
 const filteredParticipants = computed(() => {
-  if (!selectedEventDate.value) return selectedEventParticipants.value;
-  return selectedEventParticipants.value.filter(p => {
-    if (!p.selected_event_date) return false;
-    const key = formatDateKey(p.selected_event_date);
-    return key === selectedEventDate.value;
-  });
+  // カレンダーからクリックした場合: 日付一致 + A_ENTRYのみ
+  const base = selectedEventDate.value
+    ? selectedEventParticipants.value.filter(p => {
+        if (!p.selected_event_date) return false;
+        return formatDateKey(p.selected_event_date) === selectedEventDate.value;
+      })
+    : selectedEventParticipants.value;
+  // A_ENTRY のみ表示
+  return base.filter(p => p.status === 'A_ENTRY');
 });
 
 const participantStatusCounts = computed(() => {
@@ -281,6 +296,16 @@ const participantStatusCounts = computed(() => {
   });
   return counts;
 });
+
+// カレンダーセル用: 日付一致+A_ENTRYの参加者数を返す
+const getCalendarEntryCount = (eventId: number, dateKey: string): number => {
+  const ps = eventParticipantsMap.value[eventId] || [];
+  return ps.filter(p =>
+    p.status === 'A_ENTRY' &&
+    p.selected_event_date &&
+    formatDateKey(p.selected_event_date) === dateKey
+  ).length;
+};
 
 onMounted(fetchEvents);
 </script>
@@ -320,20 +345,65 @@ onMounted(fetchEvents);
             <div class="py-1 text-center">日</div><div class="py-1 text-center">月</div><div class="py-1 text-center">火</div><div class="py-1 text-center">水</div><div class="py-1 text-center">木</div><div class="py-1 text-center">金</div><div class="py-1 text-center">土</div>
           </div>
           <div class="grid grid-cols-7 border border-gray-200 rounded-lg overflow-hidden">
-            <div v-for="cell in currentMonthCells" :key="`current-${cell.key}`" class="min-h-[72px] border-r border-b border-gray-200 p-2 text-xs" :class="{ 'bg-gray-50': !cell.date }">
+            <div
+              v-for="cell in currentMonthCells"
+              :key="`current-${cell.key}`"
+              class="border-r border-b border-gray-200 text-xs transition-colors"
+              :class="{
+                'bg-gray-50': !cell.date,
+                'bg-white': cell.date && getEventsForDate(cell.key).length === 0,
+                'bg-blue-50/30': cell.date && getEventsForDate(cell.key).length > 0,
+                'ring-2 ring-inset ring-red-400': cell.date && cell.date.toDateString() === new Date().toDateString()
+              }"
+              style="min-height: 96px;"
+            >
               <template v-if="cell.date">
-                <div class="text-gray-700">{{ cell.date.getDate() }}</div>
-                <div v-if="getEventsForDate(cell.key).length" class="mt-1 space-y-1">
+                <!-- 日付ヘッダー -->
+                <div
+                  class="flex items-center justify-between px-2 py-1 border-b text-xs"
+                  :class="getEventsForDate(cell.key).length > 0
+                    ? 'bg-blue-600 border-blue-700'
+                    : (cell.date.toDateString() === new Date().toDateString()
+                        ? 'bg-red-500 border-red-600'
+                        : 'bg-white border-gray-100')"
+                >
+                  <span
+                    class="font-bold"
+                    :class="{
+                      'text-white': getEventsForDate(cell.key).length > 0 || cell.date.toDateString() === new Date().toDateString(),
+                      'text-red-500': cell.date.getDay() === 0 && getEventsForDate(cell.key).length === 0 && cell.date.toDateString() !== new Date().toDateString(),
+                      'text-blue-500': cell.date.getDay() === 6 && getEventsForDate(cell.key).length === 0 && cell.date.toDateString() !== new Date().toDateString(),
+                      'text-gray-700': ![0,6].includes(cell.date.getDay()) && getEventsForDate(cell.key).length === 0 && cell.date.toDateString() !== new Date().toDateString()
+                    }"
+                  >{{ cell.date.getDate() }}</span>
+                  <span v-if="getEventsForDate(cell.key).length > 0" class="text-[10px] text-blue-100 font-medium">
+                    {{ getEventsForDate(cell.key).length }}件
+                  </span>
+                </div>
+
+                <!-- イベント一覧：タイトル + 参加ありボタン -->
+                <div class="p-1 space-y-0.5">
                   <div
-                    v-for="ev in getEventsForDate(cell.key).slice(0, 2)"
+                    v-for="ev in getEventsForDate(cell.key).slice(0, 4)"
                     :key="ev.id"
-                    class="truncate px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100"
-                    @click="openEventDetailPanel(ev, cell.key)"
+                    class="rounded overflow-hidden"
                   >
-                    {{ eventParticipantNames[ev.id]?.length || 0 }}名 {{ ev.title }}
+                    <!-- イベント名 -->
+                    <div class="px-1.5 py-0.5 bg-blue-600 text-white text-[10px] font-semibold truncate leading-tight" :title="ev.title">
+                      {{ ev.title }}
+                    </div>
+                    <!-- 参加ありボタン: 日付一致+A_ENTRYのみカウント -->
+                    <button
+                      v-if="getCalendarEntryCount(ev.id, cell.key) > 0"
+                      class="w-full text-left px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[9px] font-semibold hover:bg-emerald-100 transition-colors border-t border-emerald-100 flex items-center gap-1"
+                      @click.stop="openEventDetailPanel(ev, cell.key)"
+                    >
+                      <svg class="w-2.5 h-2.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg>
+                      {{ getCalendarEntryCount(ev.id, cell.key) }}名参加
+                    </button>
                   </div>
-                  <div v-if="getEventsForDate(cell.key).length > 2" class="text-[10px] text-gray-500">
-                    +{{ getEventsForDate(cell.key).length - 2 }}件
+                  <div v-if="getEventsForDate(cell.key).length > 4" class="text-[9px] text-blue-500 font-semibold px-1">
+                    +{{ getEventsForDate(cell.key).length - 4 }}件
                   </div>
                 </div>
               </template>
@@ -500,93 +570,67 @@ onMounted(fetchEvents);
 
     <div v-if="selectedCalendarEvent" class="fixed inset-0 z-[90] flex items-center justify-center p-4">
       <div class="absolute inset-0 bg-black/40" @click="closeEventDetailPanel" />
-      <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 class="text-xl font-bold text-gray-900">イベント詳細・参加者一覧</h2>
-          <button class="text-gray-400 hover:text-gray-600 p-1" @click="closeEventDetailPanel">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <!-- ヘッダー -->
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700">
+          <div>
+            <h2 class="text-base font-bold text-white">{{ selectedCalendarEvent.title }}</h2>
+            <p class="text-xs text-blue-200 mt-0.5">{{ selectedEventDate }} の参加者（A:エントリーのみ）</p>
+          </div>
+          <button class="text-blue-200 hover:text-white p-1 transition-colors" @click="closeEventDetailPanel">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
           </button>
         </div>
-        <div class="p-6 overflow-y-auto space-y-6">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-gray-50 rounded-lg p-5 border border-gray-100">
-            <div><p class="text-xs text-gray-500 mb-1">イベント名</p><p class="text-gray-900 font-bold whitespace-normal">{{ selectedCalendarEvent.title }}</p></div>
-            <div>
-              <p class="text-xs text-gray-500 mb-1">開催日時</p>
-              <div class="text-gray-900">
-                <p v-for="(dt, idx) in displayEventDates(selectedCalendarEvent)" :key="`panel-dt-${idx}`">{{ dt }}</p>
-                <p v-if="displayEventDates(selectedCalendarEvent).length === 0">-</p>
-              </div>
-            </div>
-            <div><p class="text-xs text-gray-500 mb-1">会場</p><p class="text-gray-900">{{ selectedCalendarEvent.location || '-' }}</p></div>
-            <div><p class="text-xs text-gray-500 mb-1">エントリー目標 / 着座目標</p><p class="text-gray-900">{{ selectedCalendarEvent.capacity || '-' }}名 / {{ selectedCalendarEvent.target_seats || '-' }}名</p></div>
-            <div class="md:col-span-2"><p class="text-xs text-gray-500 mb-1">概要</p><p class="text-gray-900 whitespace-pre-wrap">{{ selectedCalendarEvent.description || '-' }}</p></div>
-            <div class="md:col-span-2"><p class="text-xs text-gray-500 mb-1">LPリンク</p>
-              <a v-if="selectedCalendarEvent.lp_url" :href="selectedCalendarEvent.lp_url" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-700 break-all">{{ selectedCalendarEvent.lp_url }}</a>
-              <p v-else class="text-gray-400">-</p>
-            </div>
+
+        <div class="px-5 py-4 overflow-y-auto">
+          <!-- 合計バッジ -->
+          <div class="flex items-center gap-2 mb-4">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-bold rounded-full">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg>
+              {{ filteredParticipants.length }}名参加
+            </span>
           </div>
 
-          <div>
-            <h3 class="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-              <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-              {{ selectedEventDate ? selectedEventDate + 'の' : '全日程の' }}参加者内訳
-            </h3>
-
-            <div v-if="isLoadingParticipants" class="text-gray-500 text-sm py-8 text-center bg-gray-50 rounded-lg">
-              読み込み中...
-            </div>
-            <div v-else-if="filteredParticipants.length === 0" class="text-gray-500 text-sm py-8 text-center bg-gray-50 rounded-lg">
-              参加者はいません
-            </div>
-            <div v-else class="space-y-4">
-              <div class="flex flex-col sm:flex-row gap-4">
-                <div class="bg-blue-50 border border-blue-100 px-5 py-4 rounded-xl text-center sm:min-w-[120px]">
-                  <span class="text-xs text-blue-600 font-semibold block mb-1">合計人数</span>
-                  <span class="text-2xl font-black text-blue-700">{{ filteredParticipants.length }}<span class="text-base font-bold ml-1">名</span></span>
-                </div>
-                <div class="bg-gray-50 border border-gray-100 p-4 rounded-xl flex-1 flex flex-wrap items-center gap-x-6 gap-y-3">
-                  <div v-for="(count, status) in participantStatusCounts" :key="status" class="flex flex-col">
-                    <span class="text-[11px] text-gray-500 font-medium mb-0.5">{{ status }}</span> 
-                    <span class="text-lg font-bold text-gray-900">{{ count }}<span class="text-xs font-medium text-gray-600 ml-0.5">名</span></span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">
-                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead class="bg-gray-50">
-                    <tr>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-600 text-xs">名前</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-600 text-xs">大学</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-600 text-xs">担当</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-600 text-xs text-center">ｽﾃｰﾀｽ</th>
-                      <th class="px-4 py-3 text-left font-semibold text-gray-600 text-xs">参加日程</th>
-                    </tr>
-                  </thead>
-                  <tbody class="bg-white divide-y divide-gray-200">
-                    <tr v-for="p in filteredParticipants" :key="p.id || p.student_id" class="hover:bg-gray-50 transition-colors cursor-pointer" @click="router.push(`/students/${p.student_id}`)">
-                      <td class="px-4 py-3 font-bold text-blue-600 hover:text-blue-800">{{ p.name }}</td>
-                      <td class="px-4 py-3 text-gray-600 text-xs">{{ p.university || '-' }}</td>
-                      <td class="px-4 py-3 text-gray-600 text-xs">{{ p.staff_name || '-' }}</td>
-                      <td class="px-4 py-3 text-center">
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold" :class="{
-                          'bg-blue-100 text-blue-700': p.status.includes('ENTRY') || p.status.includes('registered'),
-                          'bg-green-100 text-green-700': p.status.includes('attended'),
-                          'bg-red-100 text-red-700': p.status.includes('CANCEL') || p.status.includes('canceled'),
-                          'bg-amber-100 text-amber-700': p.status.includes('WAITING')
-                        }">{{ p.status }}</span>
-                      </td>
-                      <td class="px-4 py-3 text-gray-500 text-xs">
-                        {{ p.selected_event_date ? formatDateKey(p.selected_event_date) : '-' }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          <div v-if="isLoadingParticipants" class="text-gray-500 text-sm py-8 text-center">
+            読み込み中...
+          </div>
+          <div v-else-if="filteredParticipants.length === 0" class="text-gray-400 text-sm py-8 text-center bg-gray-50 rounded-xl">
+            この日程のエントリー参加者はいません
+          </div>
+          <div v-else class="overflow-x-auto border border-gray-200 rounded-xl shadow-sm">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-600 text-xs">名前</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-600 text-xs">大学</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-600 text-xs">担当</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-600 text-xs">ステータス</th>
+                  <th class="px-4 py-3 text-left font-semibold text-gray-600 text-xs">参加日程</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-100">
+                <tr
+                  v-for="p in filteredParticipants"
+                  :key="p.id || p.student_id"
+                  class="hover:bg-blue-50 transition-colors cursor-pointer"
+                  @click="router.push(`/students/${p.student_id}`)"
+                >
+                  <td class="px-4 py-3 font-semibold text-blue-600 text-sm">{{ p.name }}</td>
+                  <td class="px-4 py-3 text-gray-600 text-xs">{{ p.university || '-' }}</td>
+                  <td class="px-4 py-3 text-gray-600 text-xs">{{ p.staff_name || '-' }}</td>
+                  <td class="px-4 py-3">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                      A:エントリー
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 text-gray-500 text-xs font-medium">
+                    {{ p.selected_event_date ? formatDateKey(p.selected_event_date) : '-' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
-
       </div>
     </div>
   </Layout>

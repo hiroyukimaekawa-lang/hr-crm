@@ -23,6 +23,7 @@ interface EventItem {
   kpi_entry_to_interview_rate?: number | null;
   kpi_interview_to_inflow_rate?: number | null;
   kpi_custom_steps?: string | null;
+  yomi_statuses?: string | string[] | null;
 }
 
 interface KpiCustomStep {
@@ -31,7 +32,7 @@ interface KpiCustomStep {
 }
 
 const user = JSON.parse(localStorage.getItem('user') || '{"role":"staff"}');
-const activeSection = ref<'categories' | 'invite' | 'event-kpi'>('categories');
+const activeSection = ref<'categories' | 'invite' | 'event-kpi' | 'event-status'>('categories');
 const categories = ref<SourceCategory[]>([]);
 const graduationYearCategories = ref<GraduationYearCategory[]>([]);
 const newCategoryName = ref('');
@@ -50,6 +51,22 @@ const form = ref({
   interview_to_inflow_rate: '50'
 });
 const customSteps = ref<KpiCustomStep[]>([]);
+
+const eventStatuses = ref<string[]>([]);
+const selectedStatusEventId = ref<number | null>(null);
+const statusSaveMessage = ref('');
+
+const STATUS_LABEL_MAP: Record<string, string> = {
+  A_ENTRY: 'A:エントリー',
+  B_WAITING: 'B:回答待ち',
+  C_WAITING: 'C:回答待ち',
+  attended: '出席',
+  D_PASS: 'D:合格',
+  E_FAIL: 'E:不合格',
+  XA_CANCEL: 'XA:エントリーキャンセル'
+};
+
+const newStatusInput = ref('');
 
 const fetchCategories = async () => {
   const token = localStorage.getItem('token');
@@ -220,6 +237,28 @@ const saveKpi = async () => {
   await fetchEvents();
 };
 
+const loadEventStatuses = (event: EventItem | null) => {
+  if (!event) return;
+  try {
+    const raw = event.yomi_statuses || '["A_ENTRY","B_WAITING","C_WAITING","D_PASS","E_FAIL","XA_CANCEL"]';
+    eventStatuses.value = Array.isArray(raw) ? raw : JSON.parse(String(raw));
+  } catch { eventStatuses.value = []; }
+};
+
+const saveEventStatuses = async () => {
+  if (!selectedStatusEventId.value) return;
+  const token = localStorage.getItem('token');
+  const event = events.value.find(e => e.id === selectedStatusEventId.value);
+  if (!event) return;
+  await api.put(
+    `/api/events/${selectedStatusEventId.value}`,
+    { title: event.title, yomi_statuses: eventStatuses.value },
+    { headers: { Authorization: token } }
+  );
+  statusSaveMessage.value = 'イベントステータスを保存しました。';
+  await fetchEvents();
+};
+
 onMounted(async () => {
   await fetchCategories();
   await fetchGraduationYearCategories();
@@ -238,6 +277,7 @@ onMounted(async () => {
           <button class="px-4 py-2 rounded-lg border text-sm" :class="activeSection === 'categories' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'categories'">流入経路カテゴリ登録</button>
           <button class="px-4 py-2 rounded-lg border text-sm" :class="activeSection === 'invite' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'invite'">担当者招待URL</button>
           <button class="px-4 py-2 rounded-lg border text-sm" :class="activeSection === 'event-kpi' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'event-kpi'">イベントKPI</button>
+          <button class="px-4 py-2 rounded-lg border text-sm" :class="activeSection === 'event-status' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'event-status'">イベントステータス登録</button>
         </div>
       </div>
 
@@ -373,7 +413,7 @@ onMounted(async () => {
         <p v-if="inviteMessage" class="text-sm text-gray-600 mt-2">{{ inviteMessage }}</p>
       </div>
 
-      <div v-else class="space-y-4">
+      <div v-else-if="activeSection === 'event-kpi'" class="space-y-4">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-1">イベントKPI</h2>
           <p class="text-sm text-gray-500 mb-4">目標着座数から逆算して、必要なエントリー/面談/流入数を自動計算します。</p>
@@ -463,6 +503,56 @@ onMounted(async () => {
             </table>
           </div>
           <p v-if="loading" class="text-sm text-gray-500 mt-3">読み込み中...</p>
+        </div>
+      </div>
+
+      <div v-else class="space-y-4">
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">イベントステータス登録</h2>
+          <p class="text-sm text-gray-500 mb-4">イベントごとに表示・使用するステータスを管理します。</p>
+          <div class="mb-4">
+            <label class="block text-sm text-gray-600 mb-1">対象イベント</label>
+            <select
+              v-model.number="selectedStatusEventId"
+              class="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg"
+              @change="() => { const ev = events.find(e => e.id === selectedStatusEventId); loadEventStatuses(ev || null); statusSaveMessage = ''; }"
+            >
+              <option :value="null">-- イベントを選択 --</option>
+              <option v-for="e in events" :key="e.id" :value="e.id">{{ e.title }}</option>
+            </select>
+          </div>
+          <div v-if="selectedStatusEventId">
+            <p class="text-sm font-semibold text-gray-700 mb-2">現在のステータス一覧</p>
+            <div class="space-y-2 mb-4">
+              <div v-for="(st, idx) in eventStatuses" :key="`status-${idx}`" class="flex items-center gap-2">
+                <span class="px-3 py-1.5 rounded border border-gray-200 bg-gray-50 text-sm flex-1">
+                  {{ STATUS_LABEL_MAP[st] || st }}
+                  <span class="text-xs text-gray-400 ml-1">({{ st }})</span>
+                </span>
+                <button
+                  class="px-3 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50"
+                  @click="eventStatuses.splice(idx, 1)"
+                >削除</button>
+              </div>
+              <p v-if="eventStatuses.length === 0" class="text-xs text-gray-400">ステータスが設定されていません。</p>
+            </div>
+            <div class="flex gap-2 max-w-md mb-4">
+              <input
+                v-model="newStatusInput"
+                type="text"
+                placeholder="カスタムステータスを追加（例: D_PASS）"
+                class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+              <button
+                class="px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-200"
+                @click="() => { if (newStatusInput.trim()) { eventStatuses.push(newStatusInput.trim()); newStatusInput = ''; } }"
+              >追加</button>
+            </div>
+            <div class="flex items-center gap-3">
+              <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm" @click="saveEventStatuses">保存</button>
+              <span v-if="statusSaveMessage" class="text-sm text-green-600">{{ statusSaveMessage }}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

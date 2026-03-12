@@ -53,6 +53,19 @@ const participants = ref<Participant[]>([]);
 const searchTerm = ref('');
 const isEditing = ref(false);
 const saveMessage = ref('');
+const sortField = ref<'status' | null>(null);
+const sortOrder = ref<'asc' | 'desc'>('asc');
+
+const STATUS_ORDER: Record<string, number> = {
+  A_ENTRY: 1, registered: 1,
+  B_WAITING: 2,
+  C_WAITING: 3,
+  attended: 4,
+  D_PASS: 5,
+  E_FAIL: 6,
+  XA_CANCEL: 7,
+  canceled: 8
+};
 const form = ref({
   title: '',
   description: '',
@@ -175,10 +188,16 @@ const displayEventDates = (ev: EventDetail | null) => {
 
 const filteredParticipants = computed(() => {
   const term = searchTerm.value.toLowerCase();
-  return participants.value.filter(p =>
+  const filtered = participants.value.filter(p =>
     p.name.toLowerCase().includes(term) ||
     (p.university || '').toLowerCase().includes(term)
   );
+  if (!sortField.value) return filtered;
+  return [...filtered].sort((a, b) => {
+    const aOrder = STATUS_ORDER[a.status] ?? 99;
+    const bOrder = STATUS_ORDER[b.status] ?? 99;
+    return sortOrder.value === 'asc' ? aOrder - bOrder : bOrder - aOrder;
+  });
 });
 
 const statusBadge = (status: string) => {
@@ -432,7 +451,17 @@ onMounted(fetchDetail);
                   <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">担当</th>
                   <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">申込日</th>
                   <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">参加日程</th>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ステータス</th>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <button
+                      class="flex items-center gap-1 hover:text-gray-800"
+                      @click="() => { if (sortField === 'status') { if (sortOrder === 'asc') { sortOrder = 'desc'; } else { sortField = null; sortOrder = 'asc'; } } else { sortField = 'status'; sortOrder = 'asc'; } }"
+                    >
+                      ステータス
+                      <span v-if="sortField === 'status' && sortOrder === 'asc'">▲</span>
+                      <span v-else-if="sortField === 'status' && sortOrder === 'desc'">▼</span>
+                      <span v-else class="opacity-30">▲</span>
+                    </button>
+                  </th>
                   <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
                 </tr>
               </thead>

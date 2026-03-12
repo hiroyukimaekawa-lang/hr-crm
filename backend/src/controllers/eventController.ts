@@ -245,7 +245,8 @@ export const updateEvent = async (req: Request, res: Response) => {
     const {
         title, description, event_date, event_dates, location, lp_url,
         capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline,
-        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps
+        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps,
+        yomi_statuses
     } = req.body;
     try {
         await ensureEventDatesTable();
@@ -274,6 +275,10 @@ export const updateEvent = async (req: Request, res: Response) => {
         pushSet('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate ?? 60);
         pushSet('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate ?? 50);
         pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
+        if (yomi_statuses !== undefined) {
+            values.push(JSON.stringify(yomi_statuses));
+            setParts.push(`yomi_statuses = $${values.length}`);
+        }
         values.push(id);
 
         await pool.query('BEGIN');
@@ -375,6 +380,98 @@ export const deleteEvent = async (req: Request, res: Response) => {
             return;
         }
         res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+export const getKgiProgress = async (req: Request, res: Response) => {
+    try {
+        await ensureEventDatesTable();
+        await ensureStudentEventsColumns();
+
+        // Today in JST
+        const now = new Date();
+        const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        const todayStr = jstNow.toISOString().slice(0, 10);
+        const todayDate = new Date(todayStr + 'T00:00:00+09:00');
+
+        const eventsRes = await pool.query(`
+            SELECT
+                e.id,
+                e.title,
+                e.target_seats,
+                e.capacity AS capacity_entry,
+                COALESCE(e.kpi_seat_to_entry_rate, 70) AS kpi_seat_to_entry_rate,
+                COALESCE(e.entry_deadline, e.event_date) AS deadline
+            FROM events e
+            ORDER BY e.event_date DESC
+        `);
+
+        const statusBreakdownRes = await pool.query(`
+            SELECT
+                se.event_id,
+                se.status,
+                COUNT(*) AS cnt
+            FROM student_events se
+            GROUP BY se.event_id, se.status
+        `);
+
+        const breakdownMap: Record<number, Record<string, number>> = {};
+        for (const row of statusBreakdownRes.rows) {
+            if (!breakdownMap[row.event_id]) breakdownMap[row.event_id] = {};
+            breakdownMap[row.event_id][row.status] = Number(row.cnt);
+        }
+
+        const result = eventsRes.rows.map((e: any) => {
+            const breakdown = breakdownMap[e.id] || {};
+            const currentEntry = (breakdown['A_ENTRY'] || 0) + (breakdown['registered'] || 0);
+            const currentSeats = breakdown['attended'] || 0;
+            const targetSeats = Number(e.target_seats || 0);
+            const capacityEntry = Number(e.capacity_entry || 0);
+            const kpiRate = Number(e.kpi_seat_to_entry_rate || 70);
+
+            // KPI連動: 目標着座を着座率(%)で割り、必要エントリー数を逆算
+            // 例: 目標着座30名, 着座率70% → 必要エントリー = 30 / 0.70 ≈ 43名
+            const kpiTargetEntry = targetSeats > 0 && kpiRate > 0
+                ? Math.ceil(targetSeats / (kpiRate / 100))
+                : 0;
+
+            // 目標エントリー: capacityが設定されていればそれを使用、なければKPI逆算値
+            const targetEntry = capacityEntry > 0 ? capacityEntry : kpiTargetEntry;
+
+            let daysRemaining = 0;
+            let deadlineStr: string | null = null;
+            if (e.deadline) {
+                const deadlineDate = new Date(e.deadline);
+                deadlineStr = deadlineDate.toISOString().slice(0, 10);
+                const diffMs = deadlineDate.getTime() - todayDate.getTime();
+                daysRemaining = Math.floor(diffMs / 86400000);
+            }
+
+            // デイリー必要エントリー数: KPI連動目標から現在値を引いて残日数で割る
+            let dailyEntryGap = 0;
+            if (daysRemaining > 0) {
+                const effectiveTarget = kpiTargetEntry > 0 ? kpiTargetEntry : targetEntry;
+                dailyEntryGap = Math.round(((effectiveTarget - currentEntry) / daysRemaining) * 10) / 10;
+            }
+
+            return {
+                event_id: e.id,
+                event_title: e.title,
+                deadline: deadlineStr,
+                days_remaining: daysRemaining,
+                target_entry: targetEntry,
+                kpi_target_entry: kpiTargetEntry,
+                kpi_rate: kpiRate,
+                current_entry: currentEntry,
+                target_seats: targetSeats,
+                current_seats: currentSeats,
+                daily_entry_gap: dailyEntryGap,
+                status_breakdown: breakdown
+            };
+        });
+
+        res.json(result);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

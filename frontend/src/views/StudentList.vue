@@ -1596,6 +1596,15 @@ watch(filteredStudents, () => {
 
             <div class="border border-gray-200 rounded-lg p-3">
               <h3 class="font-semibold text-sm mb-2">3) 面談実施登録</h3>
+              <label class="block text-xs text-gray-600 mb-1">面談ステータス</label>
+              <select
+                v-model="funnelForm.interview_status"
+                class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-3"
+              >
+                <option value="completed">実施</option>
+                <option value="no_show">トビ（無断欠席）</option>
+                <option value="rescheduled">リスケ</option>
+              </select>
               <label class="block text-xs text-gray-600 mb-1">面談予定日（実際の面談日）</label>
               <div class="grid grid-cols-12 gap-2 mb-2">
                 <input
@@ -1613,7 +1622,7 @@ watch(filteredStudents, () => {
                 </select>
               </div>
               <label class="block text-xs text-gray-600 mb-1">面談実施日</label>
-              <div class="grid grid-cols-12 gap-2 mb-2">
+              <div class="grid grid-cols-12 gap-2 mb-3">
                 <input
                   :value="getDatePart(funnelForm.interview_interviewed_at)"
                   type="date"
@@ -1628,7 +1637,13 @@ watch(filteredStudents, () => {
                   <option v-for="h in hourOptions" :key="`funnel-interviewed-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
-              <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitInterview">面談実施登録</button>
+              <button
+                class="px-3 py-2 text-xs text-white rounded w-full font-semibold"
+                :class="funnelForm.interview_status === 'no_show' ? 'bg-red-600 hover:bg-red-700' : funnelForm.interview_status === 'rescheduled' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'"
+                @click="submitInterview"
+              >
+                {{ funnelForm.interview_status === 'no_show' ? 'トビとして登録' : funnelForm.interview_status === 'rescheduled' ? 'リスケとして登録' : '面談実施登録' }}
+              </button>
             </div>
 
           </div>
