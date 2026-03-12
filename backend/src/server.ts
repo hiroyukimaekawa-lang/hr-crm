@@ -63,6 +63,7 @@ app.use('/api/kpi', kpiRoutes);
 // 旧APIとの互換性のためのエイリアス（必要に応じて）
 app.post('/api/login', (req, res) => res.redirect(307, '/api/auth/login'));
 app.post('/api/interview-logs', (req, res) => res.redirect(307, '/api/students/interview-logs'));
+app.put('/api/interview-logs/:id', (req, res) => res.redirect(307, `/api/students/interview-logs/${req.params.id}`));
 app.delete('/api/interview-logs/:id', (req, res) => res.redirect(307, `/api/students/interview-logs/${req.params.id}`));
 
 module.exports = app;

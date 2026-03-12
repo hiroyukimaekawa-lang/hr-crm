@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { api } from '../lib/api';
 import Layout from '../components/Layout.vue';
+import { ArrowRight } from 'lucide-vue-next';
 
 interface Student {
   id: number;
@@ -14,6 +15,7 @@ interface EventItem {
   id: number;
   title: string;
   event_date?: string;
+  event_dates?: string[];
   description?: string;
   location?: string;
   lp_url?: string;
@@ -33,6 +35,7 @@ interface EventParticipant {
   student_id: number;
   status: string;
   created_at: string;
+  selected_event_date?: string | null;
   name: string;
   university?: string;
   staff_name?: string;
@@ -44,6 +47,17 @@ const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admi
 const selectedYomiEvent = ref<EventItem | null>(null);
 const yomiParticipants = ref<EventParticipant[]>([]);
 const yomiLoading = ref(false);
+const showMonthlyAttendanceModal = ref(false);
+const selectedMonthlyParticipants = ref<Array<EventParticipant & { event_title?: string; held_date?: string; single_event_date?: string | null }>>([]);
+const monthlyFilters = ref({
+  event_title: '',
+  name: '',
+  university: '',
+  staff_name: '',
+  created_at: '',
+  selected_event_date: '',
+  status: ''
+});
 type YomiKey = 'A' | 'B' | 'C' | 'XA';
 const interviewMetrics = ref({
   first_lead_time_days_avg: null as number | null,
@@ -290,12 +304,68 @@ const closeYomiEventDetail = () => {
   yomiParticipants.value = [];
 };
 
+const openMonthlyAttendanceModal = async () => {
+  showMonthlyAttendanceModal.value = true;
+  selectedMonthlyParticipants.value = [];
+  yomiLoading.value = true;
+  
+  try {
+    const token = localStorage.getItem('token');
+    const month = selectedMonthKey.value;
+    
+    // Get all events in this month
+    const monthEvents = events.value.filter(e => String(e.event_date || '').slice(0, 7) === month);
+    
+    // Fetch participants for each event
+    const participantPromises = monthEvents.map(e => {
+      // Determine single event date
+      let singleDate: string | null = null;
+      if (Array.isArray(e.event_dates) && e.event_dates.length === 1) {
+        singleDate = e.event_dates[0] || null;
+      } else if (!Array.isArray(e.event_dates) && e.event_date) {
+        singleDate = e.event_date;
+      }
+      
+      return api.get(`/api/events/${e.id}`, { headers: { Authorization: token } })
+         .then(res => {
+           return (res.data.participants || []).map((p: any) => ({
+             ...p,
+             event_title: e.title,
+             held_date: e.event_date,
+             single_event_date: singleDate
+           }));
+         })
+         .catch(() => []);
+    });
+    
+    const results = await Promise.all(participantPromises);
+    selectedMonthlyParticipants.value = results.flat();
+    monthlyFilters.value = { event_title: '', name: '', university: '', staff_name: '', created_at: '', selected_event_date: '', status: '' };
+  } catch (err) {
+    console.error(err);
+  } finally {
+    yomiLoading.value = false;
+  }
+};
+
+const closeMonthlyAttendanceModal = () => {
+  showMonthlyAttendanceModal.value = false;
+  selectedMonthlyParticipants.value = [];
+};
+
 const normalizedYomiKey = (status?: string): 'A' | 'B' | 'C' | 'XA' | 'OTHER' => {
   if (status === 'A_ENTRY' || status === 'registered') return 'A';
   if (status === 'B_WAITING') return 'B';
   if (status === 'C_WAITING') return 'C';
   if (status === 'XA_CANCEL' || status === 'canceled') return 'XA';
   return 'OTHER';
+};
+
+const formatDateKey = (value: string | Date | null | undefined) => {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '-';
+  return `${d.getMonth() + 1}/${d.getDate()}`;
 };
 
 const yomiCounts = computed(() => ({
@@ -454,6 +524,30 @@ const monthlyYomiByEvent = computed(() => {
     }));
 });
 
+const monthlyAttendanceCount = computed(() => {
+  const month = selectedMonthKey.value;
+  return eventYomiRows.value
+    .filter((row) => String(row.event_date || '').slice(0, 7) === month)
+    .reduce((sum, row) => sum + Number(row.total || 0), 0);
+});
+
+const filteredMonthlyParticipants = computed(() => {
+  return selectedMonthlyParticipants.value.filter(p => {
+    const pDate = formatDateKey(p.selected_event_date || p.single_event_date);
+    const cDate = formatDateKey(p.created_at);
+    
+    const matchEvent = !monthlyFilters.value.event_title || (p.event_title || '').includes(monthlyFilters.value.event_title);
+    const matchName = !monthlyFilters.value.name || p.name.includes(monthlyFilters.value.name);
+    const matchUniv = !monthlyFilters.value.university || (p.university || '').includes(monthlyFilters.value.university);
+    const matchStaff = !monthlyFilters.value.staff_name || (p.staff_name || '').includes(monthlyFilters.value.staff_name);
+    const matchCreatedAt = !monthlyFilters.value.created_at || cDate.includes(monthlyFilters.value.created_at);
+    const matchEventDate = !monthlyFilters.value.selected_event_date || pDate.includes(monthlyFilters.value.selected_event_date);
+    const matchStatus = !monthlyFilters.value.status || monthlyFilters.value.status === 'ALL' || normalizedYomiKey(p.status) === monthlyFilters.value.status;
+    
+    return matchEvent && matchName && matchUniv && matchStaff && matchCreatedAt && matchEventDate && matchStatus;
+  });
+});
+
 onMounted(fetchData);
 watch(sourceCompanyFilter, fetchInterviewMetrics);
 </script>
@@ -468,7 +562,16 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-bold text-gray-900">イベント別ヨミ表（A/B/C）</h2>
+          <div class="flex items-center gap-4">
+            <h2 class="text-lg font-bold text-gray-900">イベント別ヨミ表（A/B/C）</h2>
+            <button 
+              @click="openMonthlyAttendanceModal"
+              class="px-3 py-1 bg-green-50 border border-green-200 text-green-700 rounded-full text-sm font-semibold hover:bg-green-100 transition-colors flex items-center gap-1.5"
+            >
+              {{ calendarBaseMonth.getMonth() + 1 }}月の参加人数: {{ monthlyAttendanceCount }}名
+              <ArrowRight class="w-3.5 h-3.5" />
+            </button>
+          </div>
           <span class="text-sm text-gray-500">開催予定: {{ upcomingEvents }}件</span>
         </div>
         <div class="flex flex-wrap items-center gap-2 mb-4">
@@ -655,6 +758,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">学生名</th>
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">大学</th>
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">担当</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">参加日程</th>
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">変更</th>
                   </tr>
                 </thead>
@@ -663,6 +767,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                     <td class="px-3 py-2 text-gray-900">{{ p.name }}</td>
                     <td class="px-3 py-2 text-gray-600">{{ p.university || '-' }}</td>
                     <td class="px-3 py-2 text-gray-600">{{ p.staff_name || '-' }}</td>
+                    <td class="px-3 py-2 text-gray-900 font-medium">{{ formatDateKey(p.selected_event_date) }}</td>
                     <td class="px-3 py-2">
                       <select
                         class="w-full min-w-[170px] px-2 py-1 border border-gray-300 rounded-md text-xs bg-white"
@@ -678,6 +783,86 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                   </tr>
                   <tr v-if="yomiGroups[section.key].length === 0">
                     <td colSpan="4" class="px-3 py-6 text-center text-gray-400">該当学生はいません。</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Monthly Attendance Modal -->
+    <div v-if="showMonthlyAttendanceModal" class="fixed inset-0 z-[90]">
+      <div class="absolute inset-0 bg-black/30" @click="closeMonthlyAttendanceModal" />
+      <div class="absolute right-0 top-0 h-full w-full md:w-2/3 lg:w-1/2 xl:w-7/12 bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto flex flex-col">
+        <div class="flex items-center justify-between mb-6 shrink-0">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900">{{ calendarBaseMonth.getMonth() + 1 }}月の全イベント参加者一覧</h2>
+            <p class="text-sm text-gray-500 mt-1">対象月のすべてのイベント参加者（合計: {{ selectedMonthlyParticipants.length }}名）</p>
+          </div>
+          <button class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50" @click="closeMonthlyAttendanceModal">閉じる</button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto w-full">
+          <div v-if="yomiLoading" class="text-center text-gray-400 py-20">参加データを集計中...</div>
+          <div v-else class="border border-gray-200 rounded-lg overflow-hidden h-full flex flex-col">
+            <div class="overflow-y-auto flex-1 relative">
+              <table class="w-full text-sm min-w-[800px]">
+                <thead class="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+                  <tr>
+                    <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[140px]">
+                      <div class="mb-1 uppercase">イベント名</div>
+                      <input v-model="monthlyFilters.event_title" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
+                    </th>
+                    <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[100px]">
+                      <div class="mb-1 uppercase">学生名</div>
+                      <input v-model="monthlyFilters.name" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
+                    </th>
+                    <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[120px]">
+                      <div class="mb-1 uppercase">大学</div>
+                      <input v-model="monthlyFilters.university" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
+                    </th>
+                    <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[80px]">
+                      <div class="mb-1 uppercase">担当</div>
+                      <input v-model="monthlyFilters.staff_name" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
+                    </th>
+                    <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[80px]">
+                      <div class="mb-1 uppercase">申込日</div>
+                      <input v-model="monthlyFilters.created_at" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
+                    </th>
+                    <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[80px]">
+                      <div class="mb-1 uppercase">参加日程</div>
+                      <input v-model="monthlyFilters.selected_event_date" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
+                    </th>
+                    <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[100px]">
+                      <div class="mb-1 uppercase">ステータス</div>
+                      <select v-model="monthlyFilters.status" class="w-full px-1 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal bg-white">
+                        <option value="">すべて</option>
+                        <option value="A">A:エントリー</option>
+                        <option value="B">B:回答待ち</option>
+                        <option value="C">C:回答待ち</option>
+                        <option value="XA">XA:キャンセル</option>
+                      </select>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <tr v-for="p in filteredMonthlyParticipants" :key="`mo-part-${p.student_event_id || p.student_id}`" class="hover:bg-gray-50">
+                    <td class="px-3 py-2.5 text-gray-900 text-xs truncate max-w-[200px]" :title="p.event_title">{{ p.event_title }}</td>
+                    <td class="px-3 py-2.5 font-bold text-gray-900">{{ p.name }}</td>
+                    <td class="px-3 py-2.5 text-gray-600 text-xs">{{ p.university || '-' }}</td>
+                    <td class="px-3 py-2.5 text-gray-600 text-xs">{{ p.staff_name || '-' }}</td>
+                    <td class="px-3 py-2.5 text-gray-600 font-medium whitespace-nowrap">{{ formatDateKey(p.created_at) }}</td>
+                    <td class="px-3 py-2.5 text-gray-900 font-bold whitespace-nowrap">{{ formatDateKey(p.selected_event_date || p.single_event_date) }}</td>
+                    <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                      <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold shadow-sm" :class="yomiStatusClass(p.status)">
+                        {{ yomiStatusLabel(p.status) }}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr v-if="filteredMonthlyParticipants.length === 0">
+                    <td colSpan="7" class="px-3 py-16 text-center text-gray-400">参加者データがありません。</td>
                   </tr>
                 </tbody>
               </table>

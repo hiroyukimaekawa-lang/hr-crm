@@ -385,12 +385,12 @@ const normalizeToHour = (value: any): string | null => {
     if (!raw) return null;
 
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-        return `${raw} 00:00:00`;
+        return `${raw} 00:00:00+09`;
     }
 
     const direct = raw.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2})/);
     if (direct) {
-        return `${direct[1]} ${direct[2]}:00:00`;
+        return `${direct[1]} ${direct[2]}:00:00+09`;
     }
 
     const d = new Date(raw);
@@ -399,7 +399,7 @@ const normalizeToHour = (value: any): string | null => {
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     const hh = String(d.getHours()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd} ${hh}:00:00`;
+    return `${yyyy}-${mm}-${dd} ${hh}:00:00+09`;
 };
 
 const normalizeReferralStatus = (value: any) => {
@@ -1109,7 +1109,7 @@ export const linkEvent = async (req: Request, res: Response) => {
     const { event_id, status, selected_event_date } = req.body;
     try {
         await ensureStudentEventsColumns();
-        const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING', 'XA_CANCEL'].includes(status) ? status : 'A_ENTRY';
+        const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING', 'D_PASS', 'E_FAIL', 'XA_CANCEL'].includes(status) ? status : 'A_ENTRY';
         await pool.query(
             `INSERT INTO student_events (student_id, event_id, status, selected_event_date)
              VALUES ($1, $2, $3, $4)
@@ -1146,6 +1146,24 @@ export const deleteInterviewLog = async (req: Request, res: Response) => {
             return;
         }
         res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const updateInterviewLog = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { content } = req.body;
+    try {
+        const result = await pool.query(
+            'UPDATE interview_logs SET content = $1, created_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+            [content, id]
+        );
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Log not found' });
+            return;
+        }
+        res.json(result.rows[0]);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }

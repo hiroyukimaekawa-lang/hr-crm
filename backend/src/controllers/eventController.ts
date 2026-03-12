@@ -32,6 +32,10 @@ const ensureEventDatesTable = async () => {
                 ADD COLUMN IF NOT EXISTS kpi_custom_steps TEXT DEFAULT '[]'
             `);
             await pool.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS yomi_statuses JSONB DEFAULT '["A_ENTRY", "B_WAITING", "C_WAITING", "D_PASS", "E_FAIL", "XA_CANCEL"]'
+            `);
+            await pool.query(`
                 CREATE TABLE IF NOT EXISTS event_dates (
                     id SERIAL PRIMARY KEY,
                     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -147,6 +151,8 @@ export const getEvents = async (req: Request, res: Response) => {
                 COALESCE(part_stats.a_entry_count, 0) as a_entry_count,
                 COALESCE(part_stats.b_waiting_count, 0) as b_waiting_count,
                 COALESCE(part_stats.c_waiting_count, 0) as c_waiting_count,
+                COALESCE(part_stats.d_pass_count, 0) as d_pass_count,
+                COALESCE(part_stats.e_fail_count, 0) as e_fail_count,
                 COALESCE(part_stats.xa_cancel_count, 0) as xa_cancel_count,
                 COALESCE(part_stats.total_count, 0) as total_count
             FROM events e
@@ -164,6 +170,8 @@ export const getEvents = async (req: Request, res: Response) => {
                     COUNT(se.*) FILTER (WHERE se.status = 'A_ENTRY' OR se.status = 'registered') as a_entry_count,
                     COUNT(se.*) FILTER (WHERE se.status = 'B_WAITING') as b_waiting_count,
                     COUNT(se.*) FILTER (WHERE se.status = 'C_WAITING') as c_waiting_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'D_PASS') as d_pass_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'E_FAIL') as e_fail_count,
                     COUNT(se.*) FILTER (WHERE se.status = 'XA_CANCEL' OR se.status = 'canceled') as xa_cancel_count,
                     COUNT(se.*) as total_count
                 FROM student_events se
@@ -227,7 +235,7 @@ export const createEvent = async (req: Request, res: Response) => {
         await pool.query('COMMIT');
         res.json({ ...created, event_dates: dates });
     } catch (err: any) {
-        try { await pool.query('ROLLBACK'); } catch {}
+        try { await pool.query('ROLLBACK'); } catch { }
         res.status(500).json({ error: err.message });
     }
 };
@@ -291,7 +299,7 @@ export const updateEvent = async (req: Request, res: Response) => {
         await pool.query('COMMIT');
         res.json({ ...result.rows[0], event_dates: dates });
     } catch (err: any) {
-        try { await pool.query('ROLLBACK'); } catch {}
+        try { await pool.query('ROLLBACK'); } catch { }
         res.status(500).json({ error: err.message });
     }
 };

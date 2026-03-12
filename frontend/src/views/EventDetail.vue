@@ -10,7 +10,8 @@ import {
   Users as UsersIcon,
   Search,
   CheckCircle,
-  XCircle
+  XCircle,
+  Download
 } from 'lucide-vue-next';
 
 interface Participant {
@@ -190,6 +191,10 @@ const statusBadge = (status: string) => {
       return 'bg-purple-100 text-purple-700';
     case 'XA_CANCEL':
       return 'bg-red-100 text-red-700';
+    case 'D_PASS':
+      return 'bg-green-100 text-green-700';
+    case 'E_FAIL':
+      return 'bg-red-100 text-red-700';
     case 'attended':
       return 'bg-green-100 text-green-700';
     case 'registered':
@@ -211,6 +216,10 @@ const statusLabel = (status: string) => {
       return 'C:回答待ち';
     case 'XA_CANCEL':
       return 'XA:エントリーキャンセル';
+    case 'D_PASS':
+      return 'D:合格';
+    case 'E_FAIL':
+      return 'E:不合格';
     case 'attended':
       return '出席';
     case 'registered':
@@ -220,6 +229,39 @@ const statusLabel = (status: string) => {
     default:
       return status || '-';
   }
+};
+
+const formatDateKey = (value: string | Date | null | undefined) => {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '-';
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+};
+
+const downloadCSV = () => {
+  const headers = ['氏名', '大学', '担当', '申込日', '参加日程', 'ステータス'];
+  const rows = filteredParticipants.value.map(p => [
+    p.name,
+    p.university || '-',
+    p.staff_name || '-',
+    formatDateKey(p.created_at),
+    formatDateKey(p.selected_event_date),
+    statusLabel(p.status)
+  ]);
+  
+  const csvContent = [headers.join(',')]
+    .concat(rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')))
+    .join('\n');
+    
+  const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+  const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `${event.value?.title || 'event'}_participants.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
 
 onMounted(fetchDetail);
@@ -349,16 +391,26 @@ onMounted(fetchDetail);
         </div>
 
         <div class="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div class="flex items-center justify-between mb-4">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
             <h2 class="text-lg font-bold text-gray-900">参加学生一覧</h2>
-            <div class="relative w-64">
-              <Search class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                v-model="searchTerm"
-                type="text"
-                placeholder="学生名で検索..."
-                class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              />
+            <div class="flex items-center gap-3 w-full sm:w-auto">
+              <div class="relative flex-1 sm:w-64">
+                <Search class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  v-model="searchTerm"
+                  type="text"
+                  placeholder="学生名で検索..."
+                  class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <button
+                @click="downloadCSV"
+                class="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 whitespace-nowrap"
+                title="CSVダウンロード"
+              >
+                <Download class="w-4 h-4" />
+                <span>CSV</span>
+              </button>
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2 mb-4">
@@ -366,6 +418,8 @@ onMounted(fetchDetail);
             <button type="button" class="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs">A:エントリー</button>
             <button type="button" class="px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700 text-xs">B:回答待ち</button>
             <button type="button" class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs">C:回答待ち</button>
+            <button type="button" class="px-2 py-1 rounded border border-green-200 bg-green-50 text-green-700 text-xs">D:合格</button>
+            <button type="button" class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs">E:不合格</button>
             <button type="button" class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs">XA:エントリーキャンセル</button>
           </div>
 
@@ -377,6 +431,7 @@ onMounted(fetchDetail);
                   <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">大学</th>
                   <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">担当</th>
                   <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">申込日</th>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">参加日程</th>
                   <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ステータス</th>
                   <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
                 </tr>
@@ -390,7 +445,8 @@ onMounted(fetchDetail);
                   </td>
                   <td class="px-4 py-3 text-gray-600">{{ p.university || '-' }}</td>
                   <td class="px-4 py-3 text-gray-600">{{ p.staff_name || '-' }}</td>
-                  <td class="px-4 py-3 text-gray-600">{{ new Date(p.created_at).toLocaleDateString('ja-JP') }}</td>
+                  <td class="px-4 py-3 text-gray-600">{{ formatDateKey(p.created_at) }}</td>
+                  <td class="px-4 py-3 text-gray-900 font-medium">{{ formatDateKey(p.selected_event_date) }}</td>
                   <td class="px-4 py-3">
                     <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="statusBadge(p.status)">
                       {{ statusLabel(p.status) }}
@@ -406,6 +462,12 @@ onMounted(fetchDetail);
                       </button>
                       <button class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs hover:bg-purple-100" @click="updateStatus(p.id!, 'C_WAITING')" title="C:回答待ち">
                         C
+                      </button>
+                      <button class="px-2 py-1 rounded border border-green-200 bg-green-50 text-green-700 text-xs hover:bg-green-100" @click="updateStatus(p.id!, 'D_PASS')" title="D:合格">
+                        D
+                      </button>
+                      <button class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs hover:bg-red-100" @click="updateStatus(p.id!, 'E_FAIL')" title="E:不合格">
+                        E
                       </button>
                       <button class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs hover:bg-red-100" @click="updateStatus(p.id!, 'XA_CANCEL')" title="XA:エントリーキャンセル">
                         XA

@@ -50,6 +50,9 @@ const proposalForm = ref({
   memo: ''
 });
 const expandedLogId = ref<number | null>(null);
+const editingLogId = ref<number | null>(null);
+const editingLogContent = ref('');
+const savingLogId = ref<number | null>(null);
 const availableEvents = ref<any[]>([]);
 const newTaskDate = ref('');
 const newTaskContent = ref('');
@@ -61,7 +64,7 @@ const newLogType = ref<'面談' | 'エントリー' | 'その他'>('面談');
 const newLogEventId = ref('');
 const selectedEventId = ref('');
 const selectedEventDate = ref('');
-const selectedEventStatus = ref<'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL'>('A_ENTRY');
+const selectedEventStatus = ref<'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'D_PASS' | 'E_FAIL' | 'XA_CANCEL'>('A_ENTRY');
 const editingStatus = ref(false);
 const referralStatusDraft = ref('不明');
 const progressStageDraft = ref('面談調整中');
@@ -344,7 +347,39 @@ const deleteLog = async (logId: number) => {
 };
 
 const toggleLog = (logId: number) => {
+  if (editingLogId.value === logId) return; // 編集中は開閉しない
   expandedLogId.value = expandedLogId.value === logId ? null : logId;
+};
+
+const startEditLog = (log: any) => {
+  editingLogId.value = log.id;
+  editingLogContent.value = log.content || '';
+  // 編集開始時は詳細を開いた状態にする
+  expandedLogId.value = log.id;
+};
+
+const cancelEditLog = () => {
+  editingLogId.value = null;
+  editingLogContent.value = '';
+};
+
+const updateLog = async (logId: number) => {
+  if (!editingLogContent.value.trim()) return;
+  try {
+    savingLogId.value = logId;
+    const token = localStorage.getItem('token');
+    await api.put(`/api/students/interview-logs/${logId}`, {
+      content: editingLogContent.value
+    }, { headers: { Authorization: token } });
+    editingLogId.value = null;
+    editingLogContent.value = '';
+    await fetchDetail();
+  } catch (err: any) {
+    console.error('Failed to update log', err);
+    alert('ログの更新に失敗しました。');
+  } finally {
+    savingLogId.value = null;
+  }
 };
 
 const addTask = async () => {
@@ -417,7 +452,7 @@ const linkEvent = async () => {
 const updateEventParticipationStatus = async (
   eventId: number,
   studentEventId: number,
-  status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL'
+  status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'D_PASS' | 'E_FAIL' | 'XA_CANCEL'
 ) => {
   const token = localStorage.getItem('token');
   await api.put(
@@ -481,6 +516,10 @@ const participationStatusClass = (status?: string) => {
     case 'XA_CANCEL':
     case 'canceled':
       return 'bg-red-100 text-red-700';
+    case 'D_PASS':
+      return 'bg-green-100 text-green-700';
+    case 'E_FAIL':
+      return 'bg-red-100 text-red-700';
     case 'attended':
       return 'bg-green-100 text-green-700';
     default:
@@ -500,6 +539,10 @@ const participationStatusLabel = (status?: string) => {
     case 'XA_CANCEL':
     case 'canceled':
       return 'XA:エントリーキャンセル';
+    case 'D_PASS':
+      return 'D:合格';
+    case 'E_FAIL':
+      return 'E:不合格';
     case 'attended':
       return '出席';
     default:
@@ -1099,36 +1142,40 @@ watch(selectedEventId, () => {
               参加・エントリーイベント
             </h2>
             <div class="space-y-3 mb-6">
-              <div v-for="e in studentEvents" :key="e.student_event_id || e.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <span class="text-sm font-medium text-gray-800">{{ e.title }}</span>
-                  <p class="text-xs text-gray-500">{{ e.selected_event_date ? formatDateTime(e.selected_event_date) : formatDateTime(e.event_date) }}</p>
-                </div>
-                <div class="flex items-center gap-2">
-                  <select
-                    v-if="eventDateOptions(e).length > 1"
-                    class="px-2 py-1 border border-gray-300 rounded-md text-xs bg-white max-w-[180px]"
-                    :value="e.selected_event_date || ''"
-                    @change="updateEventParticipationDate(e.id, e.student_event_id, e.participation_status, ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option disabled value="">参加日を選択</option>
-                    <option v-for="d in eventDateOptions(e)" :key="`student-event-date-${e.id}-${d}`" :value="d">
-                      {{ formatDateTime(d) }}
-                    </option>
-                  </select>
-                  <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="participationStatusClass(e.participation_status)">
-                    {{ participationStatusLabel(e.participation_status) }}
-                  </span>
-                  <select
-                    class="px-2 py-1 border border-gray-300 rounded-md text-xs bg-white"
-                    :value="e.participation_status === 'registered' ? 'A_ENTRY' : (e.participation_status || 'A_ENTRY')"
-                    @change="updateEventParticipationStatus(e.id, e.student_event_id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL')"
-                  >
-                    <option value="A_ENTRY">A:エントリー</option>
-                    <option value="B_WAITING">B:回答待ち</option>
-                    <option value="C_WAITING">C:回答待ち</option>
-                    <option value="XA_CANCEL">XA:エントリーキャンセル</option>
-                  </select>
+              <div v-for="e in studentEvents" :key="e.student_event_id || e.id" class="p-3 bg-gray-50 rounded-lg">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div class="min-w-0 flex-1">
+                    <span class="text-sm font-bold text-gray-900 block truncate">{{ e.title }}</span>
+                    <p class="text-xs text-gray-500 mt-0.5">{{ e.selected_event_date ? formatDateTime(e.selected_event_date) : formatDateTime(e.event_date) }}</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <select
+                      v-if="eventDateOptions(e).length > 1"
+                      class="px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-[140px]"
+                      :value="e.selected_event_date || ''"
+                      @change="updateEventParticipationDate(e.id, e.student_event_id, e.participation_status, ($event.target as HTMLSelectElement).value)"
+                    >
+                      <option disabled value="">参加日を選択</option>
+                      <option v-for="d in eventDateOptions(e)" :key="`student-event-date-${e.id}-${d}`" :value="d">
+                        {{ formatDateTime(d) }}
+                      </option>
+                    </select>
+                    <span class="text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap" :class="participationStatusClass(e.participation_status)">
+                      {{ participationStatusLabel(e.participation_status) }}
+                    </span>
+                    <select
+                      class="px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none w-[130px]"
+                      :value="e.participation_status === 'registered' ? 'A_ENTRY' : (e.participation_status || 'A_ENTRY')"
+                      @change="updateEventParticipationStatus(e.id, e.student_event_id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'D_PASS' | 'E_FAIL' | 'XA_CANCEL')"
+                    >
+                      <option value="A_ENTRY">A:エントリー</option>
+                      <option value="B_WAITING">B:回答待ち</option>
+                      <option value="C_WAITING">C:回答待ち</option>
+                      <option value="D_PASS">D:合格</option>
+                      <option value="E_FAIL">E:不合格</option>
+                      <option value="XA_CANCEL">XA:ｷｬﾝｾﾙ</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               <div v-if="studentEvents.length === 0" class="text-sm text-gray-400 text-center py-4">
@@ -1136,27 +1183,33 @@ watch(selectedEventId, () => {
               </div>
             </div>
 
-            <div class="pt-4 border-t border-gray-100">
-              <label class="block text-xs font-medium text-gray-500 mb-2">イベントに紐付ける</label>
-              <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                <select v-model="selectedEventId" class="sm:col-span-6 w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                  <option disabled value="">選択してください</option>
-                  <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
-                </select>
-                <select
-                  v-if="selectedLinkEventDates.length > 1"
-                  v-model="selectedEventDate"
-                  class="sm:col-span-6 w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option v-for="d in selectedLinkEventDates" :key="`add-link-date-${d}`" :value="d">{{ formatDateTime(d) }}</option>
-                </select>
-                <select v-model="selectedEventStatus" class="sm:col-span-4 w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="A_ENTRY">A:エントリー</option>
-                  <option value="B_WAITING">B:回答待ち</option>
-                  <option value="C_WAITING">C:回答待ち</option>
-                  <option value="XA_CANCEL">XA:エントリーキャンセル（誤登録時）</option>
-                </select>
-                <button @click="linkEvent" class="sm:col-span-2 w-full bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">追加</button>
+            <div class="pt-5 border-t border-gray-100">
+              <label class="block text-xs font-bold text-gray-600 mb-3 ml-1">新しいイベントに紐付ける</label>
+              <div class="flex flex-col gap-2">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <select v-model="selectedEventId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                    <option disabled value="">イベントを選択</option>
+                    <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
+                  </select>
+                  <select
+                    v-if="selectedLinkEventDates.length > 1"
+                    v-model="selectedEventDate"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option v-for="d in selectedLinkEventDates" :key="`add-link-date-${d}`" :value="d">{{ formatDateTime(d) }}</option>
+                  </select>
+                </div>
+                <div class="flex gap-2">
+                  <select v-model="selectedEventStatus" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                    <option value="A_ENTRY">A:エントリー</option>
+                    <option value="B_WAITING">B:回答待ち</option>
+                    <option value="C_WAITING">C:回答待ち</option>
+                    <option value="D_PASS">D:合格</option>
+                    <option value="E_FAIL">E:不合格</option>
+                    <option value="XA_CANCEL">XA:キャンセル</option>
+                  </select>
+                  <button @click="linkEvent" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm">追加</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1189,6 +1242,14 @@ watch(selectedEventId, () => {
                     </div>
                     <div class="flex items-center gap-2">
                       <button
+                        v-if="editingLogId !== log.id"
+                        class="text-gray-400 hover:text-blue-600"
+                        @click="startEditLog(log)"
+                        title="編集"
+                      >
+                        <Edit class="w-4 h-4" />
+                      </button>
+                      <button
                         class="text-gray-400 hover:text-gray-600"
                         @click="toggleLog(log.id)"
                         title="詳細"
@@ -1196,6 +1257,7 @@ watch(selectedEventId, () => {
                         <component :is="expandedLogId === log.id ? ChevronUp : ChevronDown" class="w-4 h-4" />
                       </button>
                       <button
+                        v-if="editingLogId !== log.id"
                         class="text-gray-400 hover:text-red-600"
                         @click="deleteLog(log.id)"
                         title="削除"
@@ -1204,8 +1266,30 @@ watch(selectedEventId, () => {
                       </button>
                     </div>
                   </div>
-                  <div v-if="expandedLogId === log.id" class="text-sm text-gray-800 whitespace-pre-wrap">
-                    {{ log.content }}
+                  <div v-if="expandedLogId === log.id" class="text-sm text-gray-800">
+                    <div v-if="editingLogId === log.id" class="space-y-3">
+                      <textarea
+                        v-model="editingLogContent"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 h-32 bg-white"
+                        placeholder="ログ内容を編集..."
+                      ></textarea>
+                      <div class="flex justify-end gap-2">
+                        <button
+                          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                          @click="cancelEditLog"
+                        >
+                          キャンセル
+                        </button>
+                        <button
+                          class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+                          :disabled="savingLogId === log.id"
+                          @click="updateLog(log.id)"
+                        >
+                          {{ savingLogId === log.id ? '保存中...' : '保存' }}
+                        </button>
+                      </div>
+                    </div>
+                    <div v-else class="whitespace-pre-wrap">{{ log.content }}</div>
                   </div>
                 </div>
               </div>
