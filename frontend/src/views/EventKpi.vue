@@ -32,6 +32,7 @@ interface EventDetail {
 interface KpiCustomStep {
   label: string;
   rate: number;
+  position: number; // 1=着座↔エントリー間, 2=エントリー↔面談間, 3=面談↔流入数間, 4=流入数の後
 }
 
 /* ───────── 状態 ───────── */
@@ -69,8 +70,11 @@ const parseCustomSteps = (raw: string | null | undefined): KpiCustomStep[] => {
   try {
     const p = JSON.parse(raw);
     if (!Array.isArray(p)) return [];
-    return p.map((x: any) => ({ label: String(x?.label || ''), rate: Number(x?.rate || 0) }))
-            .filter(x => x.label && x.rate > 0);
+    return p.map((x: any) => ({
+      label: String(x?.label || ''),
+      rate: Number(x?.rate || 0),
+      position: Number(x?.position || 4)
+    })).filter(x => x.label && x.rate > 0);
   } catch { return []; }
 };
 
@@ -94,31 +98,53 @@ const buildDerived = (kgi: EventKgi | null, detail: EventDetail | null) => {
   const seatToEntry      = toRate(detail?.kpi_seat_to_entry_rate, 70) / 100;
   const entryToInterview = toRate(detail?.kpi_entry_to_interview_rate, 60) / 100;
   const interviewToInflow= toRate(detail?.kpi_interview_to_inflow_rate, 50) / 100;
-  const customSteps      = parseCustomSteps(detail?.kpi_custom_steps);
 
-  const targetSeats   = kgi.target_seats;
-  const targetEntry   = targetSeats > 0 ? Math.ceil(targetSeats / seatToEntry) : 0;
-  const targetInterview = targetEntry > 0 ? Math.ceil(targetEntry / entryToInterview) : 0;
-  const targetInflow  = targetInterview > 0 ? Math.ceil(targetInterview / interviewToInflow) : 0;
+  // カスタムステップをpositionでグループ化
+  const allSteps = parseCustomSteps(detail?.kpi_custom_steps);
+  const byPos: Record<number, KpiCustomStep[]> = { 1: [], 2: [], 3: [], 4: [] };
+  for (const s of allSteps) {
+    const pos = s.position >= 1 && s.position <= 4 ? s.position : 4;
+    if (!byPos[pos]) byPos[pos] = [];
+    (byPos[pos] as KpiCustomStep[]).push(s);
+  }
 
-  const currentSeats  = kgi.current_seats;
-  const currentEntry  = kgi.current_entry;
-  const days          = Math.max(kgi.days_remaining, 0);
+  const targetSeats  = kgi.target_seats;
+  const currentSeats = kgi.current_seats;
+  const currentEntry = kgi.current_entry;
+  const days         = Math.max(kgi.days_remaining, 0);
+
+  // チェーンビルダー: 前ステップ値から各カスタムステップの目標を逆算
+  const buildChain = (steps: KpiCustomStep[], prevVal: number) => {
+    const chain: Array<{ label: string; target: number; daily: number; rate: number; position: number }> = [];
+    let v = prevVal;
+    for (const s of steps) {
+      const r = toRate(s.rate) / 100;
+      const tgt = v > 0 ? Math.ceil(v / r) : 0;
+      chain.push({ label: s.label, target: tgt, daily: days > 0 ? +(tgt / days).toFixed(1) : 0, rate: toRate(s.rate), position: s.position });
+      v = tgt;
+    }
+    return { chain, last: v };
+  };
+
+  // 固定ステップ間にカスタムステップを挿入して逆算
+  const { chain: pos1Chain, last: afterPos1 } = buildChain(byPos[1] ?? [], targetSeats);
+  const targetEntry     = afterPos1 > 0 ? Math.ceil(afterPos1 / seatToEntry) : 0;
+
+  const { chain: pos2Chain, last: afterPos2 } = buildChain(byPos[2] ?? [], targetEntry);
+  const targetInterview = afterPos2 > 0 ? Math.ceil(afterPos2 / entryToInterview) : 0;
+
+  const { chain: pos3Chain, last: afterPos3 } = buildChain(byPos[3] ?? [], targetInterview);
+  const targetInflow    = afterPos3 > 0 ? Math.ceil(afterPos3 / interviewToInflow) : 0;
+
+  const { chain: pos4Chain } = buildChain(byPos[4] ?? [], targetInflow);
 
   const dailySeat      = days > 0 ? +((targetSeats - currentSeats) / days).toFixed(1) : 0;
   const dailyEntry     = days > 0 ? +((targetEntry - currentEntry) / days).toFixed(1) : 0;
   const dailyInterview = days > 0 ? +(targetInterview / days).toFixed(1) : 0;
   const dailyInflow    = days > 0 ? +(targetInflow / days).toFixed(1) : 0;
 
-  // カスタムステップ
-  let prevTarget = targetInflow;
-  const customDerived = customSteps.map(s => {
-    const rate = toRate(s.rate) / 100;
-    const tgt  = prevTarget > 0 ? Math.ceil(prevTarget / rate) : 0;
-    const daily = days > 0 ? +(tgt / days).toFixed(1) : 0;
-    prevTarget = tgt;
-    return { label: s.label, target: tgt, daily, rate: toRate(s.rate) };
-  });
+  // デイリーカード用に全カスタムステップを結合
+  const customDerived = [...pos1Chain, ...pos2Chain, ...pos3Chain, ...pos4Chain];
 
   return {
     targetSeats, targetEntry, targetInterview, targetInflow,
@@ -133,6 +159,7 @@ const buildDerived = (kgi: EventKgi | null, detail: EventDetail | null) => {
     seatToEntryRate:       toRate(detail?.kpi_seat_to_entry_rate, 70),
     entryToInterviewRate:  toRate(detail?.kpi_entry_to_interview_rate, 60),
     interviewToInflowRate: toRate(detail?.kpi_interview_to_inflow_rate, 50),
+    pos1Chain, pos2Chain, pos3Chain, pos4Chain,
     customDerived,
     unitPrice: Number(detail?.unit_price || 0)
   };
@@ -423,40 +450,83 @@ const allDerived = computed(() => {
                   <tr>
                     <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500">ファネル段階</th>
                     <th class="px-3 py-2 text-right text-xs font-semibold text-gray-500">目標数</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-blue-500">現在数</th>
                     <th class="px-3 py-2 text-right text-xs font-semibold text-gray-500">割合</th>
                     <th class="px-3 py-2 text-right text-xs font-semibold text-gray-500">デイリー必要</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                  <tr class="hover:bg-gray-50">
+                  <!-- 着座数 -->
+                  <tr class="hover:bg-blue-50">
                     <td class="px-3 py-2.5 font-semibold text-blue-700">着座数</td>
                     <td class="px-3 py-2.5 text-right font-bold text-blue-700">{{ derived.targetSeats }}名</td>
+                    <td class="px-3 py-2.5 text-right">
+                      <span class="font-bold" :class="derived.currentSeats >= derived.targetSeats ? 'text-green-600' : 'text-blue-500'">
+                        {{ derived.currentSeats }}名
+                      </span>
+                    </td>
                     <td class="px-3 py-2.5 text-right text-gray-500">-</td>
                     <td class="px-3 py-2.5 text-right font-bold" :class="gapClass(derived.dailySeat)">{{ derived.dailySeat }}/日</td>
                   </tr>
-                  <tr class="hover:bg-gray-50">
+                  <!-- pos1: 着座↔エントリー間のカスタムステップ -->
+                  <tr v-for="(c, i) in derived.pos1Chain" :key="`p1-${i}`" class="hover:bg-orange-50">
+                    <td class="px-3 py-2 text-orange-700 pl-8 text-xs">└ {{ c.label }}</td>
+                    <td class="px-3 py-2 text-right font-semibold text-orange-700 text-xs">{{ c.target }}名</td>
+                    <td class="px-3 py-2 text-right text-gray-400 text-xs">-</td>
+                    <td class="px-3 py-2 text-right text-orange-500 text-xs">{{ c.rate }}%</td>
+                    <td class="px-3 py-2 text-right text-orange-600 font-semibold text-xs">{{ c.daily }}/日</td>
+                  </tr>
+                  <!-- エントリー数 -->
+                  <tr class="hover:bg-indigo-50">
                     <td class="px-3 py-2.5 font-semibold text-indigo-700">エントリー数</td>
                     <td class="px-3 py-2.5 text-right font-bold text-indigo-700">{{ derived.targetEntry }}名</td>
+                    <td class="px-3 py-2.5 text-right">
+                      <span class="font-bold" :class="derived.currentEntry >= derived.targetEntry ? 'text-green-600' : 'text-indigo-500'">
+                        {{ derived.currentEntry }}名
+                      </span>
+                    </td>
                     <td class="px-3 py-2.5 text-right text-gray-500">着座率 {{ derived.seatToEntryRate }}%</td>
                     <td class="px-3 py-2.5 text-right font-bold" :class="gapClass(derived.dailyEntry)">{{ derived.dailyEntry }}/日</td>
                   </tr>
-                  <tr class="hover:bg-gray-50">
+                  <!-- pos2: エントリー↔面談間のカスタムステップ -->
+                  <tr v-for="(c, i) in derived.pos2Chain" :key="`p2-${i}`" class="hover:bg-orange-50">
+                    <td class="px-3 py-2 text-orange-700 pl-8 text-xs">└ {{ c.label }}</td>
+                    <td class="px-3 py-2 text-right font-semibold text-orange-700 text-xs">{{ c.target }}名</td>
+                    <td class="px-3 py-2 text-right text-gray-400 text-xs">-</td>
+                    <td class="px-3 py-2 text-right text-orange-500 text-xs">{{ c.rate }}%</td>
+                    <td class="px-3 py-2 text-right text-orange-600 font-semibold text-xs">{{ c.daily }}/日</td>
+                  </tr>
+                  <!-- 面談数 -->
+                  <tr class="hover:bg-amber-50">
                     <td class="px-3 py-2.5 font-semibold text-amber-700">面談数</td>
                     <td class="px-3 py-2.5 text-right font-bold text-amber-700">{{ derived.targetInterview }}名</td>
+                    <td class="px-3 py-2.5 text-right text-gray-400">-</td>
                     <td class="px-3 py-2.5 text-right text-gray-500">面談化率 {{ derived.entryToInterviewRate }}%</td>
                     <td class="px-3 py-2.5 text-right font-bold text-amber-700">{{ derived.dailyInterview }}/日</td>
                   </tr>
-                  <tr class="hover:bg-gray-50">
+                  <!-- pos3: 面談↔流入数間のカスタムステップ -->
+                  <tr v-for="(c, i) in derived.pos3Chain" :key="`p3-${i}`" class="hover:bg-orange-50">
+                    <td class="px-3 py-2 text-orange-700 pl-8 text-xs">└ {{ c.label }}</td>
+                    <td class="px-3 py-2 text-right font-semibold text-orange-700 text-xs">{{ c.target }}名</td>
+                    <td class="px-3 py-2 text-right text-gray-400 text-xs">-</td>
+                    <td class="px-3 py-2 text-right text-orange-500 text-xs">{{ c.rate }}%</td>
+                    <td class="px-3 py-2 text-right text-orange-600 font-semibold text-xs">{{ c.daily }}/日</td>
+                  </tr>
+                  <!-- 流入数 -->
+                  <tr class="hover:bg-violet-50">
                     <td class="px-3 py-2.5 font-semibold text-violet-700">流入数（設定数）</td>
                     <td class="px-3 py-2.5 text-right font-bold text-violet-700">{{ derived.targetInflow }}名</td>
+                    <td class="px-3 py-2.5 text-right text-gray-400">-</td>
                     <td class="px-3 py-2.5 text-right text-gray-500">設定率 {{ derived.interviewToInflowRate }}%</td>
                     <td class="px-3 py-2.5 text-right font-bold text-violet-700">{{ derived.dailyInflow }}/日</td>
                   </tr>
-                  <tr v-for="(c, idx) in derived.customDerived" :key="`tbl-${idx}`" class="hover:bg-gray-50">
-                    <td class="px-3 py-2.5 font-semibold text-gray-700">{{ c.label }}</td>
-                    <td class="px-3 py-2.5 text-right font-bold text-gray-700">{{ c.target }}名</td>
-                    <td class="px-3 py-2.5 text-right text-gray-500">{{ c.rate }}%</td>
-                    <td class="px-3 py-2.5 text-right font-bold text-gray-700">{{ c.daily }}/日</td>
+                  <!-- pos4: 流入数の後のカスタムステップ -->
+                  <tr v-for="(c, i) in derived.pos4Chain" :key="`p4-${i}`" class="hover:bg-orange-50">
+                    <td class="px-3 py-2 text-orange-700 pl-8 text-xs">└ {{ c.label }}</td>
+                    <td class="px-3 py-2 text-right font-semibold text-orange-700 text-xs">{{ c.target }}名</td>
+                    <td class="px-3 py-2 text-right text-gray-400 text-xs">-</td>
+                    <td class="px-3 py-2 text-right text-orange-500 text-xs">{{ c.rate }}%</td>
+                    <td class="px-3 py-2 text-right text-orange-600 font-semibold text-xs">{{ c.daily }}/日</td>
                   </tr>
                 </tbody>
               </table>

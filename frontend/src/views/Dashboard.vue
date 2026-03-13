@@ -637,10 +637,12 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">イベント名</th>
                 <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">締日</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">残日数</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">目標着座</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">現着座</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">目標エントリー</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">現エントリー</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-blue-600 uppercase">目標着座</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-blue-400 uppercase">現着座</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-indigo-600 uppercase">目標エントリー</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-indigo-400 uppercase">現エントリー</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">乖離</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">売上目標</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">デイリー必要数</th>
               </tr>
             </thead>
@@ -656,13 +658,23 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                   <td class="px-3 py-2 text-right whitespace-nowrap">
                     <span :class="row.days_remaining <= 0 ? 'text-gray-400' : 'font-semibold text-gray-700'">{{ row.deadline ? row.days_remaining : '-' }}</span>
                   </td>
-                  <td class="px-3 py-2 text-right text-gray-600">{{ row.target_seats || '-' }}</td>
-                  <td class="px-3 py-2 text-right text-gray-600">{{ row.current_seats }}</td>
-                  <td class="px-3 py-2 text-right text-gray-700 font-semibold">
+                  <td class="px-3 py-2 text-right text-blue-700 font-semibold">{{ row.target_seats || '-' }}</td>
+                  <td class="px-3 py-2 text-right text-blue-500">{{ row.current_seats }}</td>
+                  <td class="px-3 py-2 text-right text-indigo-700 font-semibold">
                     <span>{{ row.target_entry || row.kpi_target_entry || '-' }}</span>
                     <span v-if="row.target_entry && row.kpi_target_entry && row.target_entry !== row.kpi_target_entry" class="text-[10px] text-gray-400 ml-1">(KPI:{{ row.kpi_target_entry }})</span>
                   </td>
-                  <td class="px-3 py-2 text-right text-gray-700 font-semibold">{{ row.current_entry }}</td>
+                  <td class="px-3 py-2 text-right text-indigo-500 font-semibold">{{ row.current_entry }}</td>
+                  <td class="px-3 py-2 text-right font-bold whitespace-nowrap" :class="{
+                    'text-green-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) >= 0,
+                    'text-yellow-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) < 0 && (row.current_entry - (row.kpi_target_entry || row.target_entry)) >= -3,
+                    'text-red-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) < -3
+                  }">
+                    {{ (() => { const g = row.current_entry - (row.kpi_target_entry || row.target_entry); return (g >= 0 ? '+' : '') + g; })() }}
+                  </td>
+                  <td class="px-3 py-2 text-right text-gray-600 whitespace-nowrap">
+                    {{ ((Number(events.find(e => e.id === row.event_id)?.unit_price || 0)) * (row.target_seats || 0)).toLocaleString() }}円
+                  </td>
                   <td class="px-3 py-2 text-right whitespace-nowrap">
                     <span
                       class="font-bold"
@@ -685,7 +697,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                         {{ step.position === 1 ? '着座↔エントリー間' : step.position === 2 ? 'エントリー↔面談間' : step.position === 3 ? '面談↔流入数間' : '流入数の後' }}
                       )</span>
                     </td>
-                    <td class="px-3 py-1.5 text-center text-orange-400 text-xs" colspan="6">前段階 {{ step.rate }}%</td>
+                    <td class="px-3 py-1.5 text-center text-orange-400 text-xs" colspan="8">前段階 {{ step.rate }}%</td>
                     <td class="px-3 py-1.5 text-right">
                       <span class="text-xs font-medium text-orange-700">
                         目標: {{ (() => {
