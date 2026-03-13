@@ -402,6 +402,9 @@ export const getKgiProgress = async (req: Request, res: Response) => {
                 e.target_seats,
                 e.capacity AS capacity_entry,
                 COALESCE(e.kpi_seat_to_entry_rate, 70) AS kpi_seat_to_entry_rate,
+                COALESCE(e.kpi_entry_to_interview_rate, 60) AS kpi_entry_to_interview_rate,
+                COALESCE(e.kpi_interview_to_inflow_rate, 50) AS kpi_interview_to_inflow_rate,
+                COALESCE(e.kpi_custom_steps, '[]') AS kpi_custom_steps,
                 COALESCE(e.entry_deadline, e.event_date) AS deadline
             FROM events e
             ORDER BY e.event_date DESC
@@ -429,9 +432,25 @@ export const getKgiProgress = async (req: Request, res: Response) => {
             const targetSeats = Number(e.target_seats || 0);
             const capacityEntry = Number(e.capacity_entry || 0);
             const kpiRate = Number(e.kpi_seat_to_entry_rate || 70);
+            const kpiEntryToInterview = Number(e.kpi_entry_to_interview_rate || 60);
+            const kpiInterviewToInflow = Number(e.kpi_interview_to_inflow_rate || 50);
+
+            // カスタムステップをパース
+            let customSteps: Array<{ label: string; rate: number; position: number }> = [];
+            try {
+                const raw = typeof e.kpi_custom_steps === 'string'
+                    ? JSON.parse(e.kpi_custom_steps)
+                    : (Array.isArray(e.kpi_custom_steps) ? e.kpi_custom_steps : []);
+                if (Array.isArray(raw)) {
+                    customSteps = raw.map((x: any) => ({
+                        label: String(x?.label || ''),
+                        rate: Number(x?.rate || 50),
+                        position: Number(x?.position || 4)
+                    })).filter((x) => x.label);
+                }
+            } catch { customSteps = []; }
 
             // KPI連動: 目標着座を着座率(%)で割り、必要エントリー数を逆算
-            // 例: 目標着座30名, 着座率70% → 必要エントリー = 30 / 0.70 ≈ 43名
             const kpiTargetEntry = targetSeats > 0 && kpiRate > 0
                 ? Math.ceil(targetSeats / (kpiRate / 100))
                 : 0;
@@ -448,7 +467,7 @@ export const getKgiProgress = async (req: Request, res: Response) => {
                 daysRemaining = Math.floor(diffMs / 86400000);
             }
 
-            // デイリー必要エントリー数: KPI連動目標から現在値を引いて残日数で割る
+            // デイリー必要エントリー数
             let dailyEntryGap = 0;
             if (daysRemaining > 0) {
                 const effectiveTarget = kpiTargetEntry > 0 ? kpiTargetEntry : targetEntry;
@@ -463,6 +482,9 @@ export const getKgiProgress = async (req: Request, res: Response) => {
                 target_entry: targetEntry,
                 kpi_target_entry: kpiTargetEntry,
                 kpi_rate: kpiRate,
+                kpi_entry_to_interview_rate: kpiEntryToInterview,
+                kpi_interview_to_inflow_rate: kpiInterviewToInflow,
+                kpi_custom_steps: customSteps,
                 current_entry: currentEntry,
                 target_seats: targetSeats,
                 current_seats: currentSeats,

@@ -49,6 +49,9 @@ interface KgiProgress {
   target_entry: number;
   kpi_target_entry: number;
   kpi_rate: number;
+  kpi_entry_to_interview_rate: number;
+  kpi_interview_to_inflow_rate: number;
+  kpi_custom_steps: Array<{ label: string; rate: number; position: number }>;
   current_entry: number;
   target_seats: number;
   current_seats: number;
@@ -642,36 +645,72 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
-              <tr v-for="row in kgiProgress" :key="`kgi-${row.event_id}`" class="hover:bg-gray-50">
-                <td class="px-3 py-2 text-gray-900 max-w-[200px] truncate" :title="row.event_title">{{ row.event_title }}</td>
-                <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
-                  <span :class="row.days_remaining <= 0 ? 'text-gray-400' : ''">
-                    {{ row.deadline ? new Date(row.deadline).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' }) : '-' }}
-                  </span>
-                </td>
-                <td class="px-3 py-2 text-right whitespace-nowrap">
-                  <span :class="row.days_remaining <= 0 ? 'text-gray-400' : 'font-semibold text-gray-700'">{{ row.deadline ? row.days_remaining : '-' }}</span>
-                </td>
-                <td class="px-3 py-2 text-right text-gray-600">{{ row.target_seats || '-' }}</td>
-                <td class="px-3 py-2 text-right text-gray-600">{{ row.current_seats }}</td>
-                <td class="px-3 py-2 text-right text-gray-700 font-semibold">
-                  <span>{{ row.target_entry || row.kpi_target_entry || '-' }}</span>
-                  <span v-if="row.target_entry && row.kpi_target_entry && row.target_entry !== row.kpi_target_entry" class="text-[10px] text-gray-400 ml-1">(KPI:{{ row.kpi_target_entry }})</span>
-                </td>
-                <td class="px-3 py-2 text-right text-gray-700 font-semibold">{{ row.current_entry }}</td>
-                <td class="px-3 py-2 text-right whitespace-nowrap">
-                  <span
-                    class="font-bold"
-                    :class="{
-                      'text-gray-400': row.days_remaining <= 0,
-                      'text-green-600': row.days_remaining > 0 && row.daily_entry_gap >= 0,
-                      'text-yellow-600': row.days_remaining > 0 && row.daily_entry_gap < 0 && row.daily_entry_gap >= -3,
-                      'text-red-600': row.days_remaining > 0 && row.daily_entry_gap < -3
-                    }"
-                  >{{ row.days_remaining <= 0 ? '締切済' : row.daily_entry_gap }}</span>
-                  <span v-if="row.days_remaining > 0 && row.kpi_rate" class="text-[10px] text-gray-400 ml-1">(着座率{{ row.kpi_rate }}%)</span>
-                </td>
-              </tr>
+              <template v-for="row in kgiProgress" :key="`kgi-${row.event_id}`">
+                <tr class="hover:bg-gray-50">
+                  <td class="px-3 py-2 text-gray-900 max-w-[200px] truncate" :title="row.event_title">{{ row.event_title }}</td>
+                  <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
+                    <span :class="row.days_remaining <= 0 ? 'text-gray-400' : ''">
+                      {{ row.deadline ? new Date(row.deadline).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' }) : '-' }}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2 text-right whitespace-nowrap">
+                    <span :class="row.days_remaining <= 0 ? 'text-gray-400' : 'font-semibold text-gray-700'">{{ row.deadline ? row.days_remaining : '-' }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-right text-gray-600">{{ row.target_seats || '-' }}</td>
+                  <td class="px-3 py-2 text-right text-gray-600">{{ row.current_seats }}</td>
+                  <td class="px-3 py-2 text-right text-gray-700 font-semibold">
+                    <span>{{ row.target_entry || row.kpi_target_entry || '-' }}</span>
+                    <span v-if="row.target_entry && row.kpi_target_entry && row.target_entry !== row.kpi_target_entry" class="text-[10px] text-gray-400 ml-1">(KPI:{{ row.kpi_target_entry }})</span>
+                  </td>
+                  <td class="px-3 py-2 text-right text-gray-700 font-semibold">{{ row.current_entry }}</td>
+                  <td class="px-3 py-2 text-right whitespace-nowrap">
+                    <span
+                      class="font-bold"
+                      :class="{
+                        'text-gray-400': row.days_remaining <= 0,
+                        'text-green-600': row.days_remaining > 0 && row.daily_entry_gap >= 0,
+                        'text-yellow-600': row.days_remaining > 0 && row.daily_entry_gap < 0 && row.daily_entry_gap >= -3,
+                        'text-red-600': row.days_remaining > 0 && row.daily_entry_gap < -3
+                      }"
+                    >{{ row.days_remaining <= 0 ? '締切済' : row.daily_entry_gap }}</span>
+                    <span v-if="row.days_remaining > 0 && row.kpi_rate" class="text-[10px] text-gray-400 ml-1">(着座率{{ row.kpi_rate }}%)</span>
+                  </td>
+                </tr>
+                <!-- カスタムKPIステップを展開表示 -->
+                <template v-if="row.kpi_custom_steps && row.kpi_custom_steps.length > 0">
+                  <tr v-for="(step, si) in row.kpi_custom_steps" :key="`kgi-custom-${row.event_id}-${si}`" class="bg-orange-50">
+                    <td class="px-3 py-1.5 text-orange-700 pl-8 text-xs">
+                      └ {{ step.label }}
+                      <span class="text-orange-400 text-[10px] ml-1">(
+                        {{ step.position === 1 ? '着座↔エントリー間' : step.position === 2 ? 'エントリー↔面談間' : step.position === 3 ? '面談↔流入数間' : '流入数の後' }}
+                      )</span>
+                    </td>
+                    <td class="px-3 py-1.5 text-center text-orange-400 text-xs" colspan="6">前段階 {{ step.rate }}%</td>
+                    <td class="px-3 py-1.5 text-right">
+                      <span class="text-xs font-medium text-orange-700">
+                        目標: {{ (() => {
+                          const seatToEntry = row.kpi_rate / 100;
+                          const entryToInterview = (row.kpi_entry_to_interview_rate || 60) / 100;
+                          const interviewToInflow = (row.kpi_interview_to_inflow_rate || 50) / 100;
+                          const seat = row.target_seats || 0;
+                          const entry = seat > 0 ? Math.ceil(seat / seatToEntry) : 0;
+                          const interview = entry > 0 ? Math.ceil(entry / entryToInterview) : 0;
+                          const inflow = interview > 0 ? Math.ceil(interview / interviewToInflow) : 0;
+                          // 対象ステップの位置に応じて前段階の値を取得
+                          const samePos = row.kpi_custom_steps.filter((s, i) => s.position === step.position && i <= si);
+                          let prev = step.position === 1 ? seat : step.position === 2 ? entry : step.position === 3 ? interview : inflow;
+                          let val = prev;
+                          for (const sp of samePos) {
+                            val = prev > 0 ? Math.ceil(prev / (sp.rate / 100)) : 0;
+                            prev = val;
+                          }
+                          return val;
+                        })() }}
+                      </span>
+                    </td>
+                  </tr>
+                </template>
+              </template>
               <tr v-if="kgiProgress.length === 0">
                 <td colspan="8" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
               </tr>

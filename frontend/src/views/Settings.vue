@@ -29,6 +29,12 @@ interface EventItem {
 interface KpiCustomStep {
   label: string;
   rate: number;
+  // position: 固定ステップ間の挿入位置
+  // 1 = 着座→エントリーの間
+  // 2 = エントリー→面談の間
+  // 3 = 面談→流入数の間
+  // 4 = 流入数の後
+  position: number;
 }
 
 const user = JSON.parse(localStorage.getItem('user') || '{"role":"staff"}');
@@ -141,26 +147,77 @@ const toRate = (v: string | number) => {
   return n;
 };
 
+// 固定ステップのラベル定数
+const FIXED_STEP_LABELS = ['着座', 'エントリー', '面談', '設定数（流入数）'];
+
+// 挿入位置の選択肢
+const POSITION_OPTIONS = [
+  { value: 1, label: '着座 ↔ エントリーの間' },
+  { value: 2, label: 'エントリー ↔ 面談の間' },
+  { value: 3, label: '面談 ↔ 流入数の間' },
+  { value: 4, label: '流入数の後' }
+];
+
 const derived = computed(() => {
   const seat = Math.max(0, Number(form.value.target_seats || 0));
   const seatToEntry = toRate(form.value.seat_to_entry_rate) / 100;
   const entryToInterview = toRate(form.value.entry_to_interview_rate) / 100;
   const interviewToInflow = toRate(form.value.interview_to_inflow_rate) / 100;
 
-  const entry = seat > 0 ? Math.ceil(seat / seatToEntry) : 0;
-  const interview = entry > 0 ? Math.ceil(entry / entryToInterview) : 0;
-  const inflow = interview > 0 ? Math.ceil(interview / interviewToInflow) : 0;
-
-  const custom = [];
-  let prev = inflow;
-  for (const step of customSteps.value) {
-    const rate = toRate(step.rate) / 100;
-    const value = prev > 0 ? Math.ceil(prev / rate) : 0;
-    custom.push({ label: step.label || '追加項目', value, rate: toRate(step.rate) });
-    prev = value;
+  // カスタムステップを挿入位置でグループ化
+  const customByPos: Record<number, KpiCustomStep[]> = { 1: [], 2: [], 3: [], 4: [] };
+  for (const s of customSteps.value) {
+    const pos = s.position >= 1 && s.position <= 4 ? s.position : 4;
+    if (!customByPos[pos]) customByPos[pos] = [];
+    (customByPos[pos] as KpiCustomStep[]).push(s);
   }
 
-  return { seat, entry, interview, inflow, custom };
+  // 各固定ステップ間のカスタムステップを逆算に組み込む
+  // pos=1: 着座 → (custom) → エントリー
+  // pos=2: エントリー → (custom) → 面談
+  // pos=3: 面談 → (custom) → 流入数
+  // pos=4: 流入数 → (custom)
+  const buildCustomChain = (posSteps: KpiCustomStep[], prevVal: number) => {
+    const chain: Array<{ label: string; value: number; rate: number; position: number }> = [];
+    let v = prevVal;
+    for (const s of posSteps) {
+      const r = toRate(s.rate) / 100;
+      const val = v > 0 ? Math.ceil(v / r) : 0;
+      chain.push({ label: s.label || '追加項目', value: val, rate: toRate(s.rate), position: s.position });
+      v = val;
+    }
+    return { chain, last: v };
+  };
+
+  // 逆算: 着座が起点
+  // pos1 カスタムを挟んでエントリーへ
+  const { chain: pos1Chain, last: afterPos1 } = buildCustomChain(customByPos[1] ?? [], seat);
+  const entry = afterPos1 > 0 ? Math.ceil(afterPos1 / seatToEntry) : 0;
+
+  // pos2 カスタムを挟んで面談へ
+  const { chain: pos2Chain, last: afterPos2 } = buildCustomChain(customByPos[2] ?? [], entry);
+  const interview = afterPos2 > 0 ? Math.ceil(afterPos2 / entryToInterview) : 0;
+
+  // pos3 カスタムを挟んで流入数へ
+  const { chain: pos3Chain, last: afterPos3 } = buildCustomChain(customByPos[3] ?? [], interview);
+  const inflow = afterPos3 > 0 ? Math.ceil(afterPos3 / interviewToInflow) : 0;
+
+  // pos4 カスタム（流入数の後）
+  const { chain: pos4Chain } = buildCustomChain(customByPos[4] ?? [], inflow);
+
+  return {
+    seat,
+    entry,
+    interview,
+    inflow,
+    pos1Chain,
+    pos2Chain,
+    pos3Chain,
+    pos4Chain,
+    seatToEntryRate: toRate(form.value.seat_to_entry_rate),
+    entryToInterviewRate: toRate(form.value.entry_to_interview_rate),
+    interviewToInflowRate: toRate(form.value.interview_to_inflow_rate)
+  };
 });
 
 const parseCustomSteps = (raw: string | null | undefined): KpiCustomStep[] => {
@@ -169,7 +226,11 @@ const parseCustomSteps = (raw: string | null | undefined): KpiCustomStep[] => {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .map((x: any) => ({ label: String(x?.label || ''), rate: Number(x?.rate || 0) }))
+      .map((x: any) => ({
+        label: String(x?.label || ''),
+        rate: Number(x?.rate || 0),
+        position: Number(x?.position || 4)
+      }))
       .filter((x) => x.label || x.rate > 0);
   } catch {
     return [];
@@ -209,7 +270,7 @@ const onSelectEvent = () => {
 };
 
 const addCustomStep = () => {
-  customSteps.value.push({ label: '', rate: 50 });
+  customSteps.value.push({ label: '', rate: 50, position: 4 });
 };
 
 const removeCustomStep = (index: number) => {
@@ -229,7 +290,7 @@ const saveKpi = async () => {
       kpi_interview_to_inflow_rate: toRate(form.value.interview_to_inflow_rate),
       kpi_custom_steps: customSteps.value
         .filter((x) => String(x.label || '').trim())
-        .map((x) => ({ label: String(x.label).trim(), rate: toRate(x.rate) }))
+        .map((x) => ({ label: String(x.label).trim(), rate: toRate(x.rate), position: Number(x.position || 4) }))
     },
     { headers: { Authorization: token } }
   );
@@ -448,8 +509,11 @@ onMounted(async () => {
               <button class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="addCustomStep">項目追加</button>
             </div>
             <div class="space-y-2">
-              <div v-for="(step, idx) in customSteps" :key="`custom-${idx}`" class="grid grid-cols-1 md:grid-cols-[1fr_140px_70px] gap-2">
-                <input v-model="step.label" type="text" placeholder="項目名（例: 架電数）" class="px-3 py-2 border border-gray-300 rounded-lg" />
+              <div v-for="(step, idx) in customSteps" :key="`custom-${idx}`" class="grid grid-cols-1 md:grid-cols-[1fr_160px_140px_70px] gap-2 items-center">
+                <input v-model="step.label" type="text" placeholder="項目名（例: 選考）" class="px-3 py-2 border border-gray-300 rounded-lg" />
+                <select v-model.number="step.position" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                  <option v-for="opt in POSITION_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
                 <input v-model.number="step.rate" type="number" min="1" max="100" placeholder="前段階比(%)" class="px-3 py-2 border border-gray-300 rounded-lg" />
                 <button class="px-3 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50" @click="removeCustomStep(idx)">削除</button>
               </div>
@@ -474,30 +538,49 @@ onMounted(async () => {
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
-                <tr>
-                  <td class="px-3 py-2">着座数</td>
-                  <td class="px-3 py-2 font-semibold">{{ derived.seat }}</td>
-                  <td class="px-3 py-2">-</td>
+                <tr class="bg-indigo-50">
+                  <td class="px-3 py-2 font-medium text-indigo-800">着座数</td>
+                  <td class="px-3 py-2 font-semibold text-indigo-900">{{ derived.seat }}</td>
+                  <td class="px-3 py-2 text-indigo-600">-</td>
+                </tr>
+                <!-- pos1: 着座 ↔ エントリーの間のカスタムステップ -->
+                <tr v-for="(x, idx) in derived.pos1Chain" :key="`p1-${idx}`" class="bg-orange-50">
+                  <td class="px-3 py-2 text-orange-800 pl-6">└ {{ x.label }}</td>
+                  <td class="px-3 py-2 font-semibold text-orange-900">{{ x.value }}</td>
+                  <td class="px-3 py-2 text-orange-600">{{ x.rate }}%</td>
                 </tr>
                 <tr>
                   <td class="px-3 py-2">エントリー数</td>
                   <td class="px-3 py-2 font-semibold">{{ derived.entry }}</td>
-                  <td class="px-3 py-2">{{ toRate(form.seat_to_entry_rate) }}%</td>
+                  <td class="px-3 py-2">{{ derived.seatToEntryRate }}%</td>
+                </tr>
+                <!-- pos2: エントリー ↔ 面談の間のカスタムステップ -->
+                <tr v-for="(x, idx) in derived.pos2Chain" :key="`p2-${idx}`" class="bg-orange-50">
+                  <td class="px-3 py-2 text-orange-800 pl-6">└ {{ x.label }}</td>
+                  <td class="px-3 py-2 font-semibold text-orange-900">{{ x.value }}</td>
+                  <td class="px-3 py-2 text-orange-600">{{ x.rate }}%</td>
                 </tr>
                 <tr>
                   <td class="px-3 py-2">面談数</td>
                   <td class="px-3 py-2 font-semibold">{{ derived.interview }}</td>
-                  <td class="px-3 py-2">{{ toRate(form.entry_to_interview_rate) }}%</td>
+                  <td class="px-3 py-2">{{ derived.entryToInterviewRate }}%</td>
+                </tr>
+                <!-- pos3: 面談 ↔ 流入数の間のカスタムステップ -->
+                <tr v-for="(x, idx) in derived.pos3Chain" :key="`p3-${idx}`" class="bg-orange-50">
+                  <td class="px-3 py-2 text-orange-800 pl-6">└ {{ x.label }}</td>
+                  <td class="px-3 py-2 font-semibold text-orange-900">{{ x.value }}</td>
+                  <td class="px-3 py-2 text-orange-600">{{ x.rate }}%</td>
                 </tr>
                 <tr>
                   <td class="px-3 py-2">設定数（流入数）</td>
                   <td class="px-3 py-2 font-semibold">{{ derived.inflow }}</td>
-                  <td class="px-3 py-2">{{ toRate(form.interview_to_inflow_rate) }}%</td>
+                  <td class="px-3 py-2">{{ derived.interviewToInflowRate }}%</td>
                 </tr>
-                <tr v-for="(x, idx) in derived.custom" :key="`result-${idx}`">
-                  <td class="px-3 py-2">{{ x.label }}</td>
-                  <td class="px-3 py-2 font-semibold">{{ x.value }}</td>
-                  <td class="px-3 py-2">{{ x.rate }}%</td>
+                <!-- pos4: 流入数の後のカスタムステップ -->
+                <tr v-for="(x, idx) in derived.pos4Chain" :key="`p4-${idx}`" class="bg-orange-50">
+                  <td class="px-3 py-2 text-orange-800 pl-6">└ {{ x.label }}</td>
+                  <td class="px-3 py-2 font-semibold text-orange-900">{{ x.value }}</td>
+                  <td class="px-3 py-2 text-orange-600">{{ x.rate }}%</td>
                 </tr>
               </tbody>
             </table>
