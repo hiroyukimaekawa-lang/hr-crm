@@ -405,9 +405,18 @@ export const getKgiProgress = async (req: Request, res: Response) => {
                 COALESCE(e.kpi_entry_to_interview_rate, 60) AS kpi_entry_to_interview_rate,
                 COALESCE(e.kpi_interview_to_inflow_rate, 50) AS kpi_interview_to_inflow_rate,
                 COALESCE(e.kpi_custom_steps, '[]') AS kpi_custom_steps,
-                COALESCE(e.entry_deadline, e.event_date) AS deadline
+                COALESCE(
+                    e.entry_deadline,
+                    e.event_date,
+                    (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id)
+                ) AS deadline,
+                (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id) AS last_event_date
             FROM events e
-            ORDER BY e.event_date DESC
+            ORDER BY COALESCE(
+                e.entry_deadline,
+                e.event_date,
+                (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id)
+            ) DESC NULLS LAST
         `);
 
         const statusBreakdownRes = await pool.query(`
@@ -460,8 +469,10 @@ export const getKgiProgress = async (req: Request, res: Response) => {
 
             let daysRemaining = 0;
             let deadlineStr: string | null = null;
-            if (e.deadline) {
-                const deadlineDate = new Date(e.deadline);
+            // entry_deadlineがない場合はevent_datesの最終日をdeadlineとして使用
+            const effectiveDeadline = e.deadline || e.last_event_date;
+            if (effectiveDeadline) {
+                const deadlineDate = new Date(effectiveDeadline);
                 deadlineStr = deadlineDate.toISOString().slice(0, 10);
                 const diffMs = deadlineDate.getTime() - todayDate.getTime();
                 daysRemaining = Math.floor(diffMs / 86400000);
