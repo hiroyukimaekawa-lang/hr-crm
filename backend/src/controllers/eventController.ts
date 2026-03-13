@@ -325,7 +325,7 @@ export const getEventDetail = async (req: Request, res: Response) => {
                 se.student_id,
                 se.status,
                 se.created_at,
-                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
+                to_char(se.selected_event_date AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
                 s.name,
                 s.university,
                 s.email,

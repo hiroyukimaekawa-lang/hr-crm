@@ -669,7 +669,7 @@ export const getStudentDetail = async (req: Request, res: Response) => {
                 se.id as student_event_id,
                 se.status as participation_status,
                 se.created_at as participation_created_at,
-                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
+                to_char(se.selected_event_date AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
             FROM events e
             JOIN student_events se ON e.id = se.event_id
             LEFT JOIN LATERAL (
