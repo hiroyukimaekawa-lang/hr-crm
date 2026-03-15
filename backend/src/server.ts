@@ -1,3 +1,6 @@
+process.env.TZ = 'Asia/Tokyo';
+console.log('[TZ Check] タイムゾーン:', process.env.TZ);
+console.log('[TZ Check] 現在のJST時刻:', new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }));
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
