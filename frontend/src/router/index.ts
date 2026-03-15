@@ -19,7 +19,7 @@ const routes = [
   { path: '/students/:id', component: StudentDetail },
   { path: '/events', component: EventList },
   { path: '/events/:id', component: EventDetail },
-  { path: '/lead-time', component: LeadTime },
+  { path: '/lead-time', name: '初回ファネル登録', component: LeadTime },
   { path: '/event-kpi', component: EventKpi },
   { path: '/settings', component: Settings }
 ];
