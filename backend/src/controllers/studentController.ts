@@ -2100,12 +2100,15 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                         status
                     FROM interviews
                     WHERE student_id IS NOT NULL
-                    ORDER BY student_id, COALESCE(scheduled_at, interviewed_at, created_at) ASC, id ASC
+                    ORDER BY student_id,
+                             COALESCE(scheduled_at, interviewed_at, created_at) ASC,
+                             id ASC
                 ),
                 interview_completed_s AS (
-                    SELECT COUNT(DISTINCT student_id)::int AS cnt FROM first_interview_per_student
-                    WHERE (COALESCE(status,'') IN ('completed','面談実施','interviewed') OR interviewed_at IS NOT NULL)
-                    ${intMonthCond}
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt
+                    FROM first_interview_per_student
+                    WHERE COALESCE(status,'') IN ('completed','面談実施','interviewed')
+                       OR interviewed_at IS NOT NULL
                 ),
                 interview_no_show_s AS (
                     SELECT COUNT(DISTINCT student_id)::int AS cnt FROM interviews

@@ -1539,113 +1539,128 @@ watch(filteredStudents, () => {
     </teleport>
 
     <teleport to="body">
-      <div v-if="showFunnel && selectedFunnelStudent" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[90]">
-        <div class="w-full max-w-3xl bg-white rounded-xl shadow-xl p-4 md:p-6 max-h-[85vh] overflow-y-auto">
+      <div v-if="showFunnel && selectedFunnelStudent" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[90]" @click.self="showFunnel = false">
+        <div class="w-full max-w-6xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-gray-200 p-6">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-bold text-gray-900">面談ファネル登録: {{ selectedFunnelStudent.name }}</h2>
-            <button class="text-sm text-gray-500 hover:text-gray-700" @click="showFunnel = false">閉じる</button>
+            <h2 class="text-2xl font-extrabold text-gray-900">面談ファネル登録: {{ selectedFunnelStudent.name }}</h2>
+            <button class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="showFunnel = false">閉じる</button>
           </div>
-          <p v-if="funnelError" class="mb-3 text-sm text-red-600">{{ funnelError }}</p>
+          <p class="text-sm text-gray-600 mb-4">申込 → 予約（初回面談） → 初回面談実施 を順番に登録します。</p>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="border border-gray-200 rounded-lg p-3">
-              <h3 class="font-semibold text-sm mb-2">1) 申込登録</h3>
-              <label class="block text-xs text-gray-600 mb-1">流入元</label>
-              <input v-model="funnelForm.source" type="text" class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2">
-              <label class="block text-xs text-gray-600 mb-1">申込日</label>
-              <div class="grid grid-cols-12 gap-2 mb-2">
+          <!-- ステップインジケーター -->
+          <div class="mb-6 rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+            <div class="flex items-center justify-between gap-2 text-xs sm:text-sm font-semibold text-slate-700">
+              <span class="inline-flex items-center gap-2"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white font-bold">1</span>申込</span>
+              <span class="h-1 flex-1 bg-slate-300 rounded-full"></span>
+              <span class="inline-flex items-center gap-2"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-white font-bold">2</span>予約</span>
+              <span class="h-1 flex-1 bg-slate-300 rounded-full"></span>
+              <span class="inline-flex items-center gap-2"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white font-bold">3</span>面談実施</span>
+            </div>
+          </div>
+
+          <p v-if="funnelError" class="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{{ funnelError }}</p>
+
+          <div class="flex flex-col lg:flex-row lg:items-stretch gap-4">
+            <!-- ステップ1: 申込登録 -->
+            <div class="flex-1 rounded-2xl border border-blue-200 bg-blue-50/40 p-5 shadow-sm">
+              <p class="text-xl font-extrabold text-gray-900 mb-3">1) 申込登録</p>
+              <label class="block text-sm font-medium text-gray-700 mb-2">申込日</label>
+              <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(funnelForm.applied_at)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   @input="funnelForm.applied_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.applied_at))"
-                >
+                />
                 <select
                   :value="getHourPart(funnelForm.applied_at)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   @change="funnelForm.applied_at = mergeDateHour(getDatePart(funnelForm.applied_at), ($event.target as HTMLSelectElement).value)"
                 >
-                  <option v-for="h in hourOptions" :key="`funnel-applied-hour-${h}`" :value="h">{{ h }}:00</option>
+                  <option v-for="h in hourOptions" :key="`funnel-apply-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
-              <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitApplication">申込登録</button>
+              <button class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm" @click="submitApplication">申込登録</button>
             </div>
 
-            <div class="border border-gray-200 rounded-lg p-3">
-              <h3 class="font-semibold text-sm mb-2">2) 予約登録</h3>
-              <label class="block text-xs text-gray-600 mb-1">予約ステータス</label>
-              <input value="初回面談" type="text" disabled class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-2 bg-gray-50 text-gray-600">
-              <label class="block text-xs text-gray-600 mb-1">予約日（TimeRex予約日）</label>
-              <div class="grid grid-cols-12 gap-2 mb-2">
+            <div class="hidden lg:flex items-center text-3xl font-black text-slate-300 px-1">→</div>
+
+            <!-- ステップ2: 予約登録 -->
+            <div class="flex-1 rounded-2xl border border-amber-200 bg-amber-50/50 p-5 shadow-sm">
+              <p class="text-xl font-extrabold text-gray-900 mb-3">2) 予約登録（初回面談）</p>
+              <label class="block text-sm font-medium text-gray-700 mb-2">予約作成日（TimeRex）</label>
+              <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(funnelForm.reservation_date)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   @input="funnelForm.reservation_date = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.reservation_date))"
-                >
+                />
                 <select
                   :value="getHourPart(funnelForm.reservation_date)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   @change="funnelForm.reservation_date = mergeDateHour(getDatePart(funnelForm.reservation_date), ($event.target as HTMLSelectElement).value)"
                 >
-                  <option v-for="h in hourOptions" :key="`funnel-reservation-hour-${h}`" :value="h">{{ h }}:00</option>
+                  <option v-for="h in hourOptions" :key="`funnel-reserve-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
-              <button class="px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700" @click="submitReservation">予約登録</button>
-            </div>
-
-            <div class="border border-gray-200 rounded-lg p-3">
-              <h3 class="font-semibold text-sm mb-2">3) 面談実施登録</h3>
-              <label class="block text-xs text-gray-600 mb-1">面談ステータス</label>
-              <select
-                v-model="funnelForm.interview_status"
-                class="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-3"
-              >
-                <option value="completed">実施</option>
-                <option value="no_show">トビ（無断欠席）</option>
-                <option value="rescheduled">リスケ</option>
-              </select>
-              <label class="block text-xs text-gray-600 mb-1">面談予定日（実際の面談日）</label>
-              <div class="grid grid-cols-12 gap-2 mb-2">
+              <label class="block text-sm font-medium text-gray-700 mb-2">初回面談予定日</label>
+              <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(funnelForm.interview_scheduled_at)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   @input="funnelForm.interview_scheduled_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.interview_scheduled_at))"
-                >
+                />
                 <select
                   :value="getHourPart(funnelForm.interview_scheduled_at)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   @change="funnelForm.interview_scheduled_at = mergeDateHour(getDatePart(funnelForm.interview_scheduled_at), ($event.target as HTMLSelectElement).value)"
                 >
                   <option v-for="h in hourOptions" :key="`funnel-scheduled-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
-              <label class="block text-xs text-gray-600 mb-1">面談実施日</label>
-              <div class="grid grid-cols-12 gap-2 mb-3">
+              <div class="mb-4 text-center">
+                <span class="inline-flex items-center px-4 py-1.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold border border-amber-200">予約ステータス: 初回面談</span>
+              </div>
+              <button class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 transition-colors shadow-sm" @click="submitReservation">予約登録</button>
+            </div>
+
+            <div class="hidden lg:flex items-center text-3xl font-black text-slate-300 px-1">→</div>
+
+            <!-- ステップ3: 面談実施登録 -->
+            <div class="flex-1 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
+              <p class="text-xl font-extrabold text-gray-900 mb-3">3) 初回面談実施登録</p>
+              <label class="block text-sm font-medium text-gray-700 mb-2">初回面談実施日</label>
+              <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(funnelForm.interview_interviewed_at)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   @input="funnelForm.interview_interviewed_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.interview_interviewed_at))"
-                >
+                />
                 <select
                   :value="getHourPart(funnelForm.interview_interviewed_at)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   @change="funnelForm.interview_interviewed_at = mergeDateHour(getDatePart(funnelForm.interview_interviewed_at), ($event.target as HTMLSelectElement).value)"
                 >
-                  <option v-for="h in hourOptions" :key="`funnel-interviewed-hour-${h}`" :value="h">{{ h }}:00</option>
+                  <option v-for="h in hourOptions" :key="`funnel-actual-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
-              <button
-                class="px-3 py-2 text-xs text-white rounded w-full font-semibold"
-                :class="funnelForm.interview_status === 'no_show' ? 'bg-red-600 hover:bg-red-700' : funnelForm.interview_status === 'rescheduled' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'"
+              <label class="block text-sm font-medium text-gray-700 mb-2">面談結果</label>
+              <select v-model="funnelForm.interview_status" class="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg text-sm mb-4 bg-white">
+                <option value="completed">実施</option>
+                <option value="no_show">トビ</option>
+                <option value="rescheduled">リスケ</option>
+              </select>
+              <button 
+                class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white transition-colors shadow-sm" 
+                :class="funnelForm.interview_status === 'no_show' ? 'bg-red-600 hover:bg-red-700' : funnelForm.interview_status === 'rescheduled' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'"
                 @click="submitInterview"
               >
                 {{ funnelForm.interview_status === 'no_show' ? 'トビとして登録' : funnelForm.interview_status === 'rescheduled' ? 'リスケとして登録' : '面談実施登録' }}
               </button>
             </div>
-
           </div>
         </div>
       </div>

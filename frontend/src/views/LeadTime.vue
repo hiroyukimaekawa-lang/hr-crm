@@ -60,6 +60,22 @@ const maxDailyApps = computed(() => {
   return counts.length > 0 ? Math.max(...counts) : 1;
 });
 
+const minDailyApps = computed(() => {
+  const counts = dailyApps30Days.value.map(d => d.count);
+  return counts.length > 0 ? Math.min(...counts) : 0;
+});
+
+const dailyAppsStats = computed(() => {
+  const data = dailyApps30Days.value;
+  if (data.length === 0) return { maxDate: '', minDate: '' };
+  const maxVal = Math.max(...data.map(d => d.count));
+  const minVal = Math.min(...data.map(d => d.count));
+  return {
+    maxDate: data.find(d => d.count === maxVal)?.day || '',
+    minDate: data.find(d => d.count === minVal)?.day || ''
+  };
+});
+
 const avgDailyApps = computed(() => {
   const data = dailyApps30Days.value;
   if (data.length === 0) return 0;
@@ -106,11 +122,13 @@ onMounted(() => {
         <div class="flex-1 w-full text-center p-6 rounded-xl border-2 bg-purple-50 border-purple-400">
           <p class="text-sm text-purple-600 font-medium mb-1">面談予約</p>
           <p class="text-4xl font-bold text-purple-900">{{ funnelKpi.counts.reserved_students }} <span class="text-lg font-normal">名</span></p>
+          <p class="text-[10px] text-purple-500 mt-2 font-bold">申込→予約率：{{ funnelKpi.application_to_reservation_rate.toFixed(1) }}%</p>
         </div>
         <ArrowRight class="hidden md:block w-8 h-8 text-gray-300" />
         <div class="flex-1 w-full text-center p-6 rounded-xl border-2 bg-green-50 border-green-400">
           <p class="text-sm text-green-600 font-medium mb-1">初回面談実施</p>
           <p class="text-4xl font-bold text-green-900">{{ funnelKpi.counts.interviewed_students }} <span class="text-lg font-normal">名</span></p>
+          <p class="text-[10px] text-green-500 mt-2 font-bold">予約→面談率：{{ reservationToInterviewRate }}%</p>
         </div>
       </div>
 
@@ -118,11 +136,13 @@ onMounted(() => {
       <div class="bg-white rounded-xl shadow-md p-6 border border-gray-100">
         <div class="flex items-center justify-between mb-6">
           <h2 class="text-lg font-bold text-gray-800">デイリー申込数推移（直近30日）</h2>
-          <span class="text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full text-xs">30日平均：{{ avgDailyApps }} 件/日</span>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">30日平均：{{ avgDailyApps }} 件/日</span>
+          </div>
         </div>
-        <div class="h-48 flex items-end gap-1 px-2">
+        <div class="h-48 flex items-end gap-1 px-2 border-b border-gray-100">
           <div 
-            v-for="d in dailyApps30Days" 
+            v-for="(d, idx) in dailyApps30Days" 
             :key="d.day"
             class="flex-1 bg-blue-400 hover:bg-blue-600 rounded-t-sm transition-all relative group"
             :style="{ height: `${(d.count / maxDailyApps) * 100}%` }"
@@ -131,11 +151,21 @@ onMounted(() => {
             <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-800 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
               {{ d.day.split('-').slice(1).join('/') }}: {{ d.count }}件
             </div>
+            <!-- X軸ラベル（5日おき） -->
+            <div v-if="idx % 5 === 0" class="absolute top-full mt-2 left-1/2 -translate-x-1/2 text-[10px] text-gray-400 whitespace-nowrap">
+              {{ d.day.split('-').slice(1).join('/') }}
+            </div>
           </div>
         </div>
-        <div class="mt-4 flex justify-between text-[10px] text-gray-400 px-2">
-          <span>{{ dailyApps30Days[0]?.day }}</span>
-          <span>{{ dailyApps30Days[dailyApps30Days.length - 1]?.day }}</span>
+        <div class="mt-8 grid grid-cols-2 gap-4">
+          <div class="bg-gray-50 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 mb-1">最多：<span class="font-bold text-gray-900">{{ maxDailyApps }}件</span></p>
+            <p class="text-[10px] text-gray-400">{{ dailyAppsStats.maxDate?.replace(/-/g, '/') }}</p>
+          </div>
+          <div class="bg-gray-50 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 mb-1">最少：<span class="font-bold text-gray-900">{{ minDailyApps }}件</span></p>
+            <p class="text-[10px] text-gray-400">{{ dailyAppsStats.minDate?.replace(/-/g, '/') }}</p>
+          </div>
         </div>
       </div>
 
