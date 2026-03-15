@@ -142,48 +142,80 @@ watch(
 <template>
   <div class="flex h-screen bg-slate-50 text-gray-900">
     <aside
-      class="hidden md:flex bg-slate-900 text-slate-100 flex-col transition-all duration-200"
-      :class="sidebarCollapsed ? 'w-20' : 'w-64'"
+      class="hidden lg:flex bg-slate-900 text-slate-100 flex-col transition-all duration-200 w-64"
     >
       <div class="p-4 border-b border-slate-800">
-        <div class="flex items-center gap-3" :class="sidebarCollapsed ? 'justify-center' : ''">
+        <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">H</div>
-          <div v-if="!sidebarCollapsed">
+          <div>
             <h1 class="font-semibold text-lg">HR CRM</h1>
             <p class="text-xs text-slate-400">イベント送客管理</p>
           </div>
         </div>
       </div>
 
-      <nav class="flex-1 p-4">
+      <nav class="flex-1 p-4 overflow-y-auto">
         <ul class="space-y-2">
           <li v-for="item in menuItems" :key="item.id">
             <router-link
               :to="item.path"
-              class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full"
-              :title="item.label"
-              :class="isActive(item.path) ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/60'"
+              class="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors w-full"
+              :class="isActive(item.path) ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800/60'"
             >
-              <component :is="item.icon" class="w-5 h-5" />
-              <span v-if="!sidebarCollapsed">{{ item.label }}</span>
+              <component :is="item.icon" class="w-5 h-5 flex-shrink-0" />
+              <span>{{ item.label }}</span>
             </router-link>
           </li>
         </ul>
       </nav>
 
-      <div class="p-4 border-t border-slate-800">
-        <div class="flex items-center gap-3 px-4 py-3" :class="sidebarCollapsed ? 'justify-center' : ''">
-          <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center">
+      <div class="p-4 border-t border-slate-800 mt-auto">
+        <div class="flex items-center gap-3 px-4 py-3">
+          <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center flex-shrink-0">
             <span class="text-slate-200 font-semibold">{{ user.name.charAt(0) }}</span>
           </div>
-          <div v-if="!sidebarCollapsed" class="flex-1 min-w-0">
-            <p class="font-medium text-slate-100 truncate">{{ user.name }}</p>
-            <p class="text-xs text-slate-400">{{ user.role === 'admin' ? '管理者' : '担当者' }}</p>
+          <div class="flex-1 min-w-0">
+            <p class="font-medium text-slate-100 truncate text-sm">{{ user.name }}</p>
+            <p class="text-[10px] text-slate-400 uppercase tracking-wider">{{ user.role === 'admin' ? '管理者' : '担当者' }}</p>
           </div>
-          <button @click="logout" class="text-slate-400 hover:text-slate-200">
+          <button @click="logout" class="text-slate-400 hover:text-slate-200 h-11 w-11 flex items-center justify-center" title="ログアウト">
             <LogOut class="w-5 h-5" />
           </button>
         </div>
+      </div>
+    </aside>
+
+    <!-- タブレット用サイドバー (md: アイコンのみ) -->
+    <aside
+      class="hidden md:flex lg:hidden bg-slate-900 text-slate-100 flex-col transition-all duration-200 w-16"
+    >
+      <div class="p-4 border-b border-slate-800 flex justify-center">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">H</div>
+      </div>
+
+      <nav class="flex-1 p-2 space-y-4 pt-6 overflow-y-auto overflow-x-hidden">
+        <router-link
+          v-for="item in menuItems"
+          :key="`tab-${item.id}`"
+          :to="item.path"
+          class="group relative flex items-center justify-center w-12 h-12 rounded-xl transition-colors mx-auto h-11 w-11"
+          :class="isActive(item.path) ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800/60'"
+        >
+          <component :is="item.icon" class="w-6 h-6" />
+          <!-- ツールチップ風ラベル -->
+          <div class="absolute left-16 bg-slate-800 text-white text-xs px-2 py-1.4 rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[100] font-bold">
+            {{ item.label }}
+          </div>
+        </router-link>
+      </nav>
+
+      <div class="p-2 border-t border-slate-800 flex flex-col items-center gap-4 py-4">
+        <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center flex-shrink-0">
+          <span class="text-slate-200 font-semibold">{{ user.name.charAt(0) }}</span>
+        </div>
+        <button @click="logout" class="text-slate-400 hover:text-slate-200 h-11 w-11 flex items-center justify-center" title="ログアウト">
+          <LogOut class="w-5 h-5" />
+        </button>
       </div>
     </aside>
 
@@ -238,54 +270,69 @@ watch(
       </div>
     </aside>
 
-    <div class="flex-1 flex flex-col">
-      <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
-        <div class="flex items-center gap-2 w-full max-w-2xl">
-          <button class="md:hidden w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500" @click="mobileSidebarOpen = true">
-            <Menu class="w-5 h-5" />
+    <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <header class="h-16 lg:h-20 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6 flex-shrink-0">
+        <div class="flex items-center gap-3 w-full max-w-2xl">
+          <button class="md:hidden h-11 w-11 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-200 shadow-sm" @click="mobileSidebarOpen = true">
+            <Menu class="w-6 h-6" />
           </button>
-          <button class="hidden md:flex w-10 h-10 rounded-full border border-gray-200 items-center justify-center text-gray-500 hover:text-gray-700" @click="sidebarCollapsed = !sidebarCollapsed">
-            <component :is="sidebarCollapsed ? PanelLeftOpen : PanelLeftClose" class="w-5 h-5" />
-          </button>
+          
           <div class="relative flex-1">
-          <Search class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="キーワードで検索..."
-            class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500"
-          />
+            <Search class="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="検索..."
+              class="w-full h-11 pl-10 pr-4 bg-gray-50 border border-gray-200 rounded-xl text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+            />
           </div>
         </div>
-        <div class="relative">
-          <button class="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 relative" @click="toggleNotifications">
-            <Bell class="w-5 h-5" />
-            <span v-if="unreadCount > 0" class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">
-              {{ unreadCount > 99 ? '99+' : unreadCount }}
-            </span>
-          </button>
-          <div v-if="notificationOpen" class="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-lg z-50">
-            <div class="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
-              <p class="text-sm font-semibold text-gray-800">通知</p>
-              <button class="text-xs text-gray-500 hover:text-red-600" @click="clearNotifications(); refreshNotifications()">
-                クリア
-              </button>
-            </div>
-            <div class="max-h-80 overflow-y-auto">
-              <div v-if="notifications.length === 0" class="px-3 py-6 text-sm text-gray-400 text-center">
-                通知はありません
+        
+        <div class="flex items-center gap-2 md:gap-4 ml-4">
+          <div class="relative">
+            <button class="h-11 w-11 rounded-xl border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors relative" @click="toggleNotifications">
+              <Bell class="w-5 h-5" />
+              <span v-if="unreadCount > 0" class="absolute top-2 right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-bold ring-2 ring-white">
+                {{ unreadCount > 99 ? '99+' : unreadCount }}
+              </span>
+            </button>
+            <div v-if="notificationOpen" class="absolute right-0 mt-3 w-80 bg-white border border-gray-200 rounded-2xl shadow-2xl z-[150]">
+              <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <p class="text-sm font-bold text-gray-900">通知</p>
+                <button class="text-xs font-semibold text-gray-500 hover:text-red-600" @click="clearNotifications(); refreshNotifications()">
+                  クリア
+                </button>
               </div>
-              <div v-for="n in notifications" :key="n.id" class="px-3 py-2 border-b border-gray-50">
-                <p class="text-sm text-gray-800">{{ n.message }}</p>
-                <p class="text-xs text-gray-400 mt-1">{{ new Date(n.createdAt).toLocaleString('ja-JP') }}</p>
+              <div class="max-h-80 overflow-y-auto p-2 space-y-1">
+                <div v-if="notifications.length === 0" class="py-10 text-sm text-gray-400 text-center">
+                  通知はありません
+                </div>
+                <div v-for="n in notifications" :key="n.id" class="p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                  <p class="text-sm text-gray-900 leading-relaxed">{{ n.message }}</p>
+                  <p class="text-[10px] text-gray-400 mt-2 font-medium">{{ new Date(n.createdAt).toLocaleString('ja-JP') }}</p>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      <main class="flex-1 overflow-auto">
+      <main class="flex-1 overflow-auto scroll-smooth pb-20 md:pb-0">
         <slot />
       </main>
+
+      <!-- スマホ用ボトムナビゲーション (sm) -->
+      <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-2 py-1.5 flex items-center justify-around z-50 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <router-link
+          v-for="item in menuItems.slice(0, 5)"
+          :key="`bottom-${item.id}`"
+          :to="item.path"
+          class="flex flex-col items-center gap-1 p-2 rounded-xl transition-colors h-14 w-14 justify-center"
+          :class="isActive(item.path) ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'"
+        >
+          <component :is="item.icon" class="w-6 h-6 flex-shrink-0" />
+          <span class="text-[10px] font-bold leading-none">{{ item.label.slice(0, 4) }}</span>
+        </router-link>
+      </nav>
 
       <div
         v-if="popupNotification"

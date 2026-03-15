@@ -137,7 +137,16 @@ const currentPage = ref(1);
 const pageSize = 50;
 const isDesktop = ref(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
 const isTablet = ref(typeof window !== 'undefined' ? (window.innerWidth >= 768 && window.innerWidth < 1024) : false);
+const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
 const filterPanelOpen = ref(!isTablet.value);
+
+const handleResize = () => {
+  const width = window.innerWidth;
+  isDesktop.value = width >= 1024;
+  isTablet.value = width >= 768 && width < 1024;
+  isMobile.value = width < 768;
+  if (!isTablet.value) filterPanelOpen.value = true;
+};
 
 const appliedFilters = ref({
   selectedNames: [] as string[],
@@ -682,13 +691,6 @@ const goNextPage = () => {
   if (currentPage.value < totalPages.value) currentPage.value += 1;
 };
 
-const handleResize = () => {
-  isDesktop.value = window.innerWidth >= 1024;
-  isTablet.value = window.innerWidth >= 768 && window.innerWidth < 1024;
-  if (!isTablet.value) {
-    filterPanelOpen.value = true;
-  }
-};
 
 const formatDate = (value?: string | null) => {
   if (!value) return '-';
@@ -889,7 +891,7 @@ watch(filteredStudents, () => {
 
 <template>
   <Layout>
-    <div class="p-4 md:p-6 lg:p-8">
+    <div class="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto">
       <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
         <div>
           <h1 class="text-3xl font-bold text-gray-900">学生一覧</h1>
@@ -1163,25 +1165,25 @@ watch(filteredStudents, () => {
                 />
               </div>
             </div>
-        </div>
-        <label v-if="user.role === 'admin'" class="flex items-center gap-2 text-sm text-gray-600">
-          <input type="checkbox" v-model="showAll" @change="fetchStudents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-          全学生を表示
-        </label>
-        <div class="flex flex-col sm:flex-row gap-2 justify-end">
-          <button
-            @click="applyFilters"
-            class="px-3 py-2 rounded-lg text-sm text-white bg-blue-600 border border-blue-600 hover:bg-blue-700"
-          >
-            検索
-          </button>
-          <button
-            @click="clearFilters"
-            class="px-3 py-2 rounded-lg text-sm text-red-600 border border-red-200 hover:bg-red-50"
-          >
-            フィルタクリア
-          </button>
-        </div>
+          </div>
+          <label v-if="user.role === 'admin'" class="flex items-center gap-2 text-sm text-gray-600">
+            <input type="checkbox" v-model="showAll" @change="fetchStudents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+            全学生を表示
+          </label>
+          <div class="flex flex-col sm:flex-row gap-2 justify-end">
+            <button
+              @click="applyFilters"
+              class="px-3 py-2 rounded-lg text-sm text-white bg-blue-600 border border-blue-600 hover:bg-blue-700"
+            >
+              検索
+            </button>
+            <button
+              @click="clearFilters"
+              class="px-3 py-2 rounded-lg text-sm text-red-600 border border-red-200 hover:bg-red-50"
+            >
+              フィルタクリア
+            </button>
+          </div>
         </template>
       </div>
 
@@ -1193,151 +1195,122 @@ watch(filteredStudents, () => {
         {{ toastMessage }}
       </div>
 
-      <div v-if="!isDesktop" class="space-y-3">
-        <div v-for="s in pagedStudents" :key="`mobile-${s.id}`" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div class="flex items-start justify-between gap-3 mb-3">
-            <div>
-              <p class="text-sm font-semibold text-gray-900">{{ s.name }}</p>
-              <p class="text-xs text-gray-500">{{ s.university || '-' }}</p>
-            </div>
-            <span class="text-xs text-gray-500">{{ s.graduation_year || '-' }}卒</span>
-          </div>
-          <div class="grid grid-cols-2 gap-2 text-xs mb-3">
-            <div>
-              <p class="text-gray-400">流入経路</p>
-              <p class="text-gray-700">{{ normalizeSourceCompany(s.source_company) || '-' }}</p>
-            </div>
-            <div>
-              <p class="text-gray-400">所在地</p>
-              <p class="text-gray-700">{{ s.prefecture || '-' }}</p>
-            </div>
-            <div>
-              <p class="text-gray-400">文理</p>
-              <p class="text-gray-700">{{ s.academic_track || '-' }}</p>
-            </div>
-            <div>
-              <p class="text-gray-400">進捗</p>
-              <p class="text-gray-700">{{ s.progress_stage || '面談調整中' }}</p>
-            </div>
-            <div>
-              <p class="text-gray-400">次回面談日</p>
-              <p class="text-gray-700">{{ formatDate(s.next_meeting_date) }}</p>
-            </div>
-            <div>
-              <p class="text-gray-400">タスク履行日</p>
-              <p class="text-gray-700">{{ formatDate(s.latest_task_due_date) }}</p>
-            </div>
-          </div>
-          <div class="space-y-2 mb-3">
-            <p class="block text-xs text-gray-500">ステータス(打診)</p>
-            <select
-              class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs"
-              :value="s.referral_status || '不明'"
-              @change="updateStudentMeta(s.id, { referral_status: ($event.target as HTMLSelectElement).value })"
-            >
-              <option v-for="v in referralStatusOptions" :key="`mobile-ref-${s.id}-${v}`" :value="v">{{ v }}</option>
-            </select>
-            <p class="block text-xs text-gray-500">進捗</p>
-            <select
-              class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs"
-              :value="s.progress_stage || '初回面談'"
-              @change="updateStudentMeta(s.id, { progress_stage: ($event.target as HTMLSelectElement).value })"
-            >
-              <option v-for="v in progressStageOptions" :key="`mobile-prog-${s.id}-${v}`" :value="v">{{ v }}</option>
-            </select>
-            <p class="block text-xs text-gray-500">次回面談日</p>
-            <input
-              type="date"
-              class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs"
-              :value="s.next_meeting_date || ''"
-              @change="updateStudentMeta(s.id, { next_meeting_date: ($event.target as HTMLInputElement).value || null })"
-            />
-            <p class="block text-xs text-gray-500">ネクストアクション</p>
-            <input
-              type="text"
-              class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs"
-              :value="s.next_action || ''"
-              @blur="updateStudentMeta(s.id, { next_action: ($event.target as HTMLInputElement).value || null })"
-              placeholder="次にやること"
-            />
-            <div v-if="user.role === 'admin'">
-              <p class="block text-xs text-gray-500 mb-1">担当</p>
-              <select
-                :value="s.staff_id || ''"
-                @change="updateStaff(s.id, ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
-                class="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs"
-              >
-                <option value="">未割当</option>
-                <option v-for="u in staffUsers" :key="`mobile-staff-${s.id}-${u.id}`" :value="u.id">{{ u.name }}</option>
-              </select>
-            </div>
-          </div>
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
+      <div v-if="isMobile" class="space-y-4">
+        <div v-for="s in pagedStudents" :key="`mobile-${s.id}`" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden transition-all hover:shadow-md active:scale-[0.98]">
+          <div class="p-5 border-b border-gray-50 bg-gradient-to-r from-gray-50/50 to-white">
+            <div class="flex items-start justify-between gap-3">
+              <div @click="router.push(`/students/${s.id}`)" class="cursor-pointer">
+                <h3 class="text-lg font-black text-gray-900 leading-tight mb-1 flex items-center gap-2">
+                  {{ s.name }}
+                  <ChevronRight class="w-4 h-4 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </h3>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{{ s.university || '-' }}</span>
+                  <span class="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-widest">{{ s.graduation_year || '-' }}卒</span>
+                </div>
+              </div>
               <button
-                class="text-blue-600 hover:text-blue-800 text-sm font-semibold inline-flex items-center gap-1"
-                @click="router.push(`/students/${s.id}`)"
+                v-if="user.role === 'admin'"
+                class="p-2 text-gray-300 hover:text-rose-500 transition-colors"
+                @click="deleteStudent(s.id)"
               >
-                詳細
-                <ChevronRight class="w-4 h-4" />
+                <Trash2 class="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div class="p-5 space-y-5">
+            <div class="grid grid-cols-2 gap-4">
+              <div class="space-y-1">
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">ステータス</p>
+                <select
+                  class="w-full h-10 px-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
+                  :value="s.referral_status || '不明'"
+                  @change="updateStudentMeta(s.id, { referral_status: ($event.target as HTMLSelectElement).value })"
+                >
+                  <option v-for="v in referralStatusOptions" :key="`mobile-ref-${s.id}-${v}`" :value="v">{{ v }}</option>
+                </select>
+              </div>
+              <div class="space-y-1">
+                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">フェーズ</p>
+                <select
+                  class="w-full h-10 px-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
+                  :value="s.progress_stage || '初回面談'"
+                  @change="updateStudentMeta(s.id, { progress_stage: ($event.target as HTMLSelectElement).value })"
+                >
+                  <option v-for="v in progressStageOptions" :key="`mobile-prog-${s.id}-${v}`" :value="v">{{ v }}</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">次回面談日</p>
+              <input
+                type="date"
+                class="w-full h-10 px-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
+                :value="s.next_meeting_date || ''"
+                @change="updateStudentMeta(s.id, { next_meeting_date: ($event.target as HTMLInputElement).value || null })"
+              />
+            </div>
+
+            <div class="flex items-center gap-2 pt-2">
+              <button
+                @click="router.push(`/students/${s.id}`)"
+                class="flex-1 h-11 bg-white border-2 border-slate-100 text-slate-700 rounded-2xl text-xs font-black shadow-sm flex items-center justify-center gap-2 active:bg-slate-50 transition-colors"
+              >
+                詳細データを確認
               </button>
               <button
-                class="px-2 py-1 text-xs border border-indigo-200 text-indigo-700 rounded hover:bg-indigo-50"
                 @click="openFunnelModal(s)"
+                class="flex-1 h-11 bg-indigo-600 text-white rounded-2xl text-xs font-black shadow-lg shadow-indigo-100 flex items-center justify-center gap-2 active:bg-indigo-700 transition-colors"
               >
                 ファネル登録
               </button>
             </div>
-            <button
-              v-if="user.role === 'admin'"
-              class="text-gray-400 hover:text-red-600 inline-flex items-center"
-              @click="deleteStudent(s.id)"
-              title="削除"
-            >
-              <Trash2 class="w-4 h-4" />
-            </button>
           </div>
         </div>
-        <div v-if="totalFilteredCount === 0" class="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-10 text-center text-sm text-gray-400">
+        <div v-if="totalFilteredCount === 0" class="bg-gray-50 rounded-2xl p-12 text-center text-sm text-gray-400 font-bold">
           該当する学生が見つかりませんでした。
         </div>
       </div>
 
-      <div v-else class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
-        <table class="w-full min-w-[980px]">
-          <thead class="bg-gray-50 border-b border-gray-200 text-xs">
+      <div v-else class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-x-auto">
+        <table class="w-full min-w-[1000px]">
+          <thead class="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-500">
             <tr>
-              <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">流入経路</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">氏名</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">大学</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">進捗</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">所在地</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">文理</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">卒業年度</th>
-              <th class="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">担当</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">次回面談日</th>
-              <th class="px-3 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">タスク履行日</th>
-              <th class="px-6 py-3 text-right font-medium text-gray-500 uppercase tracking-wider">操作</th>
+              <th class="px-4 py-4 text-left">流入経路</th>
+              <th class="px-4 py-4 text-left">氏名</th>
+              <th class="px-4 py-4 text-left hidden xl:table-cell">大学</th>
+              <th class="px-3 py-4 text-left">進捗</th>
+              <th class="px-3 py-4 text-left hidden 2xl:table-cell">所在地</th>
+              <th class="px-3 py-4 text-left hidden xl:table-cell">文理</th>
+              <th class="px-3 py-4 text-left hidden lg:table-cell">卒業年度</th>
+              <th class="px-4 py-4 text-left">担当</th>
+              <th class="px-3 py-4 text-left">打診</th>
+              <th class="px-3 py-4 text-left">次回面談</th>
+              <th class="px-3 py-4 text-left hidden xl:table-cell">タスク履行</th>
+              <th class="px-6 py-4 text-right">操作</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 bg-white">
-            <tr v-for="s in pagedStudents" :key="s.id" class="hover:bg-gray-50 transition-colors">
-              <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{{ normalizeSourceCompany(s.source_company) || '-' }}</td>
-              <td class="px-4 py-3 text-xs font-medium text-gray-900 whitespace-nowrap">{{ s.name }}</td>
-              <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.university }}</td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+            <tr v-for="s in pagedStudents" :key="s.id" class="hover:bg-slate-50/50 transition-colors border-b border-slate-50 last:border-0 group">
+              <td class="px-4 py-4 text-xs text-slate-600 font-medium whitespace-nowrap">{{ normalizeSourceCompany(s.source_company) || '-' }}</td>
+              <td class="px-4 py-4 text-xs font-black text-slate-900 whitespace-nowrap">
+                <button @click="router.push(`/students/${s.id}`)" class="hover:text-blue-600 transition-colors">{{ s.name }}</button>
+              </td>
+              <td class="px-4 py-4 text-xs text-slate-500 whitespace-nowrap hidden xl:table-cell">{{ s.university }}</td>
+              <td class="px-3 py-4 text-xs text-slate-500 whitespace-nowrap">
                 <select
-                  class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs"
+                  class="w-full px-2 py-1.5 bg-slate-50 border-none rounded-lg text-[10px] font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
                   :value="s.progress_stage || '面談調整中'"
                   @change="updateStudentMeta(s.id, { progress_stage: ($event.target as HTMLSelectElement).value })"
                 >
                   <option v-for="v in progressStageOptions" :key="`desktop-prog-${s.id}-${v}`" :value="v">{{ v }}</option>
                 </select>
               </td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.prefecture || '-' }}</td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.academic_track || '-' }}</td>
-              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ s.graduation_year || '-' }}</td>
+              <td class="px-3 py-4 text-xs text-slate-500 whitespace-nowrap hidden 2xl:table-cell">{{ s.prefecture || '-' }}</td>
+              <td class="px-3 py-4 text-xs text-slate-500 whitespace-nowrap hidden xl:table-cell">{{ s.academic_track || '-' }}</td>
+              <td class="px-3 py-4 text-xs text-slate-500 whitespace-nowrap hidden lg:table-cell font-bold">{{ s.graduation_year || '-' }}</td>
               <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
                 <div v-if="user.role === 'admin'" class="max-w-[180px]">
                   <select

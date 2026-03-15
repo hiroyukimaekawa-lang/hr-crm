@@ -97,8 +97,15 @@ const getLeadTimeColor = (days: number | null) => {
   return 'bg-red-50 border-red-400 text-red-700';
 };
 
+const isMobile = ref(false);
+const checkMobile = () => {
+  isMobile.value = window.innerWidth < 768;
+};
+
 onMounted(() => {
   fetchFunnelData();
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
 });
 </script>
 
@@ -113,58 +120,93 @@ onMounted(() => {
       </div>
 
       <!-- セクション①：初回面談フロー可視化 -->
-      <div class="flex flex-col md:flex-row items-center justify-between gap-4 py-8 bg-white rounded-xl shadow-md border border-gray-100 px-6">
-        <div class="flex-1 w-full text-center p-6 rounded-xl border-2 bg-blue-50 border-blue-400">
-          <p class="text-sm text-blue-600 font-medium mb-1">申し込み</p>
-          <p class="text-4xl font-bold text-blue-900">{{ funnelKpi.counts.applications_students }} <span class="text-lg font-normal">名</span></p>
-        </div>
-        <ArrowRight class="hidden md:block w-8 h-8 text-gray-300" />
-        <div class="flex-1 w-full text-center p-6 rounded-xl border-2 bg-purple-50 border-purple-400">
-          <p class="text-sm text-purple-600 font-medium mb-1">面談予約</p>
-          <p class="text-4xl font-bold text-purple-900">{{ funnelKpi.counts.reserved_students }} <span class="text-lg font-normal">名</span></p>
-          <p class="text-[10px] text-purple-500 mt-2 font-bold">申込→予約率：{{ funnelKpi.application_to_reservation_rate.toFixed(1) }}%</p>
-        </div>
-        <ArrowRight class="hidden md:block w-8 h-8 text-gray-300" />
-        <div class="flex-1 w-full text-center p-6 rounded-xl border-2 bg-green-50 border-green-400">
-          <p class="text-sm text-green-600 font-medium mb-1">初回面談実施</p>
-          <p class="text-4xl font-bold text-green-900">{{ funnelKpi.counts.interviewed_students }} <span class="text-lg font-normal">名</span></p>
-          <p class="text-[10px] text-green-500 mt-2 font-bold">予約→面談率：{{ reservationToInterviewRate }}%</p>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
+        <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+          <span class="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+          初回面談までのステップ
+        </h2>
+        <!-- PC・タブレット: 横並び / スマホ: 縦並び -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 md:gap-6 relative">
+          <!-- Step 1 -->
+          <div class="flex-1 w-full flex flex-col items-center bg-blue-50/50 rounded-2xl p-5 border border-blue-100/50 transition-all hover:shadow-md">
+            <span class="text-3xl mb-2">📩</span>
+            <p class="text-sm font-bold text-blue-900 mb-1">申し込み</p>
+            <p class="text-2xl font-black text-blue-600">{{ funnelKpi.counts.applications_students }}<span class="text-xs ml-1 font-bold">名</span></p>
+          </div>
+
+          <!-- Arrow 1 (sm:横, xs:縦) -->
+          <div class="flex flex-col items-center justify-center py-2 sm:py-0">
+            <div class="sm:hidden text-2xl text-gray-300">↓</div>
+            <ArrowRight class="hidden sm:block w-8 h-8 text-gray-300" />
+            <div class="mt-1 bg-white border border-blue-100 px-3 py-1 rounded-full shadow-sm">
+              <p class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter text-center">申込→予約率</p>
+              <p class="text-sm font-black text-blue-600 text-center">{{ funnelKpi.application_to_reservation_rate.toFixed(1) }}%</p>
+            </div>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="flex-1 w-full flex flex-col items-center bg-purple-50/50 rounded-2xl p-5 border border-purple-100/50 transition-all hover:shadow-md">
+            <span class="text-3xl mb-2">📅</span>
+            <p class="text-sm font-bold text-purple-900 mb-1">面談予約</p>
+            <p class="text-2xl font-black text-purple-600">{{ funnelKpi.counts.reserved_students }}<span class="text-xs ml-1 font-bold">名</span></p>
+          </div>
+
+          <!-- Arrow 2 (sm:横, xs:縦) -->
+          <div class="flex flex-col items-center justify-center py-2 sm:py-0">
+            <div class="sm:hidden text-2xl text-gray-300">↓</div>
+            <ArrowRight class="hidden sm:block w-8 h-8 text-gray-300" />
+            <div class="mt-1 bg-white border border-green-100 px-3 py-1 rounded-full shadow-sm">
+              <p class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter text-center">予約→面談率</p>
+              <p class="text-sm font-black text-green-600 text-center">{{ reservationToInterviewRate }}%</p>
+            </div>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="flex-1 w-full flex flex-col items-center bg-green-50/50 rounded-2xl p-5 border border-green-100/50 transition-all hover:shadow-md">
+            <span class="text-3xl mb-2">🤝</span>
+            <p class="text-sm font-bold text-green-900 mb-1">初回面談実施</p>
+            <p class="text-2xl font-black text-green-600">{{ funnelKpi.counts.interviewed_students }}<span class="text-xs ml-1 font-bold">名</span></p>
+          </div>
         </div>
       </div>
 
       <!-- セクション②：デイリー申込数グラフ -->
-      <div class="bg-white rounded-xl shadow-md p-6 border border-gray-100">
-        <div class="flex items-center justify-between mb-6">
-          <h2 class="text-lg font-bold text-gray-800">デイリー申込数推移（直近30日）</h2>
-          <div class="flex items-center gap-2">
-            <span class="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">30日平均：{{ avgDailyApps }} 件/日</span>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <span class="w-1.5 h-6 bg-indigo-600 rounded-full"></span>
+              デイリー申込推移
+            </h2>
+            <p class="text-sm text-gray-500 mt-1">直近{{ isMobile ? 14 : 30 }}日間の申し込み件数</p>
+          </div>
+          <div class="flex flex-wrap gap-4">
+            <div class="px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
+              <p class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-0.5">1日平均</p>
+              <p class="text-lg font-black text-slate-700">{{ avgDailyApps }}<span class="text-[10px] ml-0.5">名</span></p>
+            </div>
+            <div class="px-4 py-2 bg-indigo-50 rounded-xl border border-indigo-100">
+              <p class="text-[10px] uppercase tracking-wider text-indigo-400 font-bold mb-0.5">最多 ({{ dailyAppsStats.maxDate.slice(5) }})</p>
+              <p class="text-lg font-black text-indigo-700">{{ maxDailyApps }}<span class="text-[10px] ml-0.5">名</span></p>
+            </div>
           </div>
         </div>
-        <div class="h-48 flex items-end gap-1 px-2 border-b border-gray-100">
+
+        <div class="h-48 md:h-64 flex items-end gap-1 px-2 border-b border-gray-100 relative">
           <div 
-            v-for="(d, idx) in dailyApps30Days" 
+            v-for="(d, idx) in (isMobile ? dailyApps30Days.slice(-14) : dailyApps30Days)" 
             :key="d.day"
-            class="flex-1 bg-blue-400 hover:bg-blue-600 rounded-t-sm transition-all relative group"
+            class="flex-1 bg-blue-500 hover:bg-blue-600 rounded-t-sm transition-all relative group"
             :style="{ height: `${(d.count / maxDailyApps) * 100}%` }"
           >
             <!-- ツールチップ -->
-            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-800 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
-              {{ d.day.split('-').slice(1).join('/') }}: {{ d.count }}件
+            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-800 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10 font-bold">
+              {{ d.day.split('-').slice(1).join('/') }}: {{ d.count }}名
             </div>
-            <!-- X軸ラベル（5日おき） -->
-            <div v-if="idx % 5 === 0" class="absolute top-full mt-2 left-1/2 -translate-x-1/2 text-[10px] text-gray-400 whitespace-nowrap">
+            <!-- X軸ラベル -->
+            <div v-if="(isMobile ? idx % 4 === 0 : idx % 5 === 0) || idx === (isMobile ? 13 : 29)" class="absolute top-full mt-2 left-1/2 -translate-x-1/2 text-[10px] text-gray-400 font-bold whitespace-nowrap">
               {{ d.day.split('-').slice(1).join('/') }}
             </div>
-          </div>
-        </div>
-        <div class="mt-8 grid grid-cols-2 gap-4">
-          <div class="bg-gray-50 rounded-lg p-3">
-            <p class="text-[10px] text-gray-500 mb-1">最多：<span class="font-bold text-gray-900">{{ maxDailyApps }}件</span></p>
-            <p class="text-[10px] text-gray-400">{{ dailyAppsStats.maxDate?.replace(/-/g, '/') }}</p>
-          </div>
-          <div class="bg-gray-50 rounded-lg p-3">
-            <p class="text-[10px] text-gray-500 mb-1">最少：<span class="font-bold text-gray-900">{{ minDailyApps }}件</span></p>
-            <p class="text-[10px] text-gray-400">{{ dailyAppsStats.minDate?.replace(/-/g, '/') }}</p>
           </div>
         </div>
       </div>

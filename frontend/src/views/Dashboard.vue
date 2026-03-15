@@ -615,175 +615,139 @@ const filteredMonthlyParticipants = computed(() => {
   });
 });
 
-onMounted(fetchData);
+const isMobile = ref(false);
+const checkMobile = () => {
+  isMobile.value = window.innerWidth < 1024;
+};
+
+onMounted(() => {
+  fetchData();
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+});
 watch(sourceCompanyFilter, fetchInterviewMetrics);
 </script>
 
 <template>
   <Layout>
-    <div class="p-4 md:p-6 lg:p-8">
+    <div class="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto">
       <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900">ダッシュボード</h1>
-        <p class="text-gray-500 mt-2">最新の統計と活動状況を確認できます。</p>
+        <h1 class="text-3xl font-black text-gray-900 tracking-tight">ダッシュボード</h1>
+        <p class="text-sm font-bold text-gray-500 mt-1 uppercase tracking-wider opacity-60">Latest performance & metrics</p>
       </div>
 
       <!-- KGI Daily Progress Widget -->
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-        <h2 class="text-lg font-bold text-gray-900 mb-4">デイリーKGI進捗</h2>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
+        <h2 class="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
+          <span class="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+          デイリーKGI進捗
+        </h2>
+        <div class="overflow-x-auto scroll-smooth">
+          <table class="w-full text-sm min-w-[1000px]">
+            <thead class="bg-slate-50 border-b border-slate-100">
               <tr>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">イベント名</th>
-                <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">締日</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">残日数</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-blue-600 uppercase">目標着座</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-blue-400 uppercase">現着座</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-indigo-600 uppercase">目標エントリー</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-indigo-400 uppercase">現エントリー</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">乖離</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">売上目標</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">デイリー必要数</th>
+                <th class="px-3 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">イベント名</th>
+                <th class="px-3 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">締日</th>
+                <th class="px-3 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">残日数</th>
+                <th class="px-3 py-4 text-right text-xs font-bold text-blue-600 uppercase tracking-wider">目標着座</th>
+                <th class="px-3 py-4 text-right text-xs font-bold text-blue-400 uppercase tracking-wider">現着座</th>
+                <th class="px-3 py-4 text-right text-xs font-bold text-indigo-600 uppercase tracking-wider">目標エントリー</th>
+                <th class="px-3 py-4 text-right text-xs font-bold text-indigo-400 uppercase tracking-wider">現エントリー</th>
+                <th class="px-3 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">乖離</th>
+                <th class="px-3 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">デイリー必要数</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-200">
+            <tbody class="divide-y divide-slate-100">
               <template v-for="row in kgiProgress" :key="`kgi-${row.event_id}`">
-                <tr class="hover:bg-gray-50">
-                  <td class="px-3 py-2 text-gray-900 max-w-[200px] truncate" :title="row.event_title">{{ row.event_title }}</td>
-                  <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
-                    <span :class="row.days_remaining <= 0 ? 'text-gray-400' : ''">
+                <tr class="hover:bg-slate-50/50 transition-colors">
+                  <td class="px-3 py-4 text-slate-900 font-bold max-w-[200px] truncate" :title="row.event_title">{{ row.event_title }}</td>
+                  <td class="px-3 py-4 text-center text-slate-600 whitespace-nowrap">
+                    <span :class="row.days_remaining <= 0 ? 'text-slate-300' : ''">
                       {{ row.deadline ? new Date(row.deadline).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' }) : '-' }}
                     </span>
                   </td>
-                  <td class="px-3 py-2 text-right whitespace-nowrap">
-                    <span :class="row.days_remaining <= 0 ? 'text-gray-400' : 'font-semibold text-gray-700'">{{ row.deadline ? row.days_remaining : '-' }}</span>
+                  <td class="px-3 py-4 text-right whitespace-nowrap">
+                    <span :class="row.days_remaining <= 0 ? 'text-slate-300' : 'font-black text-slate-700'">{{ row.deadline ? row.days_remaining : '-' }}</span>
                   </td>
-                  <td class="px-3 py-2 text-right text-blue-700 font-semibold">{{ row.target_seats || '-' }}</td>
-                  <td class="px-3 py-2 text-right text-blue-500">{{ row.current_seats }}</td>
-                  <td class="px-3 py-2 text-right text-indigo-700 font-semibold">
-                    <span>{{ row.target_entry || row.kpi_target_entry || '-' }}</span>
-                    <span v-if="row.target_entry && row.kpi_target_entry && row.target_entry !== row.kpi_target_entry" class="text-[10px] text-gray-400 ml-1">(KPI:{{ row.kpi_target_entry }})</span>
-                  </td>
-                  <td class="px-3 py-2 text-right text-indigo-500 font-semibold">{{ row.current_entry }}</td>
-                  <td class="px-3 py-2 text-right font-bold whitespace-nowrap" :class="{
-                    'text-green-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) >= 0,
-                    'text-yellow-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) < 0 && (row.current_entry - (row.kpi_target_entry || row.target_entry)) >= -3,
-                    'text-red-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) < -3
+                  <td class="px-3 py-4 text-right text-blue-700 font-black">{{ row.target_seats || '-' }}</td>
+                  <td class="px-3 py-4 text-right text-blue-500 font-bold">{{ row.current_seats }}</td>
+                  <td class="px-3 py-4 text-right text-indigo-700 font-black">{{ row.target_entry || row.kpi_target_entry || '-' }}</td>
+                  <td class="px-3 py-4 text-right text-indigo-500 font-black">{{ row.current_entry }}</td>
+                  <td class="px-3 py-4 text-right font-black whitespace-nowrap" :class="{
+                    'text-emerald-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) >= 0,
+                    'text-amber-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) < 0 && (row.current_entry - (row.kpi_target_entry || row.target_entry)) >= -3,
+                    'text-rose-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) < -3
                   }">
                     {{ (() => { const g = row.current_entry - (row.kpi_target_entry || row.target_entry); return (g >= 0 ? '+' : '') + g; })() }}
                   </td>
-                  <td class="px-3 py-2 text-right text-gray-600 whitespace-nowrap">
-                    {{ ((Number(events.find(e => e.id === row.event_id)?.unit_price || 0)) * (row.target_seats || 0)).toLocaleString() }}円
-                  </td>
-                  <td class="px-3 py-2 text-right whitespace-nowrap">
+                  <td class="px-3 py-4 text-right whitespace-nowrap">
                     <span
-                      class="font-bold"
+                      class="font-black"
                       :class="{
-                        'text-gray-400': row.days_remaining <= 0,
-                        'text-green-600': row.days_remaining > 0 && row.daily_entry_gap >= 0,
-                        'text-yellow-600': row.days_remaining > 0 && row.daily_entry_gap < 0 && row.daily_entry_gap >= -3,
-                        'text-red-600': row.days_remaining > 0 && row.daily_entry_gap < -3
+                        'text-slate-300': row.days_remaining <= 0,
+                        'text-emerald-600': row.days_remaining > 0 && row.daily_entry_gap >= 0,
+                        'text-amber-600': row.days_remaining > 0 && row.daily_entry_gap < 0 && row.daily_entry_gap >= -3,
+                        'text-rose-600': row.days_remaining > 0 && row.daily_entry_gap < -3
                       }"
                     >{{ row.days_remaining <= 0 ? '締切済' : row.daily_entry_gap }}</span>
-                    <span v-if="row.days_remaining > 0 && row.kpi_rate" class="text-[10px] text-gray-400 ml-1">(着座率{{ row.kpi_rate }}%)</span>
                   </td>
                 </tr>
-                <!-- カスタムKPIステップを展開表示 -->
-                <template v-if="row.kpi_custom_steps && row.kpi_custom_steps.length > 0">
-                  <tr v-for="(step, si) in row.kpi_custom_steps" :key="`kgi-custom-${row.event_id}-${si}`" class="bg-orange-50">
-                    <td class="px-3 py-1.5 text-orange-700 pl-8 text-xs">
-                      └ {{ step.label }}
-                      <span class="text-orange-400 text-[10px] ml-1">(
-                        {{ step.position === 1 ? '着座↔エントリー間' : step.position === 2 ? 'エントリー↔面談間' : step.position === 3 ? '面談↔流入数間' : '流入数の後' }}
-                      )</span>
-                    </td>
-                    <td class="px-3 py-1.5 text-center text-orange-400 text-xs" colspan="8">前段階 {{ step.rate }}%</td>
-                    <td class="px-3 py-1.5 text-right">
-                      <span class="text-xs font-medium text-orange-700">
-                        目標: {{ (() => {
-                          const seatToEntry = row.kpi_rate / 100;
-                          const entryToInterview = (row.kpi_entry_to_interview_rate || 60) / 100;
-                          const interviewToInflow = (row.kpi_interview_to_inflow_rate || 50) / 100;
-                          const seat = row.target_seats || 0;
-                          const entry = seat > 0 ? Math.ceil(seat / seatToEntry) : 0;
-                          const interview = entry > 0 ? Math.ceil(entry / entryToInterview) : 0;
-                          const inflow = interview > 0 ? Math.ceil(interview / interviewToInflow) : 0;
-                          // 対象ステップの位置に応じて前段階の値を取得
-                          const samePos = row.kpi_custom_steps.filter((s, i) => s.position === step.position && i <= si);
-                          let prev = step.position === 1 ? seat : step.position === 2 ? entry : step.position === 3 ? interview : inflow;
-                          let val = prev;
-                          for (const sp of samePos) {
-                            val = prev > 0 ? Math.ceil(prev / (sp.rate / 100)) : 0;
-                            prev = val;
-                          }
-                          return val;
-                        })() }}
-                      </span>
-                    </td>
-                  </tr>
-                </template>
               </template>
-              <tr v-if="kgiProgress.length === 0">
-                <td colspan="8" class="px-3 py-8 text-center text-gray-400">データがありません。</td>
-              </tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-        <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-4">
-            <h2 class="text-lg font-bold text-gray-900">イベント別ヨミ表（A/B/C）</h2>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div class="flex flex-col md:flex-row md:items-center gap-4">
+            <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <span class="w-1.5 h-6 bg-emerald-600 rounded-full"></span>
+              イベント別ヨミ表 (A/B/C)
+            </h2>
             <button 
               @click="openMonthlyAttendanceModal"
-              class="px-3 py-1 bg-green-50 border border-green-200 text-green-700 rounded-full text-sm font-semibold hover:bg-green-100 transition-colors flex items-center gap-1.5"
+              class="px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-sm font-black hover:bg-emerald-100 transition-all flex items-center gap-2 w-fit"
             >
-              {{ calendarBaseMonth.getMonth() + 1 }}月の参加人数: {{ monthlyAttendanceCount }}名
-              <ArrowRight class="w-3.5 h-3.5" />
+              {{ calendarBaseMonth.getMonth() + 1 }}月の参加: {{ monthlyAttendanceCount }}名
+              <ArrowRight class="w-4 h-4" />
             </button>
           </div>
-          <span class="text-sm text-gray-500">開催予定: {{ upcomingEvents }}件</span>
+          <span class="text-sm font-bold text-slate-400 bg-slate-50 px-3 py-1 rounded-full w-fit">開催予定: {{ upcomingEvents }}件</span>
         </div>
-        <div class="flex flex-wrap items-center gap-2 mb-4">
-          <span class="text-xs text-gray-500">区分:</span>
-          <span class="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs">A:エントリー</span>
-          <span class="px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700 text-xs">B:回答待ち</span>
-          <span class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs">C:回答待ち</span>
-          <span class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs">XA:エントリーキャンセル</span>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">イベント名</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">開催日</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-blue-700 uppercase">A</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-amber-700 uppercase">B</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-purple-700 uppercase">C</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-red-700 uppercase">XA</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">合計</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              <tr v-for="row in eventYomiRows" :key="row.id" class="hover:bg-gray-50">
-                <td class="px-3 py-2">
-                  <button class="text-blue-700 hover:text-blue-900 underline-offset-2 hover:underline" @click="openYomiEventDetail(row.id)">
-                    {{ row.title }}
-                  </button>
-                </td>
-                <td class="px-3 py-2 text-gray-600">{{ row.event_date ? new Date(row.event_date).toLocaleDateString('ja-JP') : '-' }}</td>
-                <td class="px-3 py-2 text-right text-blue-700 font-semibold">{{ row.a }}</td>
-                <td class="px-3 py-2 text-right text-amber-700 font-semibold">{{ row.b }}</td>
-                <td class="px-3 py-2 text-right text-purple-700 font-semibold">{{ row.c }}</td>
-                <td class="px-3 py-2 text-right text-red-700 font-semibold">{{ row.xa }}</td>
-                <td class="px-3 py-2 text-right text-gray-700 font-semibold">{{ row.total }}</td>
-              </tr>
-              <tr v-if="eventYomiRows.length === 0">
-                <td colSpan="7" class="px-3 py-8 text-center text-gray-400">イベントデータがありません。</td>
-              </tr>
-            </tbody>
-          </table>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div v-for="row in eventYomiRows" :key="row.id" class="bg-slate-50/50 rounded-2xl p-5 border border-slate-100 transition-all hover:shadow-lg hover:border-blue-200 hover:bg-white group">
+            <h3 class="font-black text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 min-h-[3rem] text-lg mb-4">
+              {{ row.title }}
+            </h3>
+            <div class="flex items-center gap-2 mb-6">
+              <span class="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-500 shadow-sm uppercase tracking-tighter">
+                📅 {{ row.event_date ? new Date(row.event_date).toLocaleDateString('ja-JP') : '-' }}
+              </span>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-6">
+              <div class="bg-blue-600 rounded-2xl p-3 text-white shadow-md shadow-blue-100">
+                <p class="text-[9px] font-black uppercase tracking-widest opacity-70 mb-1">A:Entry</p>
+                <p class="text-2xl font-black">{{ row.a }}</p>
+              </div>
+              <div class="bg-amber-500 rounded-2xl p-3 text-white shadow-md shadow-amber-100">
+                <p class="text-[9px] font-black uppercase tracking-widest opacity-70 mb-1">B:Wait</p>
+                <p class="text-2xl font-black">{{ row.b }}</p>
+              </div>
+              <div class="bg-purple-500 rounded-2xl p-3 text-white shadow-md shadow-purple-100">
+                <p class="text-[9px] font-black uppercase tracking-widest opacity-70 mb-1">C:Wait</p>
+                <p class="text-2xl font-black">{{ row.c }}</p>
+              </div>
+              <div class="bg-slate-900 rounded-2xl p-3 text-white shadow-md shadow-slate-200">
+                <p class="text-[9px] font-black uppercase tracking-widest opacity-70 mb-1">Total</p>
+                <p class="text-2xl font-black">{{ row.total }}</p>
+              </div>
+            </div>
+            <button @click="openYomiEventDetail(row.id)" class="w-full py-3 bg-white border-2 border-slate-100 rounded-2xl text-xs font-black text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all shadow-sm">
+              参加数・売上詳細を管理
+            </button>
+          </div>
         </div>
       </div>
 
