@@ -1,3 +1,8 @@
+// --- ここから追加 ---
+process.env.TZ = 'Asia/Tokyo';
+console.log('[TZ Check] タイムゾーンを設定しました:', process.env.TZ);
+console.log('[TZ Check] 現在のJST時刻:', new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }));
+// --- ここまで追加 ---
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');

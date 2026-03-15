@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteGraduationYearCategory = exports.createGraduationYearCategory = exports.getGraduationYearCategories = exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.getStudentEventProposals = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
+exports.deleteGraduationYearCategory = exports.createGraduationYearCategory = exports.getGraduationYearCategories = exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.getStudentEventProposals = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.updateInterviewLog = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
 const db_1 = __importDefault(require("../config/db"));
 let interviewScheduleTableReady = false;
 let interviewScheduleTablePromise = null;
@@ -390,21 +390,29 @@ const normalizeToHour = (value) => {
     const raw = normalizeNullableText(value);
     if (!raw)
         return null;
+    // 日付のみ (YYYY-MM-DD)
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-        return `${raw} 00:00:00`;
+        return `${raw} 00:00:00+09`;
     }
-    const direct = raw.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2})/);
-    if (direct) {
-        return `${direct[1]} ${direct[2]}:00:00`;
+    // YYYY-MM-DDTHH:mm または YYYY-MM-DD HH:mm 形式（フロントのdatetime-local）
+    // → JSTとしてそのまま保存（UTCに変換しない）
+    const directMatch = raw.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}):?(\d{2})?/);
+    if (directMatch) {
+        const datePart = directMatch[1];
+        const hourPart = directMatch[2];
+        return `${datePart} ${hourPart}:00:00+09`;
     }
+    // ISO文字列（末尾にZまたはタイムゾーンあり）→ JSTに変換
     const d = new Date(raw);
     if (Number.isNaN(d.getTime()))
         return null;
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const hh = String(d.getHours()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd} ${hh}:00:00`;
+    // JSTオフセット(+9時間)を適用
+    const jstDate = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+    const yyyy = jstDate.getUTCFullYear();
+    const mm = String(jstDate.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(jstDate.getUTCDate()).padStart(2, '0');
+    const hh = String(jstDate.getUTCHours()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:00:00+09`;
 };
 const normalizeReferralStatus = (value) => {
     const raw = String(value !== null && value !== void 0 ? value : '').trim();
@@ -624,7 +632,7 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 se.id as student_event_id,
                 se.status as participation_status,
                 se.created_at as participation_created_at,
-                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
+                to_char(se.selected_event_date AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
             FROM events e
             JOIN student_events se ON e.id = se.event_id
             LEFT JOIN LATERAL (
@@ -1041,7 +1049,7 @@ const linkEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { event_id, status, selected_event_date } = req.body;
     try {
         yield ensureStudentEventsColumns();
-        const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING', 'XA_CANCEL'].includes(status) ? status : 'A_ENTRY';
+        const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING', 'D_PASS', 'E_FAIL', 'XA_CANCEL'].includes(status) ? status : 'A_ENTRY';
         yield db_1.default.query(`INSERT INTO student_events (student_id, event_id, status, selected_event_date)
              VALUES ($1, $2, $3, $4)
              ON CONFLICT (student_id, event_id, selected_event_date)
@@ -1080,6 +1088,22 @@ const deleteInterviewLog = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.deleteInterviewLog = deleteInterviewLog;
+const updateInterviewLog = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { content } = req.body;
+    try {
+        const result = yield db_1.default.query('UPDATE interview_logs SET content = $1, created_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *', [content, id]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Log not found' });
+            return;
+        }
+        res.json(result.rows[0]);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.updateInterviewLog = updateInterviewLog;
 const updateStudentStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
     const { status } = req.body;
@@ -1661,7 +1685,79 @@ exports.getStudentEventProposals = getStudentEventProposals;
 const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield ensureSalesFunnelTables();
-        if (String(req.query.group_by_source || '') === '1') {
+        // クエリパラメータ
+        const monthParam = String(req.query.month || '').trim(); // YYYY-MM
+        const groupByMonth = String(req.query.group_by_month || '') === '1';
+        const groupBySource = String(req.query.group_by_source || '') === '1';
+        // 月フィルタ条件文字列
+        const mf = monthParam ? `'${monthParam.replace(/'/g, '')}'` : null;
+        const appMonthCond = mf ? `AND TO_CHAR(a.applied_at, 'YYYY-MM') = ${mf}` : '';
+        const resMonthCond = mf ? `AND TO_CHAR(a.reservation_created_at, 'YYYY-MM') = ${mf}` : '';
+        const intMonthCond = mf ? `AND TO_CHAR(i.scheduled_at, 'YYYY-MM') = ${mf}` : '';
+        const dailyAppCond = mf ? `AND TO_CHAR(applied_at, 'YYYY-MM') = ${mf}` : '';
+        const dailySetCond = mf ? `AND TO_CHAR(reservation_created_at, 'YYYY-MM') = ${mf}` : '';
+        // ─── group_by_month: 月別集計 ───
+        if (groupByMonth) {
+            const monthlyRes = yield db_1.default.query(`
+                WITH months AS (
+                    SELECT TO_CHAR(applied_at, 'YYYY-MM') AS month FROM applications WHERE applied_at IS NOT NULL
+                    UNION
+                    SELECT TO_CHAR(reservation_created_at, 'YYYY-MM') FROM applications WHERE reservation_created_at IS NOT NULL
+                    UNION
+                    SELECT TO_CHAR(scheduled_at, 'YYYY-MM') FROM interviews WHERE scheduled_at IS NOT NULL
+                ),
+                app_bm AS (
+                    SELECT TO_CHAR(applied_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
+                    FROM applications WHERE applied_at IS NOT NULL GROUP BY 1
+                ),
+                reserve_bm AS (
+                    SELECT TO_CHAR(reservation_created_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
+                    FROM applications WHERE reservation_created_at IS NOT NULL GROUP BY 1
+                ),
+                interview_bm AS (
+                    SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
+                    FROM interviews WHERE scheduled_at IS NOT NULL GROUP BY 1
+                ),
+                completed_bm AS (
+                    SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
+                    FROM interviews
+                    WHERE scheduled_at IS NOT NULL
+                      AND (COALESCE(status,'') IN ('completed','面談実施','interviewed') OR interviewed_at IS NOT NULL)
+                    GROUP BY 1
+                ),
+                noshow_bm AS (
+                    SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
+                    FROM interviews WHERE scheduled_at IS NOT NULL AND COALESCE(status,'') = 'no_show' GROUP BY 1
+                ),
+                reschedule_bm AS (
+                    SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
+                    FROM interviews WHERE scheduled_at IS NOT NULL AND COALESCE(status,'') = 'rescheduled' GROUP BY 1
+                )
+                SELECT
+                    m.month,
+                    COALESCE(a.cnt, 0) AS applications_students,
+                    COALESCE(r.cnt, 0) AS reserved_students,
+                    COALESCE(i.cnt, 0) AS interview_scheduled_students,
+                    COALESCE(c.cnt, 0) AS interviewed_students,
+                    COALESCE(n.cnt, 0) AS no_show_students,
+                    COALESCE(rsc.cnt, 0) AS rescheduled_students,
+                    ROUND(COALESCE(r.cnt,0)::numeric / NULLIF(COALESCE(a.cnt,0),0) * 100, 2) AS application_to_reservation_rate,
+                    ROUND(COALESCE(c.cnt,0)::numeric / NULLIF(COALESCE(r.cnt,0),0) * 100, 2) AS reservation_to_interview_rate,
+                    ROUND(COALESCE(n.cnt,0)::numeric / NULLIF(COALESCE(i.cnt,0),0) * 100, 2) AS no_show_rate,
+                    ROUND(COALESCE(rsc.cnt,0)::numeric / NULLIF(COALESCE(i.cnt,0),0) * 100, 2) AS reschedule_rate
+                FROM (SELECT DISTINCT month FROM months) m
+                LEFT JOIN app_bm a ON a.month = m.month
+                LEFT JOIN reserve_bm r ON r.month = m.month
+                LEFT JOIN interview_bm i ON i.month = m.month
+                LEFT JOIN completed_bm c ON c.month = m.month
+                LEFT JOIN noshow_bm n ON n.month = m.month
+                LEFT JOIN reschedule_bm rsc ON rsc.month = m.month
+                ORDER BY m.month DESC
+            `);
+            res.json(monthlyRes.rows);
+            return;
+        }
+        if (groupBySource) {
             const bySourceRes = yield db_1.default.query(`
                 WITH src AS (
                     SELECT DISTINCT COALESCE(NULLIF(TRIM(source_company), ''), '未設定') AS source_company
@@ -1670,135 +1766,88 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 app_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT a.student_id)::int AS cnt
-                    FROM applications a
-                    JOIN students s ON s.id = a.student_id
-                    WHERE a.student_id IS NOT NULL
-                    GROUP BY 1
+                    FROM applications a JOIN students s ON s.id = a.student_id
+                    WHERE a.student_id IS NOT NULL ${appMonthCond} GROUP BY 1
                 ),
                 reserve_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT a.student_id)::int AS cnt
-                    FROM applications a
-                    JOIN students s ON s.id = a.student_id
-                    WHERE a.student_id IS NOT NULL
-                      AND (
-                        COALESCE(a.reservation_status, '') IN ('reserved', '予約済み', '予約', '初回面談')
-                        OR a.reservation_created_at IS NOT NULL
-                        OR a.reservation_date IS NOT NULL
-                      )
-                    GROUP BY 1
+                    FROM applications a JOIN students s ON s.id = a.student_id
+                    WHERE a.student_id IS NOT NULL AND a.reservation_created_at IS NOT NULL ${resMonthCond} GROUP BY 1
                 ),
                 interview_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i
-                    JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL
-                      AND i.scheduled_at IS NOT NULL
-                    GROUP BY 1
+                    FROM interviews i JOIN students s ON s.id = i.student_id
+                    WHERE i.student_id IS NOT NULL AND i.scheduled_at IS NOT NULL ${intMonthCond} GROUP BY 1
                 ),
                 interview_completed_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i
-                    JOIN students s ON s.id = i.student_id
+                    FROM interviews i JOIN students s ON s.id = i.student_id
                     WHERE i.student_id IS NOT NULL
-                      AND (COALESCE(i.status, '') IN ('completed', '面談実施', 'interviewed') OR i.interviewed_at IS NOT NULL)
-                    GROUP BY 1
+                      AND (COALESCE(i.status,'') IN ('completed','面談実施','interviewed') OR i.interviewed_at IS NOT NULL)
+                      ${intMonthCond} GROUP BY 1
                 ),
                 interview_no_show_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i
-                    JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL
-                      AND COALESCE(i.status, '') = 'no_show'
-                    GROUP BY 1
+                    FROM interviews i JOIN students s ON s.id = i.student_id
+                    WHERE i.student_id IS NOT NULL AND COALESCE(i.status,'') = 'no_show' ${intMonthCond} GROUP BY 1
                 ),
                 interview_rescheduled_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i
-                    JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL
-                      AND COALESCE(i.status, '') = 'rescheduled'
-                    GROUP BY 1
+                    FROM interviews i JOIN students s ON s.id = i.student_id
+                    WHERE i.student_id IS NOT NULL AND COALESCE(i.status,'') = 'rescheduled' ${intMonthCond} GROUP BY 1
                 ),
                 proposal_s AS (
-                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company,
                            COUNT(DISTINCT ep.student_id)::int AS cnt
-                    FROM event_proposals ep
-                    JOIN students s ON s.id = ep.student_id
-                    GROUP BY 1
+                    FROM event_proposals ep JOIN students s ON s.id = ep.student_id GROUP BY 1
                 ),
                 join_s AS (
-                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company,
                            COUNT(DISTINCT ep.student_id)::int AS cnt
-                    FROM event_proposals ep
-                    JOIN students s ON s.id = ep.student_id
-                    WHERE COALESCE(ep.status, '') IN ('joined', '参加', '参加確定', 'accepted')
-                    GROUP BY 1
+                    FROM event_proposals ep JOIN students s ON s.id = ep.student_id
+                    WHERE COALESCE(ep.status,'') IN ('joined','参加','参加確定','accepted') GROUP BY 1
                 ),
                 daily_app AS (
-                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
-                           COUNT(*)::int AS cnt
-                    FROM applications a
-                    JOIN students s ON s.id = a.student_id
-                    WHERE DATE(a.applied_at) = CURRENT_DATE
-                    GROUP BY 1
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company, COUNT(*)::int AS cnt
+                    FROM applications a JOIN students s ON s.id = a.student_id
+                    WHERE DATE(a.applied_at) = CURRENT_DATE GROUP BY 1
                 ),
                 daily_avg AS (
-                    SELECT
-                        source_company,
-                        ROUND(AVG(cnt)::numeric, 2) AS avg_daily_applications
+                    SELECT source_company, ROUND(AVG(cnt)::numeric, 2) AS avg_daily_applications
                     FROM (
-                        SELECT
-                            COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
-                            DATE(a.applied_at) AS day,
-                            COUNT(*)::int AS cnt
-                        FROM applications a
-                        JOIN students s ON s.id = a.student_id
-                        WHERE a.applied_at >= (CURRENT_DATE - INTERVAL '30 days')
-                        GROUP BY 1, 2
-                    ) t
-                    GROUP BY source_company
+                        SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company,
+                               DATE(a.applied_at) AS day, COUNT(*)::int AS cnt
+                        FROM applications a JOIN students s ON s.id = a.student_id
+                        WHERE a.applied_at >= (CURRENT_DATE - INTERVAL '30 days') GROUP BY 1,2
+                    ) t GROUP BY source_company
                 ),
                 daily_setting AS (
-                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
-                           COUNT(*)::int AS cnt
-                    FROM applications a
-                    JOIN students s ON s.id = a.student_id
-                    WHERE DATE(COALESCE(a.reservation_date, a.reservation_created_at)) = CURRENT_DATE
-                    GROUP BY 1
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company, COUNT(*)::int AS cnt
+                    FROM applications a JOIN students s ON s.id = a.student_id
+                    WHERE DATE(a.reservation_created_at) = CURRENT_DATE GROUP BY 1
                 ),
                 app_to_reserve_lt AS (
-                    SELECT
-                        COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
-                        ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(a.reservation_created_at, a.reservation_date) - a.applied_at)) / 86400.0)::numeric, 2) AS days
-                    FROM applications a
-                    JOIN students s ON s.id = a.student_id
-                    WHERE a.applied_at IS NOT NULL
-                      AND COALESCE(a.reservation_created_at, a.reservation_date) IS NOT NULL
-                    GROUP BY 1
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company,
+                        ROUND(AVG(EXTRACT(EPOCH FROM (a.reservation_created_at - a.applied_at))/86400.0)::numeric, 2) AS days
+                    FROM applications a JOIN students s ON s.id = a.student_id
+                    WHERE a.applied_at IS NOT NULL AND a.reservation_created_at IS NOT NULL GROUP BY 1
                 ),
                 latest_interview AS (
-                    SELECT DISTINCT ON (i.student_id)
-                        i.student_id,
-                        i.scheduled_at
-                    FROM interviews i
-                    WHERE i.student_id IS NOT NULL
+                    SELECT DISTINCT ON (i.student_id) i.student_id, i.scheduled_at
+                    FROM interviews i WHERE i.student_id IS NOT NULL
                     ORDER BY i.student_id, COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) DESC, i.id DESC
                 ),
                 reserve_to_interview_lt AS (
-                    SELECT
-                        COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
-                        ROUND(AVG(EXTRACT(EPOCH FROM (li.scheduled_at - COALESCE(a.reservation_date, a.reservation_created_at))) / 86400.0)::numeric, 2) AS days
-                    FROM applications a
-                    JOIN students s ON s.id = a.student_id
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company,
+                        ROUND(AVG(EXTRACT(EPOCH FROM (li.scheduled_at - a.reservation_created_at))/86400.0)::numeric, 2) AS days
+                    FROM applications a JOIN students s ON s.id = a.student_id
                     JOIN latest_interview li ON li.student_id = a.student_id
-                    WHERE COALESCE(a.reservation_date, a.reservation_created_at) IS NOT NULL
-                      AND li.scheduled_at IS NOT NULL
-                    GROUP BY 1
+                    WHERE a.reservation_created_at IS NOT NULL AND li.scheduled_at IS NOT NULL GROUP BY 1
                 )
                 SELECT
                     src.source_company,
@@ -1815,13 +1864,13 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     COALESCE(join_s.cnt, 0)::int AS joined_students,
                     app_to_reserve_lt.days AS apply_to_reservation_lead_time_days_avg,
                     reserve_to_interview_lt.days AS reservation_to_interview_lead_time_days_avg,
-                    ROUND((COALESCE(reserve_s.cnt, 0)::numeric / NULLIF(COALESCE(app_s.cnt, 0), 0)) * 100, 2) AS application_to_reservation_rate,
-                    ROUND((COALESCE(interview_s.cnt, 0)::numeric / NULLIF(COALESCE(reserve_s.cnt, 0), 0)) * 100, 2) AS reservation_to_interview_rate,
-                    ROUND((COALESCE(proposal_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_completed_s.cnt, 0), 0)) * 100, 2) AS interview_to_proposal_rate,
-                    ROUND((COALESCE(join_s.cnt, 0)::numeric / NULLIF(COALESCE(proposal_s.cnt, 0), 0)) * 100, 2) AS proposal_to_join_rate,
-                    ROUND((COALESCE(interview_completed_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS interview_completed_rate,
-                    ROUND((COALESCE(interview_no_show_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS no_show_rate,
-                    ROUND((COALESCE(interview_rescheduled_s.cnt, 0)::numeric / NULLIF(COALESCE(interview_s.cnt, 0), 0)) * 100, 2) AS reschedule_rate
+                    ROUND((COALESCE(reserve_s.cnt,0)::numeric / NULLIF(COALESCE(app_s.cnt,0),0)) * 100, 2) AS application_to_reservation_rate,
+                    ROUND((COALESCE(interview_completed_s.cnt,0)::numeric / NULLIF(COALESCE(reserve_s.cnt,0),0)) * 100, 2) AS reservation_to_interview_rate,
+                    ROUND((COALESCE(proposal_s.cnt,0)::numeric / NULLIF(COALESCE(interview_completed_s.cnt,0),0)) * 100, 2) AS interview_to_proposal_rate,
+                    ROUND((COALESCE(join_s.cnt,0)::numeric / NULLIF(COALESCE(proposal_s.cnt,0),0)) * 100, 2) AS proposal_to_join_rate,
+                    ROUND((COALESCE(interview_completed_s.cnt,0)::numeric / NULLIF(COALESCE(interview_s.cnt,0),0)) * 100, 2) AS interview_completed_rate,
+                    ROUND((COALESCE(interview_no_show_s.cnt,0)::numeric / NULLIF(COALESCE(interview_s.cnt,0),0)) * 100, 2) AS no_show_rate,
+                    ROUND((COALESCE(interview_rescheduled_s.cnt,0)::numeric / NULLIF(COALESCE(interview_s.cnt,0),0)) * 100, 2) AS reschedule_rate
                 FROM src
                 LEFT JOIN app_s ON app_s.source_company = src.source_company
                 LEFT JOIN reserve_s ON reserve_s.source_company = src.source_company
@@ -1841,90 +1890,64 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             res.json(bySourceRes.rows);
             return;
         }
+        // ─── 全体集計（月フィルタ対応） ───
         const [dailyRes, dailySettingsRes, summaryRes, lostRes] = yield Promise.all([
             db_1.default.query(`
                 SELECT DATE(applied_at) AS day, COUNT(*)::int AS count
                 FROM applications
-                GROUP BY DATE(applied_at)
-                ORDER BY day DESC
-                LIMIT 31
+                WHERE applied_at IS NOT NULL ${dailyAppCond}
+                GROUP BY DATE(applied_at) ORDER BY day DESC LIMIT 62
             `),
             db_1.default.query(`
-                SELECT DATE(COALESCE(reservation_date, reservation_created_at)) AS day, COUNT(*)::int AS count
+                SELECT DATE(reservation_created_at) AS day, COUNT(*)::int AS count
                 FROM applications
-                WHERE COALESCE(reservation_date, reservation_created_at) IS NOT NULL
-                GROUP BY DATE(COALESCE(reservation_date, reservation_created_at))
-                ORDER BY day DESC
-                LIMIT 31
+                WHERE reservation_created_at IS NOT NULL ${dailySetCond}
+                GROUP BY DATE(reservation_created_at) ORDER BY day DESC LIMIT 62
             `),
             db_1.default.query(`
                 WITH app_s AS (
-                    SELECT COUNT(DISTINCT student_id)::int AS cnt
-                    FROM applications
-                    WHERE student_id IS NOT NULL
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt FROM applications
+                    WHERE student_id IS NOT NULL ${appMonthCond}
                 ),
                 reserve_s AS (
-                    SELECT COUNT(DISTINCT student_id)::int AS cnt
-                    FROM applications
-                    WHERE student_id IS NOT NULL
-                      AND (
-                        COALESCE(reservation_status, '') IN ('reserved', '予約済み', '予約')
-                        OR reservation_created_at IS NOT NULL
-                      )
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt FROM applications
+                    WHERE student_id IS NOT NULL AND reservation_created_at IS NOT NULL ${resMonthCond}
                 ),
                 interview_s AS (
-                    SELECT COUNT(DISTINCT student_id)::int AS cnt
-                    FROM interviews
-                    WHERE student_id IS NOT NULL
-                      AND scheduled_at IS NOT NULL
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt FROM interviews
+                    WHERE student_id IS NOT NULL AND scheduled_at IS NOT NULL ${intMonthCond}
                 ),
                 interview_completed_s AS (
-                    SELECT COUNT(DISTINCT student_id)::int AS cnt
-                    FROM interviews
-                    WHERE student_id IS NOT NULL
-                      AND (COALESCE(status, '') IN ('completed', '面談実施', 'interviewed') OR interviewed_at IS NOT NULL)
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt FROM interviews
+                    WHERE student_id IS NOT NULL ${intMonthCond}
+                      AND (COALESCE(status,'') IN ('completed','面談実施','interviewed') OR interviewed_at IS NOT NULL)
                 ),
                 interview_no_show_s AS (
-                    SELECT COUNT(DISTINCT student_id)::int AS cnt
-                    FROM interviews
-                    WHERE student_id IS NOT NULL
-                      AND COALESCE(status, '') = 'no_show'
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt FROM interviews
+                    WHERE student_id IS NOT NULL AND COALESCE(status,'') = 'no_show' ${intMonthCond}
                 ),
                 interview_rescheduled_s AS (
-                    SELECT COUNT(DISTINCT student_id)::int AS cnt
-                    FROM interviews
-                    WHERE student_id IS NOT NULL
-                      AND COALESCE(status, '') = 'rescheduled'
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt FROM interviews
+                    WHERE student_id IS NOT NULL AND COALESCE(status,'') = 'rescheduled' ${intMonthCond}
                 ),
                 apply_to_reserve_lt AS (
-                    SELECT ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(reservation_created_at, reservation_date) - applied_at)) / 86400.0)::numeric, 2) AS days
-                    FROM applications
-                    WHERE applied_at IS NOT NULL
-                      AND COALESCE(reservation_created_at, reservation_date) IS NOT NULL
+                    SELECT ROUND(AVG(EXTRACT(EPOCH FROM (reservation_created_at - applied_at))/86400.0)::numeric, 2) AS days
+                    FROM applications WHERE applied_at IS NOT NULL AND reservation_created_at IS NOT NULL
                 ),
                 latest_interview AS (
-                    SELECT DISTINCT ON (student_id)
-                        student_id,
-                        scheduled_at
-                    FROM interviews
-                    WHERE student_id IS NOT NULL
+                    SELECT DISTINCT ON (student_id) student_id, scheduled_at
+                    FROM interviews WHERE student_id IS NOT NULL
                     ORDER BY student_id, COALESCE(scheduled_at, interviewed_at, created_at) DESC, id DESC
                 ),
                 reserve_to_interview_lt AS (
-                    SELECT ROUND(AVG(EXTRACT(EPOCH FROM (li.scheduled_at - COALESCE(a.reservation_date, a.reservation_created_at))) / 86400.0)::numeric, 2) AS days
-                    FROM applications a
-                    JOIN latest_interview li ON li.student_id = a.student_id
-                    WHERE COALESCE(a.reservation_date, a.reservation_created_at) IS NOT NULL
-                      AND li.scheduled_at IS NOT NULL
+                    SELECT ROUND(AVG(EXTRACT(EPOCH FROM (li.scheduled_at - a.reservation_created_at))/86400.0)::numeric, 2) AS days
+                    FROM applications a JOIN latest_interview li ON li.student_id = a.student_id
+                    WHERE a.reservation_created_at IS NOT NULL AND li.scheduled_at IS NOT NULL
                 ),
-                proposal_s AS (
-                    SELECT COUNT(DISTINCT student_id)::int AS cnt
-                    FROM event_proposals
-                ),
+                proposal_s AS (SELECT COUNT(DISTINCT student_id)::int AS cnt FROM event_proposals),
                 join_s AS (
-                    SELECT COUNT(DISTINCT student_id)::int AS cnt
-                    FROM event_proposals
-                    WHERE COALESCE(status, '') IN ('joined', '参加', '参加確定', 'accepted')
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt FROM event_proposals
+                    WHERE COALESCE(status,'') IN ('joined','参加','参加確定','accepted')
                 )
                 SELECT
                     app_s.cnt AS applications_students,
@@ -1937,17 +1960,16 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     join_s.cnt AS joined_students,
                     apply_to_reserve_lt.days AS apply_to_reservation_lead_time_days_avg,
                     reserve_to_interview_lt.days AS reservation_to_interview_lead_time_days_avg
-                FROM app_s, reserve_s, interview_s, interview_completed_s, interview_no_show_s, interview_rescheduled_s, proposal_s, join_s, apply_to_reserve_lt, reserve_to_interview_lt
+                FROM app_s, reserve_s, interview_s, interview_completed_s, interview_no_show_s,
+                     interview_rescheduled_s, proposal_s, join_s, apply_to_reserve_lt, reserve_to_interview_lt
             `),
             db_1.default.query(`
-                SELECT COALESCE(lr.reason_name, '未設定') AS reason_name, COUNT(*)::int AS count
+                SELECT COALESCE(lr.reason_name,'未設定') AS reason_name, COUNT(*)::int AS count
                 FROM event_proposals ep
                 LEFT JOIN lost_reasons lr ON lr.id = ep.lost_reason_id
-                WHERE ep.lost_reason_id IS NOT NULL
-                  AND COALESCE(ep.status, '') IN ('lost', '失注')
-                GROUP BY COALESCE(lr.reason_name, '未設定')
-                ORDER BY count DESC, reason_name ASC
-                LIMIT 10
+                WHERE ep.lost_reason_id IS NOT NULL AND COALESCE(ep.status,'') IN ('lost','失注')
+                GROUP BY COALESCE(lr.reason_name,'未設定')
+                ORDER BY count DESC, reason_name ASC LIMIT 10
             `)
         ]);
         const s = summaryRes.rows[0] || {};
@@ -1964,12 +1986,14 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             daily_applications: dailyRes.rows,
             daily_settings: dailySettingsRes.rows,
             application_to_reservation_rate: rate(reservedStudents, applicationsStudents),
-            reservation_to_interview_rate: rate(interviewScheduledStudents, reservedStudents),
+            // 予約→面談率: 実施数 / 予約済み（分母を予約者数に修正）
+            reservation_to_interview_rate: rate(interviewedStudents, reservedStudents),
             interview_to_proposal_rate: rate(proposedStudents, interviewedStudents),
             proposal_to_join_rate: rate(joinedStudents, proposedStudents),
             apply_to_reservation_lead_time_days_avg: s.apply_to_reservation_lead_time_days_avg !== null ? Number(s.apply_to_reservation_lead_time_days_avg) : null,
             reservation_to_interview_lead_time_days_avg: s.reservation_to_interview_lead_time_days_avg !== null ? Number(s.reservation_to_interview_lead_time_days_avg) : null,
             interview_completed_rate: rate(interviewedStudents, interviewScheduledStudents),
+            // 飛ばれ率・リスケ率の分母を面談設定数（scheduled）に修正
             no_show_rate: rate(noShowStudents, interviewScheduledStudents),
             reschedule_rate: rate(rescheduledStudents, interviewScheduledStudents),
             lost_reason_ranking: lostRes.rows,

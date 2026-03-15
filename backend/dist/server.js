@@ -12,6 +12,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+process.env.TZ = 'Asia/Tokyo';
+console.log('[TZ Check] タイムゾーン:', process.env.TZ);
+console.log('[TZ Check] 現在のJST時刻:', new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }));
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -69,6 +72,7 @@ app.use('/api/kpi', kpiRoutes_1.default);
 // 旧APIとの互換性のためのエイリアス（必要に応じて）
 app.post('/api/login', (req, res) => res.redirect(307, '/api/auth/login'));
 app.post('/api/interview-logs', (req, res) => res.redirect(307, '/api/students/interview-logs'));
+app.put('/api/interview-logs/:id', (req, res) => res.redirect(307, `/api/students/interview-logs/${req.params.id}`));
 app.delete('/api/interview-logs/:id', (req, res) => res.redirect(307, `/api/students/interview-logs/${req.params.id}`));
 module.exports = app;
 exports.default = app;
