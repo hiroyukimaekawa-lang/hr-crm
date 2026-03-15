@@ -28,7 +28,7 @@ const monthOptions = computed(() => {
 const formatYM = (ym: string) => {
   if (!ym) return '';
   const [y, m] = ym.split('-');
-  return `${y}年${parseInt(m)}月`;
+  return `${y}年${parseInt(m || '0')}月`;
 };
 
 // 現在表示中の月パラメータ（全体の場合は空）

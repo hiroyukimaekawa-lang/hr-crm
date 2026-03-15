@@ -175,17 +175,23 @@ const formatDateKey = (value: string | Date) => {
 const currentMonthBase = computed(() => new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth(), 1));
 
 const eventsByDate = computed(() => {
-  const map: Record<string, EventItem[]> = {};
+  const map: Record<string, (EventItem & { dateCount: number })[]> = {};
   events.value.forEach(e => {
     const dateList = Array.isArray(e.event_dates) && e.event_dates.length > 0
       ? e.event_dates
       : (e.event_date ? [e.event_date] : []);
+    
+    const countMap: Record<string, number> = {};
     dateList.forEach((d) => {
       const key = formatDateKey(d);
       if (!key) return;
-      if (!map[key]) map[key] = [];
-      map[key].push(e);
+      countMap[key] = (countMap[key] || 0) + 1;
     });
+
+    for (const [key, count] of Object.entries(countMap)) {
+      if (!map[key]) map[key] = [];
+      map[key].push({ ...e, dateCount: count });
+    }
   });
   return map;
 });
@@ -390,7 +396,7 @@ onMounted(fetchEvents);
                   >
                     <!-- イベント名 -->
                     <div class="px-1.5 py-0.5 bg-blue-600 text-white text-[10px] font-semibold truncate leading-tight" :title="ev.title">
-                      {{ ev.title }}
+                      {{ ev.title }}{{ ev.dateCount > 1 ? `（${ev.dateCount}日程）` : '' }}
                     </div>
                     <!-- 参加ありボタン: 日付一致+A_ENTRYのみカウント -->
                     <button
