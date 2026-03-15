@@ -35,6 +35,7 @@ router.put('/interview-schedules/:scheduleId', auth_1.authenticate, studentContr
 router.delete('/interview-schedules/:scheduleId', auth_1.authenticate, studentController_1.deleteInterviewSchedule);
 router.post('/:id/events', auth_1.authenticate, studentController_1.linkEvent);
 router.post('/interview-logs', auth_1.authenticate, studentController_1.addInterviewLog);
+router.put('/interview-logs/:id', auth_1.authenticate, studentController_1.updateInterviewLog);
 router.delete('/interview-logs/:id', auth_1.authenticate, studentController_1.deleteInterviewLog);
 router.put('/:id', auth_1.authenticate, studentController_1.updateStudentBasic);
 router.put('/:id/status', auth_1.authenticate, studentController_1.updateStudentStatus);

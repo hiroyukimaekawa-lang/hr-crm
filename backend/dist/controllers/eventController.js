@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteEvent = exports.updateParticipantStatus = exports.getEventDetail = exports.updateEvent = exports.createEvent = exports.getEvents = void 0;
+exports.getKgiProgress = exports.deleteEvent = exports.updateParticipantStatus = exports.getEventDetail = exports.updateEvent = exports.createEvent = exports.getEvents = void 0;
 const db_1 = __importDefault(require("../config/db"));
 let eventDatesTableReady = false;
 let eventDatesTablePromise = null;
@@ -43,6 +43,10 @@ const ensureEventDatesTable = () => __awaiter(void 0, void 0, void 0, function* 
             yield db_1.default.query(`
                 ALTER TABLE events
                 ADD COLUMN IF NOT EXISTS kpi_custom_steps TEXT DEFAULT '[]'
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS yomi_statuses JSONB DEFAULT '["A_ENTRY", "B_WAITING", "C_WAITING", "D_PASS", "E_FAIL", "XA_CANCEL"]'
             `);
             yield db_1.default.query(`
                 CREATE TABLE IF NOT EXISTS event_dates (
@@ -151,6 +155,8 @@ const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 COALESCE(part_stats.a_entry_count, 0) as a_entry_count,
                 COALESCE(part_stats.b_waiting_count, 0) as b_waiting_count,
                 COALESCE(part_stats.c_waiting_count, 0) as c_waiting_count,
+                COALESCE(part_stats.d_pass_count, 0) as d_pass_count,
+                COALESCE(part_stats.e_fail_count, 0) as e_fail_count,
                 COALESCE(part_stats.xa_cancel_count, 0) as xa_cancel_count,
                 COALESCE(part_stats.total_count, 0) as total_count
             FROM events e
@@ -168,6 +174,8 @@ const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     COUNT(se.*) FILTER (WHERE se.status = 'A_ENTRY' OR se.status = 'registered') as a_entry_count,
                     COUNT(se.*) FILTER (WHERE se.status = 'B_WAITING') as b_waiting_count,
                     COUNT(se.*) FILTER (WHERE se.status = 'C_WAITING') as c_waiting_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'D_PASS') as d_pass_count,
+                    COUNT(se.*) FILTER (WHERE se.status = 'E_FAIL') as e_fail_count,
                     COUNT(se.*) FILTER (WHERE se.status = 'XA_CANCEL' OR se.status = 'canceled') as xa_cancel_count,
                     COUNT(se.*) as total_count
                 FROM student_events se
@@ -233,7 +241,7 @@ const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 exports.createEvent = createEvent;
 const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline, kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps } = req.body;
+    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline, kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps, yomi_statuses } = req.body;
     try {
         yield ensureEventDatesTable();
         const dates = normalizeEventDates(event_dates, event_date);
@@ -262,6 +270,10 @@ const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         pushSet('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate !== null && kpi_entry_to_interview_rate !== void 0 ? kpi_entry_to_interview_rate : 60);
         pushSet('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate !== null && kpi_interview_to_inflow_rate !== void 0 ? kpi_interview_to_inflow_rate : 50);
         pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
+        if (yomi_statuses !== undefined) {
+            values.push(JSON.stringify(yomi_statuses));
+            setParts.push(`yomi_statuses = $${values.length}`);
+        }
         values.push(id);
         yield db_1.default.query('BEGIN');
         const result = yield db_1.default.query(`UPDATE events
@@ -302,7 +314,7 @@ const getEventDetail = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 se.student_id,
                 se.status,
                 se.created_at,
-                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
+                to_char(se.selected_event_date AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
                 s.name,
                 s.university,
                 s.email,
@@ -358,3 +370,122 @@ const deleteEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.deleteEvent = deleteEvent;
+const getKgiProgress = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield ensureEventDatesTable();
+        yield ensureStudentEventsColumns();
+        // Today in JST
+        const now = new Date();
+        const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        const todayStr = jstNow.toISOString().slice(0, 10);
+        const todayDate = new Date(todayStr + 'T00:00:00+09:00');
+        const eventsRes = yield db_1.default.query(`
+            SELECT
+                e.id,
+                e.title,
+                e.target_seats,
+                e.capacity AS capacity_entry,
+                COALESCE(e.kpi_seat_to_entry_rate, 70) AS kpi_seat_to_entry_rate,
+                COALESCE(e.kpi_entry_to_interview_rate, 60) AS kpi_entry_to_interview_rate,
+                COALESCE(e.kpi_interview_to_inflow_rate, 50) AS kpi_interview_to_inflow_rate,
+                COALESCE(e.kpi_custom_steps, '[]') AS kpi_custom_steps,
+                COALESCE(
+                    e.entry_deadline,
+                    e.event_date,
+                    (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id)
+                ) AS deadline,
+                (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id) AS last_event_date
+            FROM events e
+            ORDER BY COALESCE(
+                e.entry_deadline,
+                e.event_date,
+                (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id)
+            ) DESC NULLS LAST
+        `);
+        const statusBreakdownRes = yield db_1.default.query(`
+            SELECT
+                se.event_id,
+                se.status,
+                COUNT(*) AS cnt
+            FROM student_events se
+            GROUP BY se.event_id, se.status
+        `);
+        const breakdownMap = {};
+        for (const row of statusBreakdownRes.rows) {
+            if (!breakdownMap[row.event_id])
+                breakdownMap[row.event_id] = {};
+            breakdownMap[row.event_id][row.status] = Number(row.cnt);
+        }
+        const result = eventsRes.rows.map((e) => {
+            const breakdown = breakdownMap[e.id] || {};
+            const currentEntry = (breakdown['A_ENTRY'] || 0) + (breakdown['registered'] || 0);
+            const currentSeats = breakdown['attended'] || 0;
+            const targetSeats = Number(e.target_seats || 0);
+            const capacityEntry = Number(e.capacity_entry || 0);
+            const kpiRate = Number(e.kpi_seat_to_entry_rate || 70);
+            const kpiEntryToInterview = Number(e.kpi_entry_to_interview_rate || 60);
+            const kpiInterviewToInflow = Number(e.kpi_interview_to_inflow_rate || 50);
+            // カスタムステップをパース
+            let customSteps = [];
+            try {
+                const raw = typeof e.kpi_custom_steps === 'string'
+                    ? JSON.parse(e.kpi_custom_steps)
+                    : (Array.isArray(e.kpi_custom_steps) ? e.kpi_custom_steps : []);
+                if (Array.isArray(raw)) {
+                    customSteps = raw.map((x) => ({
+                        label: String((x === null || x === void 0 ? void 0 : x.label) || ''),
+                        rate: Number((x === null || x === void 0 ? void 0 : x.rate) || 50),
+                        position: Number((x === null || x === void 0 ? void 0 : x.position) || 4)
+                    })).filter((x) => x.label);
+                }
+            }
+            catch (_a) {
+                customSteps = [];
+            }
+            // KPI連動: 目標着座を着座率(%)で割り、必要エントリー数を逆算
+            const kpiTargetEntry = targetSeats > 0 && kpiRate > 0
+                ? Math.ceil(targetSeats / (kpiRate / 100))
+                : 0;
+            // 目標エントリー: capacityが設定されていればそれを使用、なければKPI逆算値
+            const targetEntry = capacityEntry > 0 ? capacityEntry : kpiTargetEntry;
+            let daysRemaining = 0;
+            let deadlineStr = null;
+            // entry_deadlineがない場合はevent_datesの最終日をdeadlineとして使用
+            const effectiveDeadline = e.deadline || e.last_event_date;
+            if (effectiveDeadline) {
+                const deadlineDate = new Date(effectiveDeadline);
+                deadlineStr = deadlineDate.toISOString().slice(0, 10);
+                const diffMs = deadlineDate.getTime() - todayDate.getTime();
+                daysRemaining = Math.floor(diffMs / 86400000);
+            }
+            // デイリー必要エントリー数
+            let dailyEntryGap = 0;
+            if (daysRemaining > 0) {
+                const effectiveTarget = kpiTargetEntry > 0 ? kpiTargetEntry : targetEntry;
+                dailyEntryGap = Math.round(((effectiveTarget - currentEntry) / daysRemaining) * 10) / 10;
+            }
+            return {
+                event_id: e.id,
+                event_title: e.title,
+                deadline: deadlineStr,
+                days_remaining: daysRemaining,
+                target_entry: targetEntry,
+                kpi_target_entry: kpiTargetEntry,
+                kpi_rate: kpiRate,
+                kpi_entry_to_interview_rate: kpiEntryToInterview,
+                kpi_interview_to_inflow_rate: kpiInterviewToInflow,
+                kpi_custom_steps: customSteps,
+                current_entry: currentEntry,
+                target_seats: targetSeats,
+                current_seats: currentSeats,
+                daily_entry_gap: dailyEntryGap,
+                status_breakdown: breakdown
+            };
+        });
+        res.json(result);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.getKgiProgress = getKgiProgress;
