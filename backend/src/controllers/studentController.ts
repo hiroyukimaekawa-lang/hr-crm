@@ -1873,11 +1873,20 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
                     FROM interviews WHERE scheduled_at IS NOT NULL GROUP BY 1
                 ),
+                first_interview_per_student AS (
+                    SELECT DISTINCT ON (student_id)
+                        student_id,
+                        scheduled_at,
+                        interviewed_at,
+                        status
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
+                    ORDER BY student_id, COALESCE(scheduled_at, interviewed_at, created_at) ASC, id ASC
+                ),
                 completed_bm AS (
                     SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
-                    FROM interviews
-                    WHERE scheduled_at IS NOT NULL
-                      AND (COALESCE(status,'') IN ('completed','面談実施','interviewed') OR interviewed_at IS NOT NULL)
+                    FROM first_interview_per_student
+                    WHERE COALESCE(status,'') IN ('completed','面談実施','interviewed') OR interviewed_at IS NOT NULL
                     GROUP BY 1
                 ),
                 noshow_bm AS (
@@ -1937,12 +1946,21 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     FROM interviews i JOIN students s ON s.id = i.student_id
                     WHERE i.student_id IS NOT NULL AND i.scheduled_at IS NOT NULL ${intMonthCond} GROUP BY 1
                 ),
+                first_interview_per_student AS (
+                    SELECT DISTINCT ON (student_id)
+                        student_id,
+                        scheduled_at,
+                        interviewed_at,
+                        status
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
+                    ORDER BY student_id, COALESCE(scheduled_at, interviewed_at, created_at) ASC, id ASC
+                ),
                 interview_completed_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
-                           COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL
-                      AND (COALESCE(i.status,'') IN ('completed','面談実施','interviewed') OR i.interviewed_at IS NOT NULL)
+                           COUNT(DISTINCT fi.student_id)::int AS cnt
+                    FROM first_interview_per_student fi JOIN students s ON s.id = fi.student_id
+                    WHERE (COALESCE(fi.status,'') IN ('completed','面談実施','interviewed') OR fi.interviewed_at IS NOT NULL)
                       ${intMonthCond} GROUP BY 1
                 ),
                 interview_no_show_s AS (
@@ -2074,10 +2092,20 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     SELECT COUNT(DISTINCT student_id)::int AS cnt FROM interviews
                     WHERE student_id IS NOT NULL AND scheduled_at IS NOT NULL ${intMonthCond}
                 ),
+                first_interview_per_student AS (
+                    SELECT DISTINCT ON (student_id)
+                        student_id,
+                        scheduled_at,
+                        interviewed_at,
+                        status
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
+                    ORDER BY student_id, COALESCE(scheduled_at, interviewed_at, created_at) ASC, id ASC
+                ),
                 interview_completed_s AS (
-                    SELECT COUNT(DISTINCT student_id)::int AS cnt FROM interviews
-                    WHERE student_id IS NOT NULL ${intMonthCond}
-                      AND (COALESCE(status,'') IN ('completed','面談実施','interviewed') OR interviewed_at IS NOT NULL)
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt FROM first_interview_per_student
+                    WHERE (COALESCE(status,'') IN ('completed','面談実施','interviewed') OR interviewed_at IS NOT NULL)
+                    ${intMonthCond}
                 ),
                 interview_no_show_s AS (
                     SELECT COUNT(DISTINCT student_id)::int AS cnt FROM interviews
