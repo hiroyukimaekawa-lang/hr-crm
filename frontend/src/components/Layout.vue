@@ -49,7 +49,7 @@ const menuItems = computed(() => [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard, path: '/dashboard' },
   { id: 'students', label: '学生一覧', icon: Users, path: '/students' },
   { id: 'events', label: 'イベント一覧', icon: Calendar, path: '/events' },
-  { id: 'lead-time', label: '初回ファネル登録', icon: ChartColumn, path: '/lead-time' },
+  { id: 'lead-time', label: '学生流入数', icon: ChartColumn, path: '/lead-time' },
   { id: 'event-kpi', label: 'KPI', icon: TrendingUp, path: '/event-kpi' },
   { id: 'settings', label: '設定', icon: Settings, path: '/settings' }
 ]);
@@ -142,39 +142,43 @@ watch(
 <template>
   <div class="flex h-screen bg-slate-50 text-gray-900">
     <aside
-      class="hidden lg:flex bg-slate-900 text-slate-100 flex-col transition-all duration-200 w-64"
+      class="hidden lg:flex bg-slate-900 text-slate-100 flex-col transition-all duration-200"
+      :class="sidebarCollapsed ? 'w-16' : 'w-64'"
     >
-      <div class="p-4 border-b border-slate-800">
+      <div class="p-4 border-b border-slate-800" :class="{ 'p-2': sidebarCollapsed }">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">H</div>
-          <div>
+          <div v-if="!sidebarCollapsed">
             <h1 class="font-semibold text-lg">HR CRM</h1>
             <p class="text-xs text-slate-400">イベント送客管理</p>
           </div>
         </div>
       </div>
 
-      <nav class="flex-1 p-4 overflow-y-auto">
+      <nav class="flex-1 p-4 overflow-y-auto" :class="{ 'p-2': sidebarCollapsed }">
         <ul class="space-y-2">
           <li v-for="item in menuItems" :key="item.id">
             <router-link
               :to="item.path"
               class="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors w-full"
-              :class="isActive(item.path) ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800/60'"
+              :class="[
+                isActive(item.path) ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800/60',
+                sidebarCollapsed ? 'justify-center px-0' : ''
+              ]"
             >
               <component :is="item.icon" class="w-5 h-5 flex-shrink-0" />
-              <span>{{ item.label }}</span>
+              <span v-if="!sidebarCollapsed">{{ item.label }}</span>
             </router-link>
           </li>
         </ul>
       </nav>
 
-      <div class="p-4 border-t border-slate-800 mt-auto">
-        <div class="flex items-center gap-3 px-4 py-3">
+      <div class="p-4 border-t border-slate-800 mt-auto" :class="{ 'p-2': sidebarCollapsed }">
+        <div class="flex items-center gap-3 px-4 py-3" :class="{ 'flex-col px-0': sidebarCollapsed }">
           <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center flex-shrink-0">
             <span class="text-slate-200 font-semibold">{{ user.name.charAt(0) }}</span>
           </div>
-          <div class="flex-1 min-w-0">
+          <div v-if="!sidebarCollapsed" class="flex-1 min-w-0">
             <p class="font-medium text-slate-100 truncate text-sm">{{ user.name }}</p>
             <p class="text-[10px] text-slate-400 uppercase tracking-wider">{{ user.role === 'admin' ? '管理者' : '担当者' }}</p>
           </div>
@@ -275,6 +279,10 @@ watch(
         <div class="flex items-center gap-3 w-full max-w-2xl">
           <button class="md:hidden h-11 w-11 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-200 shadow-sm" @click="mobileSidebarOpen = true">
             <Menu class="w-6 h-6" />
+          </button>
+          
+          <button class="hidden lg:flex h-11 w-11 rounded-xl border border-gray-200 bg-white items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors shadow-sm" @click="sidebarCollapsed = !sidebarCollapsed">
+            <component :is="sidebarCollapsed ? PanelLeftOpen : PanelLeftClose" class="w-5 h-5 flex-shrink-0" />
           </button>
           
           <div class="relative flex-1">
