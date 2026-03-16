@@ -438,6 +438,70 @@ const yomiSections: Array<{ key: YomiKey; label: string; accent: string }> = [
   { key: 'XA', label: 'XA:エントリーキャンセル', accent: 'text-red-700 border-red-200 bg-red-50' }
 ];
 
+const draggingParticipant = ref<EventParticipant | null>(null);
+const dragOverZone = ref<string | null>(null);
+
+const onDragStart = (e: DragEvent, participant: EventParticipant) => {
+  draggingParticipant.value = participant;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+  }
+};
+
+const onDragEnd = () => {
+  draggingParticipant.value = null;
+  dragOverZone.value = null;
+};
+
+const onDrop = async (e: DragEvent, newStatusKey: string) => {
+  e.preventDefault();
+  if (!draggingParticipant.value || !selectedYomiEvent.value) return;
+
+  const currentKey = normalizedYomiKey(draggingParticipant.value.status);
+  if (currentKey === newStatusKey) {
+    onDragEnd();
+    return;
+  }
+
+  // Map key back to primary status
+  const keyToStatus: Record<string, string> = {
+    A: 'A_ENTRY',
+    B: 'B_WAITING',
+    C: 'C_WAITING',
+    XA: 'XA_CANCEL'
+  };
+  const newStatus = keyToStatus[newStatusKey];
+  if (!newStatus) {
+    onDragEnd();
+    return;
+  }
+
+  // 楽観的UI更新（即時反映）
+  const dragId = draggingParticipant.value.student_event_id || draggingParticipant.value.student_id;
+  const target = yomiParticipants.value.find(p => (p.student_event_id || p.student_id) === dragId);
+  if (target) {
+    target.status = newStatus;
+  }
+
+  // API更新
+  try {
+    const token = localStorage.getItem('token');
+    const studentEventId = draggingParticipant.value.student_event_id;
+    if (studentEventId) {
+      await api.put(
+        `/api/events/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
+        { status: newStatus },
+        { headers: { Authorization: token } }
+      );
+    }
+    fetchData();
+  } catch (err) {
+    console.error(err);
+  }
+
+  onDragEnd();
+};
+
 const updateYomiParticipantStatus = async (
   eventId: number,
   studentEventId: number,
@@ -886,41 +950,37 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
             <div class="px-3 py-2 text-sm font-semibold border-b border-gray-200" :class="section.accent">
               {{ section.label }}（{{ yomiCounts[section.key] }}名）
             </div>
-            <div class="max-h-56 overflow-y-auto">
-              <table class="w-full text-sm">
-                <thead class="bg-gray-50 border-b border-gray-200 sticky top-0">
-                  <tr>
-                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">学生名</th>
-                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">大学</th>
-                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">担当</th>
-                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">参加日程</th>
-                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">変更</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200">
-                  <tr v-for="p in yomiGroups[section.key]" :key="`${section.key}-${p.student_event_id || p.student_id}`" class="hover:bg-gray-50">
-                    <td class="px-3 py-2 text-gray-900">{{ p.name }}</td>
-                    <td class="px-3 py-2 text-gray-600">{{ p.university || '-' }}</td>
-                    <td class="px-3 py-2 text-gray-600">{{ p.staff_name || '-' }}</td>
-                    <td class="px-3 py-2 text-gray-900 font-medium">{{ formatDateKey(p.selected_event_date) }}</td>
-                    <td class="px-3 py-2">
-                      <select
-                        class="w-full min-w-[170px] px-2 py-1 border border-gray-300 rounded-md text-xs bg-white"
-                        :value="p.status === 'registered' ? 'A_ENTRY' : (p.status || 'A_ENTRY')"
-                        @change="selectedYomiEvent && updateYomiParticipantStatus(selectedYomiEvent.id, p.student_event_id!, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'XA_CANCEL')"
-                      >
-                        <option value="A_ENTRY">A:エントリー</option>
-                        <option value="B_WAITING">B:回答待ち</option>
-                        <option value="C_WAITING">C:回答待ち</option>
-                        <option value="XA_CANCEL">XA:エントリーキャンセル（誤登録時）</option>
-                      </select>
-                    </td>
-                  </tr>
-                  <tr v-if="yomiGroups[section.key].length === 0">
-                    <td colSpan="4" class="px-3 py-6 text-center text-gray-400">該当学生はいません。</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div
+              @dragover.prevent="dragOverZone = section.key"
+              @dragleave="dragOverZone = null"
+              @drop="onDrop($event, section.key)"
+              class="max-h-72 overflow-y-auto p-3 transition-colors"
+              :class="{
+                'bg-blue-100 ring-2 ring-blue-400': dragOverZone === 'A' && section.key === 'A',
+                'bg-amber-100 ring-2 ring-amber-400': dragOverZone === 'B' && section.key === 'B',
+                'bg-purple-100 ring-2 ring-purple-400': dragOverZone === 'C' && section.key === 'C',
+                'bg-red-100 ring-2 ring-red-400': dragOverZone === 'XA' && section.key === 'XA'
+              }"
+            >
+              <div class="grid grid-cols-1 gap-2">
+                <div
+                  v-for="p in yomiGroups[section.key]"
+                  :key="`${section.key}-${p.student_event_id || p.student_id}`"
+                  :draggable="true"
+                  @dragstart="onDragStart($event, p)"
+                  @dragend="onDragEnd"
+                  class="p-3 bg-white border border-gray-200 rounded-lg cursor-grab active:cursor-grabbing select-none"
+                  :class="{ 'opacity-40': draggingParticipant?.student_event_id === p.student_event_id }"
+                >
+                  <p class="font-medium text-sm text-gray-900">{{ p.name }}</p>
+                  <p class="text-xs text-gray-500">{{ p.university || '-' }}</p>
+                  <p class="text-xs text-gray-400">担当: {{ p.staff_name || '-' }}</p>
+                  <p class="text-xs font-bold text-gray-700">参加日程: {{ formatDateKey(p.selected_event_date) }}</p>
+                </div>
+                <div v-if="yomiGroups[section.key].length === 0" class="py-6 text-center text-gray-400 text-xs">
+                  該当学生はいません。
+                </div>
+              </div>
             </div>
           </div>
         </div>
