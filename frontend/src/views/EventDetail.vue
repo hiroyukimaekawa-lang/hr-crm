@@ -635,10 +635,11 @@ onMounted(fetchDetail);
                   </td>
                 </tr>
                 <tr v-if="filteredParticipants.length === 0">
-                  <td colSpan="6" class="px-4 py-10 text-center text-gray-400">参加者は見つかりませんでした。</td>
+                  <td colspan="7" class="px-4 py-10 text-center text-gray-400">参加者は見つかりませんでした。</td>
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       </div>
