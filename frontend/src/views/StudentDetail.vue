@@ -615,11 +615,21 @@ const statusClass = (status?: string) => {
   }
 };
 
-const formatDateTime = (value?: string | null) => {
+const formatDateTime = (value?: string | null, event?: any) => {
   if (!value) return '-';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString('ja-JP');
+  const d = parseLocalDate(value);
+  if (!d) return String(value) || '-';
+  const base = d.toLocaleString('ja-JP');
+
+  if (event && Array.isArray(event.event_slots) && event.event_slots.length > 0) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const matchStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const slot = event.event_slots.find((s: any) => s.datetime && s.datetime.startsWith(matchStr));
+    if (slot?.location) {
+      return `${base} ${slot.location}`;
+    }
+  }
+  return base;
 };
 
 const parseLocalDate = (value?: string | Date | null) => {
@@ -1101,7 +1111,7 @@ watch(selectedEventId, () => {
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="font-semibold text-gray-900">{{ p.event_name || '-' }}</span>
                   <span class="text-xs text-gray-500">{{ formatDateTime(p.proposed_at) }}</span>
-                  <span v-if="p.selected_event_date" class="text-xs text-blue-600">参加日: {{ formatDateTime(p.selected_event_date) }}</span>
+                  <span v-if="p.selected_event_date" class="text-xs text-blue-600">参加日: {{ formatDateTime(p.selected_event_date, p) }}</span>
                   <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{{ p.status || '-' }}</span>
                   <span v-if="p.reason || p.lost_reason_name" class="text-xs text-gray-700">理由: {{ p.reason || p.lost_reason_name }}</span>
                 </div>
@@ -1118,7 +1128,7 @@ watch(selectedEventId, () => {
               </select>
               <select v-model="proposalForm.selected_event_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" :disabled="!proposalForm.event_id">
                 <option value="">参加日程を選択</option>
-                <option v-for="d in selectedProposalEventDates" :key="`proposal-date-${d}`" :value="d">{{ formatDateTime(d) }}</option>
+                <option v-for="d in selectedProposalEventDates" :key="`proposal-date-${d}`" :value="d">{{ formatDateTime(d, selectedProposalEvent) }}</option>
               </select>
               <select v-model="proposalForm.status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                 <option value="proposed">提案済み</option>
@@ -1146,7 +1156,7 @@ watch(selectedEventId, () => {
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div class="min-w-0 flex-1">
                     <span class="text-sm font-bold text-gray-900 block truncate">{{ e.title }}</span>
-                    <p class="text-xs text-gray-500 mt-0.5">{{ e.selected_event_date ? formatDateTime(e.selected_event_date) : formatDateTime(e.event_date) }}</p>
+                    <p class="text-xs text-gray-500 mt-0.5">{{ e.selected_event_date ? formatDateTime(e.selected_event_date, e) : formatDateTime(e.event_date, e) }}</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-2 sm:justify-end">
                     <select
@@ -1157,7 +1167,7 @@ watch(selectedEventId, () => {
                     >
                       <option disabled value="">参加日を選択</option>
                       <option v-for="d in eventDateOptions(e)" :key="`student-event-date-${e.id}-${d}`" :value="d">
-                        {{ formatDateTime(d) }}
+                        {{ formatDateTime(d, e) }}
                       </option>
                     </select>
                     <span class="text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap" :class="participationStatusClass(e.participation_status)">
@@ -1196,7 +1206,7 @@ watch(selectedEventId, () => {
                     v-model="selectedEventDate"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   >
-                    <option v-for="d in selectedLinkEventDates" :key="`add-link-date-${d}`" :value="d">{{ formatDateTime(d) }}</option>
+                    <option v-for="d in selectedLinkEventDates" :key="`add-link-date-${d}`" :value="d">{{ formatDateTime(d, selectedLinkEvent) }}</option>
                   </select>
                 </div>
                 <div class="flex gap-2">
@@ -1487,7 +1497,7 @@ watch(selectedEventId, () => {
               </div>
               <p class="text-xs text-gray-500 mt-3 mb-1">開催日</p>
               <div class="text-sm text-gray-800 mb-2">
-                <div v-for="d in eventDateList(ev)" :key="`upcoming-date-${ev.id}-${d}`">{{ formatDateTime(d) }}</div>
+                <div v-for="d in eventDateList(ev)" :key="`upcoming-date-${ev.id}-${d}`">{{ formatDateTime(d, ev) }}</div>
                 <div v-if="eventDateList(ev).length === 0">未設定</div>
               </div>
               <p class="text-xs text-gray-500 mb-1">開催場所</p>

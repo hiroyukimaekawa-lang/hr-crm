@@ -36,6 +36,10 @@ const ensureEventDatesTable = async () => {
                 ADD COLUMN IF NOT EXISTS yomi_statuses JSONB DEFAULT '["A_ENTRY", "B_WAITING", "C_WAITING", "D_PASS", "E_FAIL", "XA_CANCEL"]'
             `);
             await pool.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS event_slots JSONB DEFAULT '[]'
+            `);
+            await pool.query(`
                 CREATE TABLE IF NOT EXISTS event_dates (
                     id SERIAL PRIMARY KEY,
                     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -144,6 +148,7 @@ export const getEvents = async (req: Request, res: Response) => {
         const result = await pool.query(`
             SELECT 
                 e.*,
+                COALESCE(e.event_slots, '[]'::jsonb) as event_slots,
                 COALESCE(date_stats.event_dates, '[]'::json) as event_dates,
                 COALESCE(part_stats.registered_count, 0) as registered_count,
                 COALESCE(part_stats.attended_count, 0) as attended_count,
@@ -189,11 +194,18 @@ export const createEvent = async (req: Request, res: Response) => {
     const {
         title, description, event_date, event_dates, location, lp_url,
         capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline,
-        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps
+        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps,
+        event_slots
     } = req.body;
     try {
         await ensureEventDatesTable();
-        const dates = normalizeEventDates(event_dates, event_date);
+        let dates = normalizeEventDates(event_dates, event_date);
+        
+        // event_slotsがあればevent_datesを同期
+        if (Array.isArray(event_slots) && event_slots.length > 0) {
+            dates = event_slots.map((s: any) => s.datetime).filter(Boolean);
+        }
+
         const primaryDate = dates.length > 0 ? dates[0] : null;
         const cols = await getEventColumns();
         const insertCols: string[] = [];
@@ -218,6 +230,7 @@ export const createEvent = async (req: Request, res: Response) => {
         push('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate ?? 60);
         push('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate ?? 50);
         push('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
+        push('event_slots', Array.isArray(event_slots) ? JSON.stringify(event_slots) : '[]');
 
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         await pool.query('BEGIN');
@@ -246,11 +259,17 @@ export const updateEvent = async (req: Request, res: Response) => {
         title, description, event_date, event_dates, location, lp_url,
         capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline,
         kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps,
-        yomi_statuses
+        yomi_statuses, event_slots
     } = req.body;
     try {
         await ensureEventDatesTable();
-        const dates = normalizeEventDates(event_dates, event_date);
+        let dates = normalizeEventDates(event_dates, event_date);
+
+        // event_slotsがあればevent_datesを同期
+        if (Array.isArray(event_slots) && event_slots.length > 0) {
+            dates = event_slots.map((s: any) => s.datetime).filter(Boolean);
+        }
+
         const primaryDate = dates.length > 0 ? dates[0] : null;
         const cols = await getEventColumns();
         const setParts: string[] = [];
@@ -278,6 +297,10 @@ export const updateEvent = async (req: Request, res: Response) => {
         if (yomi_statuses !== undefined) {
             values.push(JSON.stringify(yomi_statuses));
             setParts.push(`yomi_statuses = $${values.length}`);
+        }
+        if (event_slots !== undefined) {
+            values.push(Array.isArray(event_slots) ? JSON.stringify(event_slots) : '[]');
+            setParts.push(`event_slots = $${values.length}`);
         }
         values.push(id);
 

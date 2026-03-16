@@ -42,6 +42,13 @@ interface EventDetail {
   target_sales?: number;
   current_sales?: number;
   lp_url?: string;
+  event_slots?: EventSlot[];
+}
+
+interface EventSlot {
+  datetime: string;
+  location: string;
+  note?: string;
 }
 
 interface EventKgi {
@@ -83,7 +90,7 @@ const STATUS_ORDER: Record<string, number> = {
 const form = ref({
   title: '',
   description: '',
-  event_dates: [''],
+  event_slots: [] as EventSlot[],
   entry_deadline: '',
   location: '',
   lp_url: '',
@@ -133,9 +140,17 @@ const fetchDetail = async () => {
   form.value = {
     title: event.value?.title || '',
     description: event.value?.description || '',
-    event_dates: Array.isArray(event.value?.event_dates) && event.value!.event_dates!.length > 0
-      ? event.value!.event_dates!.map((d: string) => toDateTimeLocalValue(d))
-      : (event.value?.event_date ? [toDateTimeLocalValue(event.value.event_date)] : ['']),
+    event_slots: Array.isArray(event.value?.event_slots) && event.value!.event_slots!.length > 0
+      ? event.value!.event_slots!.map((s: any) => ({
+          datetime: toDateTimeLocalValue(s.datetime),
+          location: s.location || '',
+          note: s.note || ''
+        }))
+      : (Array.isArray(event.value?.event_dates) && event.value!.event_dates!.length > 0
+          ? event.value!.event_dates!.map((d: string) => ({ datetime: toDateTimeLocalValue(d), location: event.value?.location || '', note: '' }))
+          : (event.value?.event_date 
+              ? [{ datetime: toDateTimeLocalValue(event.value.event_date), location: event.value?.location || '', note: '' }]
+              : [{ datetime: '', location: '', note: '' }])),
     entry_deadline: toDateTimeLocalValue(event.value?.entry_deadline),
     location: event.value?.location || '',
     lp_url: event.value?.lp_url || '',
@@ -176,7 +191,7 @@ const updateEvent = async () => {
   await api.put(`/api/events/${eventId}`, {
     title: form.value.title,
     description: form.value.description,
-    event_dates: form.value.event_dates.filter(v => String(v || '').trim()),
+    event_slots: form.value.event_slots.filter(s => s.datetime),
     entry_deadline: form.value.entry_deadline || null,
     location: form.value.location || null,
     lp_url: form.value.lp_url || null,
@@ -191,20 +206,27 @@ const updateEvent = async () => {
   fetchDetail();
 };
 
-const addFormEventDate = () => {
-  form.value.event_dates.push('');
+const addSlot = () => {
+  form.value.event_slots.push({ datetime: '', location: '', note: '' });
 };
 
-const removeFormEventDate = (index: number) => {
-  if (form.value.event_dates.length <= 1) {
-    form.value.event_dates = [''];
-    return;
+const removeSlot = (index: number) => {
+  if (form.value.event_slots.length <= 1) {
+    form.value.event_slots = [{ datetime: '', location: '', note: '' }];
+  } else {
+    form.value.event_slots.splice(index, 1);
   }
-  form.value.event_dates.splice(index, 1);
 };
 
 const displayEventDates = (ev: EventDetail | null) => {
   if (!ev) return [] as string[];
+  if (Array.isArray(ev.event_slots) && ev.event_slots.length > 0) {
+    return ev.event_slots.map(s => {
+      const dt = parseLocalDate(s.datetime);
+      const str = dt ? dt.toLocaleString('ja-JP') : s.datetime;
+      return `${str} ${s.location || ''} ${s.note || ''}`.trim();
+    });
+  }
   const list = Array.isArray(ev.event_dates) && ev.event_dates.length > 0
     ? ev.event_dates
     : (ev.event_date ? [ev.event_date] : []);
@@ -282,7 +304,18 @@ const formatDateKey = (value: string | Date | null | undefined) => {
   if (!value) return '-';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '-';
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+  
+  if (event.value?.event_slots) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    // タイムゾーンの差異を考慮せず、単純に日時文字列で比較
+    const matchStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const slot = event.value.event_slots.find(s => s.datetime.startsWith(matchStr));
+    if (slot?.location) {
+      return `${dateStr} ${slot.location}`;
+    }
+  }
+  return dateStr;
 };
 
 const downloadCSV = () => {
@@ -386,13 +419,21 @@ onMounted(fetchDetail);
               <input v-model="form.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
             <div>
-              <label class="block text-xs text-gray-500 mb-1">開催日時（複数可）</label>
+              <label class="block text-xs text-gray-500 mb-1">開催日時・場所・備考</label>
               <div class="space-y-2">
-                <div v-for="(_, idx) in form.event_dates" :key="`edit-event-date-${idx}`" class="flex gap-2">
-                  <input v-model="form.event_dates[idx]" type="datetime-local" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                  <button type="button" class="px-3 py-2 border border-gray-300 rounded-lg text-xs hover:bg-gray-50" @click="removeFormEventDate(idx)">削除</button>
+                <div v-for="(slot, idx) in form.event_slots" :key="`edit-event-slot-${idx}`" class="flex flex-col sm:flex-row gap-2 pb-2 border-b border-gray-100 sm:border-0 items-end sm:items-center">
+                  <div class="flex-[2] w-full">
+                    <input v-model="slot.datetime" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  </div>
+                  <div class="flex-1 w-full">
+                    <input v-model="slot.location" type="text" placeholder="場所" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  </div>
+                  <div class="flex-1 w-full">
+                    <input v-model="slot.note" type="text" placeholder="備考" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  </div>
+                  <button type="button" class="px-3 py-2 border border-gray-300 rounded-lg text-xs hover:bg-gray-50 text-red-600 whitespace-nowrap" @click="removeSlot(idx)">削除</button>
                 </div>
-                <button type="button" class="px-3 py-2 border border-blue-200 text-blue-700 rounded-lg text-xs hover:bg-blue-50" @click="addFormEventDate">日程追加</button>
+                <button type="button" class="px-3 py-2 border border-blue-200 text-blue-700 rounded-lg text-xs hover:bg-blue-50" @click="addSlot">日程追加</button>
               </div>
             </div>
             <div>
