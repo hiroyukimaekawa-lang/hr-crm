@@ -619,17 +619,22 @@ const formatDateTime = (value?: string | null, event?: any) => {
   if (!value) return '-';
   const d = parseLocalDate(value);
   if (!d) return String(value) || '-';
-  const base = d.toLocaleString('ja-JP');
+  
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const timeStr = `${month}/${day} ${hours}:${minutes}`;
 
   if (event && Array.isArray(event.event_slots) && event.event_slots.length > 0) {
     const pad = (n: number) => String(n).padStart(2, '0');
     const matchStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     const slot = event.event_slots.find((s: any) => s.datetime && s.datetime.startsWith(matchStr));
     if (slot?.location) {
-      return `${base} ${slot.location}`;
+      return `${timeStr} ${slot.location}`;
     }
   }
-  return base;
+  return timeStr;
 };
 
 const parseLocalDate = (value?: string | Date | null) => {

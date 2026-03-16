@@ -118,6 +118,18 @@ const parseLocalDate = (value?: string) => {
   return new Date(yyyy, mm, dd, hh, mi, ss);
 };
 
+const formatEventSlot = (datetime?: string | null, location?: string | null) => {
+  if (!datetime) return '-';
+  const d = parseLocalDate(datetime);
+  if (!d) return datetime || '-';
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const base = `${month}/${day} ${hours}:${minutes}`;
+  return location ? `${base} ${location}` : base;
+};
+
 const toDateTimeLocalValue = (value?: string) => {
   if (!value) return '';
   const d = parseLocalDate(value);
@@ -221,11 +233,7 @@ const removeSlot = (index: number) => {
 const displayEventDates = (ev: EventDetail | null) => {
   if (!ev) return [] as string[];
   if (Array.isArray(ev.event_slots) && ev.event_slots.length > 0) {
-    return ev.event_slots.map(s => {
-      const dt = parseLocalDate(s.datetime);
-      const str = dt ? dt.toLocaleString('ja-JP') : s.datetime;
-      return `${str} ${s.location || ''} ${s.note || ''}`.trim();
-    });
+    return ev.event_slots.map(s => formatEventSlot(s.datetime, s.location));
   }
   const list = Array.isArray(ev.event_dates) && ev.event_dates.length > 0
     ? ev.event_dates
@@ -311,8 +319,8 @@ const formatDateKey = (value: string | Date | null | undefined) => {
     // タイムゾーンの差異を考慮せず、単純に日時文字列で比較
     const matchStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     const slot = event.value.event_slots.find(s => s.datetime.startsWith(matchStr));
-    if (slot?.location) {
-      return `${dateStr} ${slot.location}`;
+    if (slot) {
+      return formatEventSlot(slot.datetime, slot.location);
     }
   }
   return dateStr;
