@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import Layout from '../components/Layout.vue';
 import { api } from '../lib/api';
 
@@ -40,6 +41,7 @@ const kgiList   = ref<EventKgi[]>([]);
 const eventDetails = ref<EventDetail[]>([]);
 const loading   = ref(false);
 const activeTab = ref<'all' | number>('all');
+const route     = useRoute();
 
 /* ───────── データ取得 ───────── */
 const fetchData = async () => {
@@ -52,6 +54,12 @@ const fetchData = async () => {
     ]);
     kgiList.value      = Array.isArray(kgiRes.data) ? kgiRes.data : [];
     eventDetails.value = Array.isArray(evRes.data)  ? evRes.data  : [];
+    
+    // クエリパラメータから初期タブを設定
+    const queryId = route.query.eventId;
+    if (queryId) {
+      activeTab.value = Number(queryId);
+    }
   } finally {
     loading.value = false;
   }
@@ -441,95 +449,128 @@ const allDerived = computed(() => {
             </div>
           </div>
 
-          <!-- KPI逆算テーブル -->
+          <!-- KPI視覚的ファネル -->
           <div class="bg-white rounded-xl border border-gray-200 p-5">
-            <p class="text-sm font-bold text-gray-800 mb-4">KPI逆算 — 目標達成に必要な絶対数</p>
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead class="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500">ファネル段階</th>
-                    <th class="px-3 py-2 text-right text-xs font-semibold text-gray-500">目標数</th>
-                    <th class="px-3 py-2 text-right text-xs font-semibold text-blue-500">現在数</th>
-                    <th class="px-3 py-2 text-right text-xs font-semibold text-gray-500">割合</th>
-                    <th class="px-3 py-2 text-right text-xs font-semibold text-gray-500">デイリー必要</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                  <!-- 着座数 -->
-                  <tr class="hover:bg-blue-50">
-                    <td class="px-3 py-2.5 font-semibold text-blue-700">着座数</td>
-                    <td class="px-3 py-2.5 text-right font-bold text-blue-700">{{ derived.targetSeats }}名</td>
-                    <td class="px-3 py-2.5 text-right">
-                      <span class="font-bold" :class="derived.currentSeats >= derived.targetSeats ? 'text-green-600' : 'text-blue-500'">
-                        {{ derived.currentSeats }}名
+            <p class="text-sm font-bold text-gray-800 mb-8">KPIファネル進捗 — 目標達成へのフロー</p>
+            
+            <div class="max-w-xl mx-auto space-y-4">
+              <!-- ステップ描画用の関数を模倣したテンプレート -->
+              <template v-if="derived">
+                
+                <!-- 1. 設定数（流入数） -->
+                <div class="relative">
+                  <div class="bg-violet-50 border border-violet-200 rounded-xl p-4 shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-xs font-bold text-violet-700 uppercase">設定数（流入数）</span>
+                      <span class="text-xs text-violet-500">デイリー {{ derived.dailyInflow }}/日</span>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                      <span class="text-3xl font-black text-violet-900">{{ derived.targetInflow }}</span>
+                      <span class="text-sm text-violet-400 font-semibold">名（目標）</span>
+                    </div>
+                  </div>
+                  <!-- 矢印 & 割合 -->
+                  <div class="flex flex-col items-center py-2">
+                    <div class="w-px h-6 bg-gray-200"></div>
+                    <div class="text-[10px] font-bold text-gray-400 px-2 py-0.5 border border-gray-100 rounded bg-white -my-1 z-10">
+                      設定率 {{ derived.interviewToInflowRate }}%
+                    </div>
+                    <div class="w-px h-6 bg-gray-200"></div>
+                  </div>
+                </div>
+
+                <!-- 2. 面談数 -->
+                <div class="relative">
+                  <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-xs font-bold text-amber-700 uppercase">面談数</span>
+                      <span class="text-xs text-amber-500">デイリー {{ derived.dailyInterview }}/日</span>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                      <span class="text-3xl font-black text-amber-900">{{ derived.targetInterview }}</span>
+                      <span class="text-sm text-amber-400 font-semibold">名（目標）</span>
+                    </div>
+                  </div>
+                  <!-- 矢印 & 割合 -->
+                  <div class="flex flex-col items-center py-2">
+                    <div class="w-px h-6 bg-gray-200"></div>
+                    <div class="text-[10px] font-bold text-gray-400 px-2 py-0.5 border border-gray-100 rounded bg-white -my-1 z-10">
+                      面談化率 {{ derived.entryToInterviewRate }}%
+                    </div>
+                    <div class="w-px h-6 bg-gray-200"></div>
+                  </div>
+                </div>
+
+                <!-- 3. エントリー数 -->
+                <div class="relative">
+                  <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-xs font-bold text-indigo-700 uppercase">エントリー数</span>
+                      <span class="text-xs text-indigo-500">現{{ derived.currentEntry }}名</span>
+                    </div>
+                    <div class="flex items-baseline gap-2 mb-2">
+                      <span class="text-3xl font-black text-indigo-900">{{ derived.targetEntry }}</span>
+                      <span class="text-sm text-indigo-400 font-semibold">名（目標）</span>
+                    </div>
+                    <div class="h-2 bg-indigo-100 rounded-full overflow-hidden">
+                      <div class="h-full bg-indigo-600 rounded-full transition-all duration-700" :style="{ width: `${derived.entryPct}%` }"></div>
+                    </div>
+                    <div class="flex justify-between mt-1">
+                      <span class="text-[10px] font-bold text-indigo-400">{{ derived.entryPct }}% 達成</span>
+                      <span class="text-[10px] font-bold" :class="gapClass(derived.entryGap)">
+                        乖離 {{ derived.entryGap >= 0 ? '+' : '' }}{{ derived.entryGap }}
                       </span>
-                    </td>
-                    <td class="px-3 py-2.5 text-right text-gray-500">-</td>
-                    <td class="px-3 py-2.5 text-right font-bold" :class="gapClass(derived.dailySeat)">{{ derived.dailySeat }}/日</td>
-                  </tr>
-                  <!-- pos1: 着座↔エントリー間のカスタムステップ -->
-                  <tr v-for="(c, i) in derived.pos1Chain" :key="`p1-${i}`" class="hover:bg-orange-50">
-                    <td class="px-3 py-2 text-orange-700 pl-8 text-xs">└ {{ c.label }}</td>
-                    <td class="px-3 py-2 text-right font-semibold text-orange-700 text-xs">{{ c.target }}名</td>
-                    <td class="px-3 py-2 text-right text-gray-400 text-xs">-</td>
-                    <td class="px-3 py-2 text-right text-orange-500 text-xs">{{ c.rate }}%</td>
-                    <td class="px-3 py-2 text-right text-orange-600 font-semibold text-xs">{{ c.daily }}/日</td>
-                  </tr>
-                  <!-- エントリー数 -->
-                  <tr class="hover:bg-indigo-50">
-                    <td class="px-3 py-2.5 font-semibold text-indigo-700">エントリー数</td>
-                    <td class="px-3 py-2.5 text-right font-bold text-indigo-700">{{ derived.targetEntry }}名</td>
-                    <td class="px-3 py-2.5 text-right">
-                      <span class="font-bold" :class="derived.currentEntry >= derived.targetEntry ? 'text-green-600' : 'text-indigo-500'">
-                        {{ derived.currentEntry }}名
+                    </div>
+                  </div>
+                  <!-- 矢印 & 割合 -->
+                  <div class="flex flex-col items-center py-2">
+                    <div class="w-px h-6 bg-gray-200"></div>
+                    <div class="text-[10px] font-bold text-gray-400 px-2 py-0.5 border border-gray-100 rounded bg-white -my-1 z-10">
+                      着座率 {{ derived.seatToEntryRate }}%
+                    </div>
+                    <div class="w-px h-6 bg-gray-200"></div>
+                  </div>
+                </div>
+
+                <!-- 4. 着座数 (最終目標) -->
+                <div class="relative">
+                  <div class="bg-blue-600 border border-blue-700 rounded-xl p-5 shadow-md shadow-blue-100">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-xs font-bold text-blue-100 uppercase">着座数（最終目標）</span>
+                      <span class="text-xs text-blue-200 font-bold">現{{ derived.currentSeats }}名</span>
+                    </div>
+                    <div class="flex items-baseline gap-2 mb-3">
+                      <span class="text-4xl font-black text-white">{{ derived.targetSeats }}</span>
+                      <span class="text-sm text-blue-200 font-semibold">名（目標）</span>
+                    </div>
+                    <div class="h-3 bg-blue-800/50 rounded-full overflow-hidden">
+                      <div class="h-full bg-white rounded-full transition-all duration-700" :style="{ width: `${derived.seatPct}%` }"></div>
+                    </div>
+                    <div class="flex justify-between mt-2">
+                      <span class="text-xs font-bold text-blue-100">{{ derived.seatPct }}% 達成</span>
+                      <span class="text-xs font-bold text-white bg-blue-500/50 px-2 py-0.5 rounded">
+                        乖離 {{ derived.seatGap >= 0 ? '+' : '' }}{{ derived.seatGap }}
                       </span>
-                    </td>
-                    <td class="px-3 py-2.5 text-right text-gray-500">着座率 {{ derived.seatToEntryRate }}%</td>
-                    <td class="px-3 py-2.5 text-right font-bold" :class="gapClass(derived.dailyEntry)">{{ derived.dailyEntry }}/日</td>
-                  </tr>
-                  <!-- pos2: エントリー↔面談間のカスタムステップ -->
-                  <tr v-for="(c, i) in derived.pos2Chain" :key="`p2-${i}`" class="hover:bg-orange-50">
-                    <td class="px-3 py-2 text-orange-700 pl-8 text-xs">└ {{ c.label }}</td>
-                    <td class="px-3 py-2 text-right font-semibold text-orange-700 text-xs">{{ c.target }}名</td>
-                    <td class="px-3 py-2 text-right text-gray-400 text-xs">-</td>
-                    <td class="px-3 py-2 text-right text-orange-500 text-xs">{{ c.rate }}%</td>
-                    <td class="px-3 py-2 text-right text-orange-600 font-semibold text-xs">{{ c.daily }}/日</td>
-                  </tr>
-                  <!-- 面談数 -->
-                  <tr class="hover:bg-amber-50">
-                    <td class="px-3 py-2.5 font-semibold text-amber-700">面談数</td>
-                    <td class="px-3 py-2.5 text-right font-bold text-amber-700">{{ derived.targetInterview }}名</td>
-                    <td class="px-3 py-2.5 text-right text-gray-400">-</td>
-                    <td class="px-3 py-2.5 text-right text-gray-500">面談化率 {{ derived.entryToInterviewRate }}%</td>
-                    <td class="px-3 py-2.5 text-right font-bold text-amber-700">{{ derived.dailyInterview }}/日</td>
-                  </tr>
-                  <!-- pos3: 面談↔流入数間のカスタムステップ -->
-                  <tr v-for="(c, i) in derived.pos3Chain" :key="`p3-${i}`" class="hover:bg-orange-50">
-                    <td class="px-3 py-2 text-orange-700 pl-8 text-xs">└ {{ c.label }}</td>
-                    <td class="px-3 py-2 text-right font-semibold text-orange-700 text-xs">{{ c.target }}名</td>
-                    <td class="px-3 py-2 text-right text-gray-400 text-xs">-</td>
-                    <td class="px-3 py-2 text-right text-orange-500 text-xs">{{ c.rate }}%</td>
-                    <td class="px-3 py-2 text-right text-orange-600 font-semibold text-xs">{{ c.daily }}/日</td>
-                  </tr>
-                  <!-- 流入数 -->
-                  <tr class="hover:bg-violet-50">
-                    <td class="px-3 py-2.5 font-semibold text-violet-700">流入数（設定数）</td>
-                    <td class="px-3 py-2.5 text-right font-bold text-violet-700">{{ derived.targetInflow }}名</td>
-                    <td class="px-3 py-2.5 text-right text-gray-400">-</td>
-                    <td class="px-3 py-2.5 text-right text-gray-500">設定率 {{ derived.interviewToInflowRate }}%</td>
-                    <td class="px-3 py-2.5 text-right font-bold text-violet-700">{{ derived.dailyInflow }}/日</td>
-                  </tr>
-                  <!-- pos4: 流入数の後のカスタムステップ -->
-                  <tr v-for="(c, i) in derived.pos4Chain" :key="`p4-${i}`" class="hover:bg-orange-50">
-                    <td class="px-3 py-2 text-orange-700 pl-8 text-xs">└ {{ c.label }}</td>
-                    <td class="px-3 py-2 text-right font-semibold text-orange-700 text-xs">{{ c.target }}名</td>
-                    <td class="px-3 py-2 text-right text-gray-400 text-xs">-</td>
-                    <td class="px-3 py-2 text-right text-orange-500 text-xs">{{ c.rate }}%</td>
-                    <td class="px-3 py-2 text-right text-orange-600 font-semibold text-xs">{{ c.daily }}/日</td>
-                  </tr>
-                </tbody>
-              </table>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- カスタムステップ表示 (もしあれば、補足として下に表示するか、挿入するか) -->
+                <div v-if="derived.customDerived.length > 0" class="mt-10 pt-6 border-t border-gray-100">
+                  <p class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">追加の管理指標</p>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div v-for="(c, idx) in derived.customDerived" :key="`funnel-custom-${idx}`" class="bg-gray-50 border border-gray-100 rounded-lg p-3">
+                      <p class="text-[10px] font-bold text-gray-500 mb-1">{{ c.label }}</p>
+                      <div class="flex items-baseline gap-1">
+                        <span class="text-lg font-black text-gray-700">{{ c.target }}</span>
+                        <span class="text-[10px] text-gray-400">名</span>
+                      </div>
+                      <p class="text-[9px] text-gray-400 mt-1">割合 {{ c.rate }}% | デイリー {{ c.daily }}</p>
+                    </div>
+                  </div>
+                </div>
+
+              </template>
             </div>
           </div>
         </div>

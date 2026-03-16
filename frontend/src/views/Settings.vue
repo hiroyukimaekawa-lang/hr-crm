@@ -273,6 +273,24 @@ const addCustomStep = () => {
   customSteps.value.push({ label: '', rate: 50, position: 4 });
 };
 
+const applyTemplate = (type: 'simple' | 'extended') => {
+  if (type === 'simple') {
+    form.value.seat_to_entry_rate = '70';
+    form.value.entry_to_interview_rate = '60';
+    form.value.interview_to_inflow_rate = '50';
+    customSteps.value = [];
+  } else {
+    // Beyond Challenge (Extended)
+    form.value.seat_to_entry_rate = '70'; // エントリー -> 合格
+    form.value.entry_to_interview_rate = '60'; // 面談 -> エントリー
+    form.value.interview_to_inflow_rate = '50'; // 設定数 -> 面談
+    customSteps.value = [
+      { label: '面談②', rate: 70, position: 1 },
+      { label: '合格', rate: 80, position: 1 }
+    ];
+  }
+};
+
 const removeCustomStep = (index: number) => {
   customSteps.value.splice(index, 1);
 };
@@ -500,6 +518,26 @@ onMounted(async () => {
             <div>
               <label class="block text-sm text-gray-600 mb-1">面談から設定（流入）率（%）</label>
               <input v-model="form.interview_to_inflow_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+            </div>
+          </div>
+
+          <div class="mt-6 border-t border-gray-100 pt-4">
+            <p class="text-sm font-semibold text-gray-800 mb-3">テンプレートから設定</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <button
+                class="p-4 border border-gray-200 rounded-xl hover:bg-blue-50 hover:border-blue-300 transition-all text-left group"
+                @click="applyTemplate('simple')"
+              >
+                <p class="font-bold text-gray-900 group-hover:text-blue-700">ジョブハントHR team（シンプル版）</p>
+                <p class="text-xs text-gray-500 mt-1">面談 → エントリー → 着座 の基本フロー</p>
+              </button>
+              <button
+                class="p-4 border border-gray-200 rounded-xl hover:bg-blue-50 hover:border-blue-300 transition-all text-left group"
+                @click="applyTemplate('extended')"
+              >
+                <p class="font-bold text-gray-900 group-hover:text-blue-700">Beyond Challenge（拡張版）</p>
+                <p class="text-xs text-gray-500 mt-1">合格、面談② を含む詳細フロー</p>
+              </button>
             </div>
           </div>
 

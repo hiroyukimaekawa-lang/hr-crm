@@ -44,6 +44,18 @@ interface EventDetail {
   lp_url?: string;
 }
 
+interface EventKgi {
+  event_id: number;
+  event_title: string;
+  deadline: string | null;
+  days_remaining: number;
+  target_seats: number;
+  current_seats: number;
+  target_entry: number;
+  kpi_target_entry: number;
+  current_entry: number;
+}
+
 const route = useRoute();
 const router = useRouter();
 const eventId = route.params.id as string;
@@ -55,6 +67,8 @@ const isEditing = ref(false);
 const saveMessage = ref('');
 const sortField = ref<'status' | null>(null);
 const sortOrder = ref<'asc' | 'desc'>('asc');
+const kgiData = ref<EventKgi | null>(null);
+const kgiLoading = ref(false);
 
 const STATUS_ORDER: Record<string, number> = {
   A_ENTRY: 1, registered: 1,
@@ -131,6 +145,20 @@ const fetchDetail = async () => {
     target_sales: event.value?.target_sales ? String(event.value.target_sales) : '',
     current_sales: event.value?.current_sales ? String(event.value.current_sales) : ''
   };
+
+  // KPI進捗の取得
+  try {
+    kgiLoading.value = true;
+    const token = localStorage.getItem('token');
+    const kgiRes = await api.get('/api/events/kgi-progress', { headers: { Authorization: token } });
+    if (Array.isArray(kgiRes.data)) {
+      kgiData.value = kgiRes.data.find((k: any) => k.event_id === Number(eventId)) || null;
+    }
+  } catch (err) {
+    console.error('KGI fetch error', err);
+  } finally {
+    kgiLoading.value = false;
+  }
 };
 
 const updateStatus = async (studentEventId: number, status: string) => {
@@ -409,7 +437,62 @@ onMounted(fetchDetail);
           </div>
         </div>
 
-        <div class="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div class="lg:col-span-2 space-y-6">
+          <!-- KPIサマリーカード -->
+          <div v-if="kgiData" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div class="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+              <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">KPIサマリー</span>
+              <button @click="router.push({ path: '/kpi', query: { eventId: eventId } })" class="text-[10px] font-bold text-blue-600 hover:underline">
+                KPI詳細を見る &rarr;
+              </button>
+            </div>
+            <div class="p-4 sm:p-6 flex flex-col md:flex-row gap-6 items-center">
+              <!-- ミニファネル -->
+              <div class="flex items-center gap-1 sm:gap-2">
+                <div class="flex flex-col items-center">
+                  <div class="w-16 h-12 bg-indigo-50 border border-indigo-100 rounded flex flex-col items-center justify-center">
+                    <span class="text-[10px] text-indigo-400 font-bold">エントリー</span>
+                    <span class="text-sm font-black text-indigo-700">{{ kgiData.current_entry }}</span>
+                  </div>
+                </div>
+                <span class="text-gray-300 text-sm">&rarr;</span>
+                <div class="flex flex-col items-center">
+                  <div class="w-16 h-12 bg-blue-600 border border-blue-700 rounded flex flex-col items-center justify-center">
+                    <span class="text-[10px] text-blue-100 font-bold">着座</span>
+                    <span class="text-sm font-black text-white">{{ kgiData.current_seats }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 数値サマリー -->
+              <div class="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
+                <div class="text-center md:text-left">
+                  <p class="text-[10px] font-bold text-gray-400 mb-0.5">残日数</p>
+                  <p class="text-xl font-black text-gray-700">{{ Math.max(kgiData.days_remaining, 0) }}<span class="text-[10px] ml-0.5">日</span></p>
+                </div>
+                <div class="text-center md:text-left">
+                  <p class="text-[10px] font-bold text-gray-400 mb-0.5">エントリー / 目標</p>
+                  <p class="text-xl font-black text-indigo-700">
+                    {{ kgiData.current_entry }}<span class="text-sm text-gray-300 font-normal mx-1">/</span>{{ kgiData.kpi_target_entry }}
+                  </p>
+                </div>
+                <div class="text-center md:text-left">
+                  <p class="text-[10px] font-bold text-gray-400 mb-0.5">着座 / 目標</p>
+                  <p class="text-xl font-black text-blue-700">
+                    {{ kgiData.current_seats }}<span class="text-sm text-gray-300 font-normal mx-1">/</span>{{ kgiData.target_seats }}
+                  </p>
+                </div>
+                <div class="text-center md:text-left">
+                  <p class="text-[10px] font-bold text-gray-400 mb-0.5">エントリー乖離</p>
+                  <p class="text-xl font-black" :class="(kgiData.current_entry - kgiData.kpi_target_entry) >= 0 ? 'text-green-600' : 'text-red-500'">
+                    {{ (kgiData.current_entry - kgiData.kpi_target_entry) >= 0 ? '+' : '' }}{{ kgiData.current_entry - kgiData.kpi_target_entry }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
             <h2 class="text-lg font-bold text-gray-900">参加学生一覧</h2>
             <div class="flex items-center gap-3 w-full sm:w-auto">
