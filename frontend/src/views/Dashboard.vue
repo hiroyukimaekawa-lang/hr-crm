@@ -53,8 +53,10 @@ interface KgiProgress {
   kpi_interview_to_inflow_rate: number;
   kpi_custom_steps: Array<{ label: string; rate: number; position: number }>;
   current_entry: number;
+  remaining_entry: number;
   target_seats: number;
   current_seats: number;
+  daily_required_interview: number | null;
   daily_entry_gap: number;
 }
 
@@ -717,8 +719,8 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                 <th class="px-3 py-4 text-right text-xs font-bold text-blue-400 uppercase tracking-wider">現着座</th>
                 <th class="px-3 py-4 text-right text-xs font-bold text-indigo-600 uppercase tracking-wider">目標エントリー</th>
                 <th class="px-3 py-4 text-right text-xs font-bold text-indigo-400 uppercase tracking-wider">現エントリー</th>
-                <th class="px-3 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">乖離</th>
-                <th class="px-3 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">デイリー必要数</th>
+                <th class="px-3 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">残り必要エントリー数</th>
+                <th class="px-3 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">デイリー必要面談数</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -733,27 +735,27 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                   <td class="px-3 py-4 text-right whitespace-nowrap">
                     <span :class="row.days_remaining <= 0 ? 'text-slate-300' : 'font-black text-slate-700'">{{ row.deadline ? row.days_remaining : '-' }}</span>
                   </td>
-                  <td class="px-3 py-4 text-right text-blue-700 font-black">{{ row.target_seats || '-' }}</td>
-                  <td class="px-3 py-4 text-right text-blue-500 font-bold">{{ row.current_seats }}</td>
-                  <td class="px-3 py-4 text-right text-indigo-700 font-black">{{ row.target_entry || row.kpi_target_entry || '-' }}</td>
-                  <td class="px-3 py-4 text-right text-indigo-500 font-black">{{ row.current_entry }}</td>
+                  <td class="px-3 py-4 text-right text-indigo-700/60 font-bold italic">{{ row.target_seats || '-' }}</td>
+                  <td class="px-3 py-4 text-right text-indigo-400/60 font-bold italic">{{ row.current_seats }}</td>
+                  <td class="px-3 py-4 text-right text-indigo-700 font-black">{{ row.kpi_target_entry || '-' }}</td>
+                  <td class="px-3 py-4 text-right text-indigo-400 font-black">{{ row.current_entry }}</td>
                   <td class="px-3 py-4 text-right font-black whitespace-nowrap" :class="{
-                    'text-emerald-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) >= 0,
-                    'text-amber-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) < 0 && (row.current_entry - (row.kpi_target_entry || row.target_entry)) >= -3,
-                    'text-rose-600': (row.current_entry - (row.kpi_target_entry || row.target_entry)) < -3
+                    'text-emerald-600': row.remaining_entry === 0,
+                    'text-amber-600': row.remaining_entry > 0 && row.remaining_entry <= 3,
+                    'text-rose-600': row.remaining_entry > 3
                   }">
-                    {{ (() => { const g = row.current_entry - (row.kpi_target_entry || row.target_entry); return (g >= 0 ? '+' : '') + g; })() }}
+                    {{ row.remaining_entry === 0 ? '達成' : row.remaining_entry }}
                   </td>
                   <td class="px-3 py-4 text-right whitespace-nowrap">
                     <span
                       class="font-black"
                       :class="{
-                        'text-slate-300': row.days_remaining <= 0,
-                        'text-emerald-600': row.days_remaining > 0 && row.daily_entry_gap >= 0,
-                        'text-amber-600': row.days_remaining > 0 && row.daily_entry_gap < 0 && row.daily_entry_gap >= -3,
-                        'text-rose-600': row.days_remaining > 0 && row.daily_entry_gap < -3
+                        'text-slate-300': row.daily_required_interview === null,
+                        'text-emerald-600': row.daily_required_interview !== null && row.daily_required_interview <= 0,
+                        'text-amber-600': row.daily_required_interview !== null && row.daily_required_interview > 0 && row.daily_required_interview <= 3,
+                        'text-rose-600': row.daily_required_interview !== null && row.daily_required_interview > 3
                       }"
-                    >{{ row.days_remaining <= 0 ? '締切済' : row.daily_entry_gap }}</span>
+                    >{{ row.daily_required_interview === null ? '締切済' : row.daily_required_interview }}</span>
                   </td>
                 </tr>
               </template>
@@ -945,7 +947,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
           </div>
         </div>
         <div v-if="yomiLoading" class="text-center text-gray-400 py-10">読み込み中...</div>
-        <div v-else class="space-y-4">
+        <div v-else class="space-y-2">
           <div v-for="section in yomiSections" :key="section.key" class="border border-gray-200 rounded-lg overflow-hidden">
             <div class="px-3 py-2 text-sm font-semibold border-b border-gray-200" :class="section.accent">
               {{ section.label }}（{{ yomiCounts[section.key] }}名）
@@ -963,20 +965,20 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
               }"
             >
               <div class="grid grid-cols-1 gap-2">
-                <div
-                  v-for="p in yomiGroups[section.key]"
-                  :key="`${section.key}-${p.student_event_id || p.student_id}`"
-                  :draggable="true"
-                  @dragstart="onDragStart($event, p)"
-                  @dragend="onDragEnd"
-                  class="p-3 bg-white border border-gray-200 rounded-lg cursor-grab active:cursor-grabbing select-none"
-                  :class="{ 'opacity-40': draggingParticipant?.student_event_id === p.student_event_id }"
-                >
-                  <p class="font-medium text-sm text-gray-900">{{ p.name }}</p>
-                  <p class="text-xs text-gray-500">{{ p.university || '-' }}</p>
-                  <p class="text-xs text-gray-400">担当: {{ p.staff_name || '-' }}</p>
-                  <p class="text-xs font-bold text-gray-700">参加日程: {{ formatDateKey(p.selected_event_date) }}</p>
-                </div>
+                  <div
+                    v-for="p in yomiGroups[section.key]"
+                    :key="`${section.key}-${p.student_event_id || p.student_id}`"
+                    :draggable="true"
+                    @dragstart="onDragStart($event, p)"
+                    @dragend="onDragEnd"
+                    class="flex items-center gap-4 px-4 py-3 bg-white border border-gray-200 rounded-lg cursor-grab active:cursor-grabbing select-none w-full"
+                    :class="{ 'opacity-40': draggingParticipant?.student_event_id === p.student_event_id }"
+                  >
+                    <span class="text-sm font-bold text-gray-900 w-28 shrink-0 truncate">{{ p.name }}</span>
+                    <span class="text-xs text-gray-500 w-24 shrink-0 truncate">{{ p.university || '-' }}</span>
+                    <span class="text-xs text-gray-400 w-16 shrink-0 truncate">{{ p.staff_name || '-' }}</span>
+                    <span class="text-xs font-medium text-gray-700 w-16 shrink-0">{{ formatDateKey(p.selected_event_date) || '-' }}</span>
+                  </div>
                 <div v-if="yomiGroups[section.key].length === 0" class="py-6 text-center text-gray-400 text-xs">
                   該当学生はいません。
                 </div>

@@ -196,6 +196,11 @@ const fetchDetail = async () => {
   resetBasicDraft();
 };
 
+const toLocalDateTimeString = (value) => {
+  if (!value) return '';
+  return String(value).replace('Z', '').replace(/\+09:?00$/, '').substring(0, 16);
+};
+
 const toDateTimeLocalHour = (value?: string | null) => {
   if (!value) return '';
   const raw = String(value).trim();
@@ -761,7 +766,8 @@ watch(() => proposalForm.value.event_id, () => {
     proposalForm.value.selected_event_date = '';
     return;
   }
-  if (!proposalForm.value.selected_event_date || !dates.includes(proposalForm.value.selected_event_date)) {
+  const normalized = toLocalDateTimeString(proposalForm.value.selected_event_date);
+  if (!proposalForm.value.selected_event_date || !dates.some(d => toLocalDateTimeString(d) === normalized)) {
     proposalForm.value.selected_event_date = dates[0] || '';
   }
 });
@@ -796,7 +802,8 @@ watch(selectedEventId, () => {
     selectedEventDate.value = '';
     return;
   }
-  if (!selectedEventDate.value || !list.includes(selectedEventDate.value)) {
+  const normalized = toLocalDateTimeString(selectedEventDate.value);
+  if (!selectedEventDate.value || !list.some(d => toLocalDateTimeString(d) === normalized)) {
     selectedEventDate.value = list[0] || '';
   }
 });

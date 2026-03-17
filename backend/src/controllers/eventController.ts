@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
+import { normalizeToHour } from './studentController';
 
 let eventDatesTableReady = false;
 let eventDatesTablePromise: Promise<void> | null = null;
@@ -26,6 +27,10 @@ const ensureEventDatesTable = async () => {
             await pool.query(`
                 ALTER TABLE events
                 ADD COLUMN IF NOT EXISTS kpi_interview_to_inflow_rate NUMERIC(5,2) DEFAULT 50
+            `);
+            await pool.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS kpi_inflow_to_reservation_rate NUMERIC(5,2) DEFAULT 50
             `);
             await pool.query(`
                 ALTER TABLE events
@@ -194,7 +199,8 @@ export const createEvent = async (req: Request, res: Response) => {
     const {
         title, description, event_date, event_dates, location, lp_url,
         capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline,
-        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps,
+        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate,
+        kpi_inflow_to_reservation_rate, kpi_custom_steps,
         event_slots
     } = req.body;
     try {
@@ -229,6 +235,7 @@ export const createEvent = async (req: Request, res: Response) => {
         push('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate ?? 70);
         push('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate ?? 60);
         push('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate ?? 50);
+        push('kpi_inflow_to_reservation_rate', kpi_inflow_to_reservation_rate ?? 50);
         push('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
         push('event_slots', Array.isArray(event_slots) ? JSON.stringify(event_slots) : '[]');
 
@@ -258,7 +265,8 @@ export const updateEvent = async (req: Request, res: Response) => {
     const {
         title, description, event_date, event_dates, location, lp_url,
         capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline,
-        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps,
+        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate,
+        kpi_inflow_to_reservation_rate, kpi_custom_steps,
         yomi_statuses, event_slots
     } = req.body;
     try {
@@ -293,6 +301,7 @@ export const updateEvent = async (req: Request, res: Response) => {
         pushSet('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate ?? 70);
         pushSet('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate ?? 60);
         pushSet('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate ?? 50);
+        pushSet('kpi_inflow_to_reservation_rate', kpi_inflow_to_reservation_rate ?? 50);
         pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
         if (yomi_statuses !== undefined) {
             values.push(JSON.stringify(yomi_statuses));
@@ -348,7 +357,7 @@ export const getEventDetail = async (req: Request, res: Response) => {
                 se.student_id,
                 se.status,
                 se.created_at,
-                to_char(se.selected_event_date AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
+                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
                 s.name,
                 s.university,
                 s.email,
@@ -385,7 +394,7 @@ export const updateParticipantStatus = async (req: Request, res: Response) => {
                  selected_event_date = COALESCE($2, selected_event_date)
              WHERE id = $3 AND event_id = $4
              RETURNING *`,
-            [status, selected_event_date || null, studentId, id]
+            [status, normalizeToHour(selected_event_date) || null, studentId, id]
         );
         res.json(result.rows[0]);
     } catch (err: any) {
@@ -416,7 +425,7 @@ export const getKgiProgress = async (req: Request, res: Response) => {
         const now = new Date();
         const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
         const todayStr = jstNow.toISOString().slice(0, 10);
-        const todayDate = new Date(todayStr + 'T00:00:00+09:00');
+        const todayDate = new Date(todayStr + 'T00:00:00');
 
         const eventsRes = await pool.query(`
             SELECT
@@ -462,9 +471,6 @@ export const getKgiProgress = async (req: Request, res: Response) => {
             const currentEntry = (breakdown['A_ENTRY'] || 0) + (breakdown['registered'] || 0);
             const currentSeats = breakdown['attended'] || 0;
             const targetSeats = Number(e.target_seats || 0);
-            const capacityEntry = Number(e.capacity_entry || 0);
-            const kpiRate = Number(e.kpi_seat_to_entry_rate || 70);
-            const kpiEntryToInterview = Number(e.kpi_entry_to_interview_rate || 60);
             const kpiInterviewToInflow = Number(e.kpi_interview_to_inflow_rate || 50);
 
             // カスタムステップをパース
@@ -482,17 +488,18 @@ export const getKgiProgress = async (req: Request, res: Response) => {
                 }
             } catch { customSteps = []; }
 
-            // KPI連動: 目標着座を着座率(%)で割り、必要エントリー数を逆算
-            const kpiTargetEntry = targetSeats > 0 && kpiRate > 0
-                ? Math.ceil(targetSeats / (kpiRate / 100))
-                : 0;
+            // ① 目標エントリー数：常にKPI逆算値を使用
+            const kpiRate = Number(e.kpi_seat_to_entry_rate || 70);
+            const targetEntry = targetSeats > 0 ? Math.round(targetSeats / (kpiRate / 100)) : 0;
 
-            // 目標エントリー: capacityが設定されていればそれを使用、なければKPI逆算値
-            const targetEntry = capacityEntry > 0 ? capacityEntry : kpiTargetEntry;
+            // ② 残り必要エントリー数
+            const remainingEntry = Math.max(targetEntry - currentEntry, 0);
 
+            // ③ デイリー必要面談数
+            const kpiEntryToInterview = Number(e.kpi_entry_to_interview_rate || 60);
+            
             let daysRemaining = 0;
             let deadlineStr: string | null = null;
-            // entry_deadlineがない場合はevent_datesの最終日をdeadlineとして使用
             const effectiveDeadline = e.deadline || e.last_event_date;
             if (effectiveDeadline) {
                 const deadlineDate = new Date(effectiveDeadline);
@@ -501,12 +508,9 @@ export const getKgiProgress = async (req: Request, res: Response) => {
                 daysRemaining = Math.floor(diffMs / 86400000);
             }
 
-            // デイリー必要エントリー数
-            let dailyEntryGap = 0;
-            if (daysRemaining > 0) {
-                const effectiveTarget = kpiTargetEntry > 0 ? kpiTargetEntry : targetEntry;
-                dailyEntryGap = Math.round(((effectiveTarget - currentEntry) / daysRemaining) * 10) / 10;
-            }
+            const dailyRequiredInterview = daysRemaining > 0
+                ? Math.round((remainingEntry / (kpiEntryToInterview / 100) / daysRemaining) * 10) / 10
+                : null; // 締切済みはnull
 
             return {
                 event_id: e.id,
@@ -514,15 +518,18 @@ export const getKgiProgress = async (req: Request, res: Response) => {
                 deadline: deadlineStr,
                 days_remaining: daysRemaining,
                 target_entry: targetEntry,
-                kpi_target_entry: kpiTargetEntry,
+                kpi_target_entry: targetEntry,        // 目標エントリー（KPI逆算値）
+                remaining_entry: remainingEntry,      // 残り必要エントリー数
+                daily_required_interview: dailyRequiredInterview, // デイリー必要面談数
                 kpi_rate: kpiRate,
                 kpi_entry_to_interview_rate: kpiEntryToInterview,
                 kpi_interview_to_inflow_rate: kpiInterviewToInflow,
+                kpi_inflow_to_reservation_rate: Number(e.kpi_inflow_to_reservation_rate || 50),
                 kpi_custom_steps: customSteps,
                 current_entry: currentEntry,
                 target_seats: targetSeats,
                 current_seats: currentSeats,
-                daily_entry_gap: dailyEntryGap,
+                daily_entry_gap: dailyRequiredInterview || 0, // 互換性のため
                 status_breakdown: breakdown
             };
         });

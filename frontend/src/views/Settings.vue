@@ -22,6 +22,7 @@ interface EventItem {
   kpi_seat_to_entry_rate?: number | null;
   kpi_entry_to_interview_rate?: number | null;
   kpi_interview_to_inflow_rate?: number | null;
+  kpi_inflow_to_reservation_rate?: number | null;
   kpi_custom_steps?: string | null;
   yomi_statuses?: string | string[] | null;
 }
@@ -54,7 +55,8 @@ const form = ref({
   target_seats: '',
   seat_to_entry_rate: '70',
   entry_to_interview_rate: '60',
-  interview_to_inflow_rate: '50'
+  interview_to_inflow_rate: '50',
+  inflow_to_reservation_rate: '50'
 });
 const customSteps = ref<KpiCustomStep[]>([]);
 
@@ -163,6 +165,7 @@ const derived = computed(() => {
   const seatToEntry = toRate(form.value.seat_to_entry_rate) / 100;
   const entryToInterview = toRate(form.value.entry_to_interview_rate) / 100;
   const interviewToInflow = toRate(form.value.interview_to_inflow_rate) / 100;
+  const inflowToReservation = toRate(form.value.inflow_to_reservation_rate) / 100;
 
   // カスタムステップを挿入位置でグループ化
   const customByPos: Record<number, KpiCustomStep[]> = { 1: [], 2: [], 3: [], 4: [] };
@@ -243,6 +246,7 @@ const loadEventToForm = (event: EventItem | null) => {
   form.value.seat_to_entry_rate = String(Number(event.kpi_seat_to_entry_rate ?? 70));
   form.value.entry_to_interview_rate = String(Number(event.kpi_entry_to_interview_rate ?? 60));
   form.value.interview_to_inflow_rate = String(Number(event.kpi_interview_to_inflow_rate ?? 50));
+  form.value.inflow_to_reservation_rate = String(Number(event.kpi_inflow_to_reservation_rate ?? 50));
   customSteps.value = parseCustomSteps(event.kpi_custom_steps);
 };
 
@@ -278,6 +282,7 @@ const applyTemplate = (type: 'simple' | 'extended') => {
     form.value.seat_to_entry_rate = '70';
     form.value.entry_to_interview_rate = '60';
     form.value.interview_to_inflow_rate = '50';
+    form.value.inflow_to_reservation_rate = '50';
     customSteps.value = [];
   } else {
     // Beyond Challenge (Extended)
@@ -306,6 +311,7 @@ const saveKpi = async () => {
       kpi_seat_to_entry_rate: toRate(form.value.seat_to_entry_rate),
       kpi_entry_to_interview_rate: toRate(form.value.entry_to_interview_rate),
       kpi_interview_to_inflow_rate: toRate(form.value.interview_to_inflow_rate),
+      kpi_inflow_to_reservation_rate: toRate(form.value.inflow_to_reservation_rate),
       kpi_custom_steps: customSteps.value
         .filter((x) => String(x.label || '').trim())
         .map((x) => ({ label: String(x.label).trim(), rate: toRate(x.rate), position: Number(x.position || 4) }))
@@ -508,16 +514,20 @@ onMounted(async () => {
               <input v-model="form.target_seats" type="number" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
             <div>
-              <label class="block text-sm text-gray-600 mb-1">着座からのエントリー数割（%）</label>
+              <label class="block text-sm text-gray-600 mb-1">エントリー→イベント出席率（%）</label>
               <input v-model="form.seat_to_entry_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
             <div>
-              <label class="block text-sm text-gray-600 mb-1">エントリーから面談化率（%）</label>
+              <label class="block text-sm text-gray-600 mb-1">面談→エントリー率（%）</label>
               <input v-model="form.entry_to_interview_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
             <div>
-              <label class="block text-sm text-gray-600 mb-1">面談から設定（流入）率（%）</label>
+              <label class="block text-sm text-gray-600 mb-1">面談予約→面談出席率（%）</label>
               <input v-model="form.interview_to_inflow_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+            </div>
+            <div>
+              <label class="block text-sm text-gray-600 mb-1">流入→面談予約率（%）</label>
+              <input v-model="form.inflow_to_reservation_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
           </div>
 

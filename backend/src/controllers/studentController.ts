@@ -386,7 +386,7 @@ const normalizeToHour = (value: any): string | null => {
 
     // 日付のみ (YYYY-MM-DD)
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-        return `${raw} 00:00:00+09`;
+        return `${raw} 00:00:00`;
     }
 
     // YYYY-MM-DDTHH:mm または YYYY-MM-DD HH:mm 形式（フロントのdatetime-local）
@@ -395,7 +395,8 @@ const normalizeToHour = (value: any): string | null => {
     if (directMatch) {
         const datePart = directMatch[1];
         const hourPart = directMatch[2];
-        return `${datePart} ${hourPart}:00:00+09`;
+        const minutePart = directMatch[3] || '00';
+        return `${datePart} ${hourPart}:${minutePart}:00`;
     }
 
     // ISO文字列（末尾にZまたはタイムゾーンあり）→ JSTに変換
@@ -408,7 +409,9 @@ const normalizeToHour = (value: any): string | null => {
     const mm = String(jstDate.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(jstDate.getUTCDate()).padStart(2, '0');
     const hh = String(jstDate.getUTCHours()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd} ${hh}:00:00+09`;
+    const min = String(jstDate.getUTCMinutes()).padStart(2, '0');
+    const sec = String(jstDate.getUTCSeconds()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${sec}`;
 };
 
 const normalizeReferralStatus = (value: any) => {
@@ -669,7 +672,7 @@ export const getStudentDetail = async (req: Request, res: Response) => {
                 se.id as student_event_id,
                 se.status as participation_status,
                 se.created_at as participation_created_at,
-                to_char(se.selected_event_date AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
+                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
             FROM events e
             JOIN student_events se ON e.id = se.event_id
             LEFT JOIN LATERAL (
