@@ -380,7 +380,7 @@ const normalizeProgressStage = (value: any) => {
     return '面談調整中';
 };
 
-const normalizeToHour = (value: any): string | null => {
+export const normalizeToHour = (value: any): string | null => {
     const raw = normalizeNullableText(value);
     if (!raw) return null;
 
