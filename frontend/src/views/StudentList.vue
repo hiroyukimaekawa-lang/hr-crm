@@ -178,8 +178,6 @@ const newStudent = ref({
   interview_reason: '',
   staff_id: '',
   applied_at: '',
-  meeting_decided_date: '',
-  first_interview_date: '',
   prefecture: '',
   academic_track: '',
   graduation_year: ''
@@ -461,8 +459,6 @@ const createStudent = async () => {
       faculty: newStudent.value.faculty || null,
       interview_reason: newStudent.value.interview_reason || null,
       applied_at: normalizeHourDateTime(newStudent.value.applied_at),
-      meeting_decided_date: newStudent.value.meeting_decided_date || null,
-      first_interview_date: newStudent.value.first_interview_date || null,
       prefecture: newStudent.value.prefecture || null,
       academic_track: newStudent.value.academic_track || null,
       graduation_year: newStudent.value.graduation_year ? Number(newStudent.value.graduation_year) : null,
@@ -478,8 +474,6 @@ const createStudent = async () => {
       interview_reason: '',
       staff_id: '',
       applied_at: '',
-      meeting_decided_date: '',
-      first_interview_date: '',
       prefecture: '',
       academic_track: '',
       graduation_year: ''
@@ -1458,28 +1452,6 @@ watch(filteredStudents, () => {
                 <option v-for="h in hourOptions" :key="`new-applied-hour-${h}`" :value="h">{{ h }}:00</option>
               </select>
             </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">面談決定日（時間単位）</label>
-            <div class="grid grid-cols-12 gap-2">
-              <input
-                :value="getDatePart(newStudent.meeting_decided_date)"
-                type="date"
-                class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                @input="newStudent.meeting_decided_date = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(newStudent.meeting_decided_date))"
-              >
-              <select
-                :value="getHourPart(newStudent.meeting_decided_date)"
-                class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                @change="newStudent.meeting_decided_date = mergeDateHour(getDatePart(newStudent.meeting_decided_date), ($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="h in hourOptions" :key="`new-meeting-hour-${h}`" :value="h">{{ h }}:00</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">初回面談日</label>
-            <input v-model="newStudent.first_interview_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">所在地（都道府県）</label>
