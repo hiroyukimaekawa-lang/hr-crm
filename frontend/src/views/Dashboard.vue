@@ -975,9 +975,9 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                     :class="{ 'opacity-40': draggingParticipant?.student_event_id === p.student_event_id }"
                   >
                     <span class="text-sm font-bold text-gray-900 w-28 shrink-0 truncate">{{ p.name }}</span>
-                    <span class="text-xs text-gray-500 w-24 shrink-0 truncate">{{ p.university || '-' }}</span>
-                    <span class="text-xs text-gray-400 w-16 shrink-0 truncate">{{ p.staff_name || '-' }}</span>
-                    <span class="text-xs font-medium text-gray-700 w-16 shrink-0">{{ formatDateKey(p.selected_event_date) || '-' }}</span>
+                    <span class="text-xs text-gray-700 w-24 shrink-0 truncate">{{ p.university || '-' }}</span>
+                    <span class="text-xs text-gray-700 w-16 shrink-0 truncate">{{ p.staff_name || '-' }}</span>
+                    <span class="text-xs font-medium text-gray-900 w-16 shrink-0">{{ formatDateKey(p.selected_event_date) || '-' }}</span>
                   </div>
                 <div v-if="yomiGroups[section.key].length === 0" class="py-6 text-center text-gray-400 text-xs">
                   該当学生はいません。
@@ -1067,8 +1067,8 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                   <tr v-for="p in filteredMonthlyParticipants" :key="`mo-part-${p.student_event_id || p.student_id}`" class="hover:bg-gray-50">
                     <td class="px-3 py-2.5 text-gray-900 text-xs truncate max-w-[200px]" :title="p.event_title">{{ p.event_title }}</td>
                     <td class="px-3 py-2.5 font-bold text-gray-900">{{ p.name }}</td>
-                    <td class="px-3 py-2.5 text-gray-600 text-xs">{{ p.university || '-' }}</td>
-                    <td class="px-3 py-2.5 text-gray-600 text-xs">{{ p.staff_name || '-' }}</td>
+                    <td class="px-3 py-2.5 text-gray-700 text-xs">{{ p.university || '-' }}</td>
+                    <td class="px-3 py-2.5 text-gray-700 text-xs">{{ p.staff_name || '-' }}</td>
                     <td class="px-3 py-2.5 text-gray-600 font-medium whitespace-nowrap">{{ formatDateKey(p.created_at) }}</td>
                     <td class="px-3 py-2.5 text-gray-900 font-bold whitespace-nowrap">{{ formatDateKey(p.selected_event_date || p.single_event_date) }}</td>
                     <td class="px-3 py-2.5 text-center whitespace-nowrap">
