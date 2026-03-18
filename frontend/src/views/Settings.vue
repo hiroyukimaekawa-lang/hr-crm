@@ -25,6 +25,11 @@ interface EventItem {
   kpi_inflow_to_reservation_rate?: number | null;
   kpi_custom_steps?: string | null;
   yomi_statuses?: string | string[] | null;
+  entry_deadline?: string | null;
+  capacity?: number | null;
+  unit_price?: number | null;
+  target_sales?: number | null;
+  current_sales?: number | null;
 }
 
 interface KpiCustomStep {
@@ -56,7 +61,12 @@ const form = ref({
   seat_to_entry_rate: '70',
   entry_to_interview_rate: '60',
   interview_to_inflow_rate: '50',
-  inflow_to_reservation_rate: '50'
+  inflow_to_reservation_rate: '50',
+  entry_deadline: '',
+  capacity: '',
+  unit_price: '',
+  target_sales: '',
+  current_sales: ''
 });
 const customSteps = ref<KpiCustomStep[]>([]);
 
@@ -160,6 +170,12 @@ const POSITION_OPTIONS = [
   { value: 4, label: '流入数の後' }
 ];
 
+const autoTargetSales = computed(() => {
+  const seats = Number(form.value.target_seats || 0);
+  const price = Number(form.value.unit_price || 0);
+  return seats > 0 && price > 0 ? seats * price : null;
+});
+
 const derived = computed(() => {
   const seat = Math.max(0, Number(form.value.target_seats || 0));
   const seatToEntry = toRate(form.value.seat_to_entry_rate) / 100;
@@ -247,6 +263,11 @@ const loadEventToForm = (event: EventItem | null) => {
   form.value.entry_to_interview_rate = String(Number(event.kpi_entry_to_interview_rate ?? 60));
   form.value.interview_to_inflow_rate = String(Number(event.kpi_interview_to_inflow_rate ?? 50));
   form.value.inflow_to_reservation_rate = String(Number(event.kpi_inflow_to_reservation_rate ?? 50));
+  form.value.entry_deadline = event.entry_deadline ? event.entry_deadline.slice(0, 10) : '';
+  form.value.capacity = event.capacity ? String(event.capacity) : '';
+  form.value.unit_price = event.unit_price ? String(event.unit_price) : '';
+  form.value.target_sales = event.target_sales ? String(event.target_sales) : '';
+  form.value.current_sales = event.current_sales ? String(event.current_sales) : '';
   customSteps.value = parseCustomSteps(event.kpi_custom_steps);
 };
 
@@ -269,7 +290,20 @@ const fetchEvents = async () => {
 };
 
 const onSelectEvent = () => {
-  loadEventToForm(selectedEvent.value);
+  const event = selectedEvent.value;
+  if (event) {
+    form.value.target_seats = event.target_seats ? String(event.target_seats) : '';
+    form.value.seat_to_entry_rate = String(Number(event.kpi_seat_to_entry_rate ?? 70));
+    form.value.entry_to_interview_rate = String(Number(event.kpi_entry_to_interview_rate ?? 60));
+    form.value.interview_to_inflow_rate = String(Number(event.kpi_interview_to_inflow_rate ?? 50));
+    form.value.inflow_to_reservation_rate = String(Number(event.kpi_inflow_to_reservation_rate ?? 50));
+    form.value.entry_deadline = event.entry_deadline ? event.entry_deadline.slice(0, 10) : '';
+    form.value.capacity = event.capacity ? String(event.capacity) : '';
+    form.value.unit_price = event.unit_price ? String(event.unit_price) : '';
+    form.value.target_sales = event.target_sales ? String(event.target_sales) : '';
+    form.value.current_sales = event.current_sales ? String(event.current_sales) : '';
+    customSteps.value = parseCustomSteps(event.kpi_custom_steps);
+  }
   saveMessage.value = '';
 };
 
@@ -312,6 +346,11 @@ const saveKpi = async () => {
       kpi_entry_to_interview_rate: toRate(form.value.entry_to_interview_rate),
       kpi_interview_to_inflow_rate: toRate(form.value.interview_to_inflow_rate),
       kpi_inflow_to_reservation_rate: toRate(form.value.inflow_to_reservation_rate),
+      entry_deadline: form.value.entry_deadline || null,
+      capacity: form.value.capacity ? Number(form.value.capacity) : null,
+      unit_price: form.value.unit_price ? Number(form.value.unit_price) : null,
+      target_sales: form.value.target_sales ? Number(form.value.target_sales) : autoTargetSales.value,
+      current_sales: form.value.current_sales ? Number(form.value.current_sales) : null,
       kpi_custom_steps: customSteps.value
         .filter((x) => String(x.label || '').trim())
         .map((x) => ({ label: String(x.label).trim(), rate: toRate(x.rate), position: Number(x.position || 4) }))
@@ -502,6 +541,99 @@ onMounted(async () => {
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-1">イベントKPI</h2>
           <p class="text-sm text-gray-500 mb-4">目標着座数から逆算して、必要なエントリー/面談/流入数を自動計算します。</p>
+          
+          <!-- ── 売上・目標設定セクション ── -->
+          <div class="space-y-4 mb-6 pb-6 border-b border-gray-200">
+            <h3 class="text-sm font-bold text-gray-700">売上・目標設定</h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- エントリー期日 -->
+              <div>
+                <label class="text-xs font-semibold text-gray-600 block mb-1">
+                  エントリー期日
+                </label>
+                <input
+                  v-model="form.entry_deadline"
+                  type="date"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+
+              <!-- エントリー目標人数 -->
+              <div>
+                <label class="text-xs font-semibold text-gray-600 block mb-1">
+                  エントリー目標人数
+                </label>
+                <input
+                  v-model="form.capacity"
+                  type="number"
+                  min="0"
+                  placeholder="例: 21"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+
+              <!-- 着座目標人数（既存） -->
+              <div>
+                <label class="text-xs font-semibold text-gray-600 block mb-1">
+                  着座目標人数
+                </label>
+                <input
+                  v-model="form.target_seats"
+                  type="number"
+                  min="0"
+                  placeholder="例: 5"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+
+              <!-- 単価 -->
+              <div>
+                <label class="text-xs font-semibold text-gray-600 block mb-1">
+                  単価（円）
+                </label>
+                <input
+                  v-model="form.unit_price"
+                  type="number"
+                  min="0"
+                  placeholder="例: 19000"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+
+              <!-- 目標売上（自動計算 or 手動） -->
+              <div>
+                <label class="text-xs font-semibold text-gray-600 block mb-1">
+                  目標売上（円）
+                  <span v-if="autoTargetSales" class="text-xs text-blue-500 ml-1">
+                    ※ 単価 × 着座目標 = {{ autoTargetSales.toLocaleString() }}円 で自動計算
+                  </span>
+                </label>
+                <input
+                  v-model="form.target_sales"
+                  type="number"
+                  min="0"
+                  :placeholder="autoTargetSales ? String(autoTargetSales) : '例: 95000'"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+
+              <!-- 実績売上 -->
+              <div>
+                <label class="text-xs font-semibold text-gray-600 block mb-1">
+                  実績売上（円）
+                </label>
+                <input
+                  v-model="form.current_sales"
+                  type="number"
+                  min="0"
+                  placeholder="例: 38000"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm text-gray-600 mb-1">対象イベント</label>
@@ -510,8 +642,8 @@ onMounted(async () => {
               </select>
             </div>
             <div>
-              <label class="block text-sm text-gray-600 mb-1">目標着座数</label>
-              <input v-model="form.target_seats" type="number" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+              <!-- 目標着座数は売上設定セクションに移動したが、互換性のため残すか、削除するか。
+                   指示書ではUIの構成が変更されているので、ここからは削除する。 -->
             </div>
             <div>
               <label class="block text-sm text-gray-600 mb-1">エントリー→イベント出席率（%）</label>

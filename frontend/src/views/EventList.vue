@@ -19,6 +19,7 @@ interface EventItem {
   description?: string;
   event_date?: string;
   event_dates?: string[];
+  entry_deadline?: string;
   location?: string;
   capacity?: number;
   target_seats?: number;
@@ -37,12 +38,7 @@ const newEvent = ref({
   description: '',
   event_dates: [''],
   location: '',
-  lp_url: '',
-  capacity: '',
-  target_seats: '',
-  unit_price: '',
-  target_sales: '',
-  current_sales: ''
+  lp_url: ''
 });
 const showCreate = ref(false);
 const selectedCalendarEvent = ref<EventItem | null>(null);
@@ -121,14 +117,9 @@ const createEvent = async () => {
   const token = localStorage.getItem('token');
   await api.post('/api/events', {
     ...newEvent.value,
-    event_dates: newEvent.value.event_dates.filter(v => String(v || '').trim()),
-    capacity: newEvent.value.capacity ? Number(newEvent.value.capacity) : null,
-    target_seats: newEvent.value.target_seats ? Number(newEvent.value.target_seats) : null,
-    unit_price: newEvent.value.unit_price ? Number(newEvent.value.unit_price) : null,
-    target_sales: newEvent.value.target_sales ? Number(newEvent.value.target_sales) : null,
-    current_sales: newEvent.value.current_sales ? Number(newEvent.value.current_sales) : 0
+    event_dates: newEvent.value.event_dates.filter(v => String(v || '').trim())
   }, { headers: { Authorization: token } });
-  newEvent.value = { title: '', description: '', event_dates: [''], location: '', lp_url: '', capacity: '', target_seats: '', unit_price: '', target_sales: '', current_sales: '' };
+  newEvent.value = { title: '', description: '', event_dates: [''], location: '', lp_url: '' };
   showCreate.value = false;
   fetchEvents();
 };
@@ -458,6 +449,10 @@ onMounted(fetchEvents);
                 <MapPin class="w-4 h-4" />
                 <span>{{ e.location || '会場未設定' }}</span>
               </div>
+              <div v-if="e.entry_deadline" class="flex items-center gap-2 text-sm text-gray-600">
+                <Calendar class="w-4 h-4" />
+                <span>エントリー期日: {{ formatDateKey(e.entry_deadline) }}</span>
+              </div>
               <div class="flex items-center gap-2 text-sm text-gray-600">
                 <UsersIcon class="w-4 h-4" />
                 <span>エントリー目標: {{ e.capacity || '-' }}名</span>
@@ -466,8 +461,11 @@ onMounted(fetchEvents);
                 <UsersIcon class="w-4 h-4" />
                 <span>着座目標: {{ e.target_seats || '-' }}名</span>
               </div>
-              <div class="flex items-center gap-2 text-sm text-gray-600">
-                <span>単価: {{ (e.unit_price || 0).toLocaleString() }}円</span>
+              <div v-if="e.target_sales" class="flex items-center gap-2 text-sm text-gray-600">
+                <span>目標売上: {{ e.target_sales.toLocaleString() }}円</span>
+              </div>
+              <div v-if="e.current_sales" class="flex items-center gap-2 text-sm text-gray-600">
+                <span>実績売上: {{ e.current_sales.toLocaleString() }}円</span>
               </div>
               <div class="flex items-center gap-2 text-sm text-gray-600">
                 <span class="font-medium">LP:</span>
@@ -545,26 +543,6 @@ onMounted(fetchEvents);
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">LPリンク</label>
             <input v-model="newEvent.lp_url" type="url" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">エントリー目標人数</label>
-            <input v-model="newEvent.capacity" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">着座目標人数</label>
-            <input v-model="newEvent.target_seats" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">単価（円）</label>
-            <input v-model="newEvent.unit_price" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">目標売上（円）</label>
-            <input v-model="newEvent.target_sales" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">実績売上（円）</label>
-            <input v-model="newEvent.current_sales" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
         </div>
         <div class="px-4 md:px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-white">
