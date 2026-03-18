@@ -263,11 +263,10 @@ export const createEvent = async (req: Request, res: Response) => {
 export const updateEvent = async (req: Request, res: Response) => {
     const { id } = req.params;
     const {
-        title, description, event_date, event_dates, location, lp_url,
-        capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline,
-        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate,
-        kpi_inflow_to_reservation_rate, kpi_custom_steps,
-        yomi_statuses, event_slots
+        title, description, location, lp_url,
+        yomi_statuses, event_slots,
+        // event_date, event_dates are used for legacy/internal syncing
+        event_date, event_dates 
     } = req.body;
     try {
         await ensureEventDatesTable();
@@ -278,7 +277,6 @@ export const updateEvent = async (req: Request, res: Response) => {
             dates = event_slots.map((s: any) => s.datetime).filter(Boolean);
         }
 
-        const primaryDate = dates.length > 0 ? dates[0] : null;
         const cols = await getEventColumns();
         const setParts: string[] = [];
         const values: any[] = [];
@@ -287,22 +285,11 @@ export const updateEvent = async (req: Request, res: Response) => {
             values.push(val);
             setParts.push(`${col} = $${values.length}`);
         };
+
         pushSet('title', title);
         pushSet('description', description);
         pushSet('location', location);
         pushSet('lp_url', lp_url);
-        pushSet('capacity', capacity);
-        pushSet('target_seats', target_seats);
-        pushSet('unit_price', unit_price);
-        pushSet('target_sales', target_sales);
-        pushSet('current_sales', current_sales);
-        pushSet('entry_deadline', entry_deadline);
-        
-        if (kpi_seat_to_entry_rate !== undefined) pushSet('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate);
-        if (kpi_entry_to_interview_rate !== undefined) pushSet('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate);
-        if (kpi_interview_to_inflow_rate !== undefined) pushSet('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate);
-        if (kpi_inflow_to_reservation_rate !== undefined) pushSet('kpi_inflow_to_reservation_rate', kpi_inflow_to_reservation_rate);
-        if (kpi_custom_steps !== undefined) pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
         
         if (yomi_statuses !== undefined) {
             values.push(JSON.stringify(yomi_statuses));

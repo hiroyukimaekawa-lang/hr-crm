@@ -547,6 +547,14 @@ onMounted(async () => {
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-1">イベントKPI</h2>
           <p class="text-sm text-gray-500 mb-4">目標着座数から逆算して、必要なエントリー/面談/流入数を自動計算します。</p>
+
+          <!-- ── 対象イベント選択（最上部に移動） ── -->
+          <div class="mb-6 pb-6 border-b border-gray-200">
+            <label class="block text-sm font-bold text-gray-700 mb-1">対象イベント</label>
+            <select v-model.number="selectedEventId" class="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg text-sm" @change="onSelectEvent">
+              <option v-for="e in events" :key="e.id" :value="e.id">{{ e.title }}</option>
+            </select>
+          </div>
           
           <!-- ── 売上・目標設定セクション ── -->
           <div class="space-y-4 mb-6 pb-6 border-b border-gray-200">
@@ -641,16 +649,6 @@ onMounted(async () => {
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm text-gray-600 mb-1">対象イベント</label>
-              <select v-model.number="selectedEventId" class="w-full px-3 py-2 border border-gray-300 rounded-lg" @change="onSelectEvent">
-                <option v-for="e in events" :key="e.id" :value="e.id">{{ e.title }}</option>
-              </select>
-            </div>
-            <div>
-              <!-- 目標着座数は売上設定セクションに移動したが、互換性のため残すか、削除するか。
-                   指示書ではUIの構成が変更されているので、ここからは削除する。 -->
-            </div>
             <div>
               <label class="block text-sm text-gray-600 mb-1">エントリー→イベント出席率（%）</label>
               <input v-model="form.seat_to_entry_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />

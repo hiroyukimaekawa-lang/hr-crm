@@ -204,14 +204,8 @@ const updateEvent = async () => {
     title: form.value.title,
     description: form.value.description,
     event_slots: form.value.event_slots.filter(s => s.datetime),
-    entry_deadline: form.value.entry_deadline || null,
     location: form.value.location || null,
     lp_url: form.value.lp_url || null,
-    capacity: form.value.capacity ? Number(form.value.capacity) : null,
-    target_seats: form.value.target_seats ? Number(form.value.target_seats) : null,
-    unit_price: form.value.unit_price ? Number(form.value.unit_price) : null,
-    target_sales: form.value.target_sales ? Number(form.value.target_sales) : null,
-    current_sales: form.value.current_sales ? Number(form.value.current_sales) : 0
   }, { headers: { Authorization: token } });
   isEditing.value = false;
   saveMessage.value = 'イベント情報を更新しました。';
@@ -445,36 +439,12 @@ onMounted(fetchDetail);
               </div>
             </div>
             <div>
-              <label class="block text-xs text-gray-500 mb-1">エントリー期日</label>
-              <input v-model="form.entry_deadline" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            </div>
-            <div>
               <label class="block text-xs text-gray-500 mb-1">場所（オンライン/会場）</label>
               <input v-model="form.location" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">LPリンク</label>
               <input v-model="form.lp_url" type="url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">エントリー目標人数</label>
-              <input v-model="form.capacity" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">着座目標人数</label>
-              <input v-model="form.target_seats" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">単価（円）</label>
-              <input v-model="form.unit_price" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">目標売上（円）</label>
-              <input v-model="form.target_sales" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">実績売上（円）</label>
-              <input v-model="form.current_sales" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">概要</label>
