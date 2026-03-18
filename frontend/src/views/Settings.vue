@@ -335,30 +335,36 @@ const removeCustomStep = (index: number) => {
 };
 
 const saveKpi = async () => {
-  if (!selectedEvent.value) return;
-  const token = localStorage.getItem('token');
-  await api.put(
-    `/api/events/${selectedEvent.value.id}`,
-    {
-      title: selectedEvent.value.title,
+  try {
+    if (!selectedEvent.value?.id) return;
+    
+    const payload = {
+      entry_deadline: form.value.entry_deadline || null,
+      capacity: form.value.capacity ? Number(form.value.capacity) : null,
       target_seats: form.value.target_seats ? Number(form.value.target_seats) : null,
+      unit_price: form.value.unit_price ? Number(form.value.unit_price) : null,
+      target_sales: form.value.target_sales ? Number(form.value.target_sales) : null,
+      current_sales: form.value.current_sales ? Number(form.value.current_sales) : 0,
       kpi_seat_to_entry_rate: toRate(form.value.seat_to_entry_rate),
       kpi_entry_to_interview_rate: toRate(form.value.entry_to_interview_rate),
       kpi_interview_to_inflow_rate: toRate(form.value.interview_to_inflow_rate),
       kpi_inflow_to_reservation_rate: toRate(form.value.inflow_to_reservation_rate),
-      entry_deadline: form.value.entry_deadline || null,
-      capacity: form.value.capacity ? Number(form.value.capacity) : null,
-      unit_price: form.value.unit_price ? Number(form.value.unit_price) : null,
-      target_sales: form.value.target_sales ? Number(form.value.target_sales) : autoTargetSales.value,
-      current_sales: form.value.current_sales ? Number(form.value.current_sales) : null,
       kpi_custom_steps: customSteps.value
         .filter((x) => String(x.label || '').trim())
         .map((x) => ({ label: String(x.label).trim(), rate: toRate(x.rate), position: Number(x.position || 4) }))
-    },
-    { headers: { Authorization: token } }
-  );
-  saveMessage.value = 'KPI設定を保存しました。';
-  await fetchEvents();
+    };
+
+    const token = localStorage.getItem('token');
+    await api.put(`/api/events/${selectedEvent.value.id}/kpi`, payload, {
+      headers: { Authorization: token }
+    });
+    
+    saveMessage.value = 'KPI設定を保存しました。';
+    await fetchEvents();
+  } catch (err) {
+    console.error(err);
+    saveMessage.value = '保存に失敗しました。';
+  }
 };
 
 const loadEventStatuses = (event: EventItem | null) => {

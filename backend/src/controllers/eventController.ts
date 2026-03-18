@@ -283,26 +283,27 @@ export const updateEvent = async (req: Request, res: Response) => {
         const setParts: string[] = [];
         const values: any[] = [];
         const pushSet = (col: string, val: any) => {
-            if (!cols.has(col)) return;
+            if (!cols.has(col) || val === undefined) return;
             values.push(val);
             setParts.push(`${col} = $${values.length}`);
         };
         pushSet('title', title);
-        pushSet('description', description || null);
-        pushSet('event_date', primaryDate);
-        pushSet('location', location || null);
-        pushSet('lp_url', lp_url || null);
-        pushSet('capacity', capacity || null);
-        pushSet('target_seats', target_seats || null);
-        pushSet('unit_price', unit_price || null);
-        pushSet('target_sales', target_sales || null);
-        pushSet('current_sales', current_sales || 0);
-        pushSet('entry_deadline', entry_deadline || null);
-        pushSet('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate ?? 70);
-        pushSet('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate ?? 60);
-        pushSet('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate ?? 50);
-        pushSet('kpi_inflow_to_reservation_rate', kpi_inflow_to_reservation_rate ?? 50);
-        pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
+        pushSet('description', description);
+        pushSet('location', location);
+        pushSet('lp_url', lp_url);
+        pushSet('capacity', capacity);
+        pushSet('target_seats', target_seats);
+        pushSet('unit_price', unit_price);
+        pushSet('target_sales', target_sales);
+        pushSet('current_sales', current_sales);
+        pushSet('entry_deadline', entry_deadline);
+        
+        if (kpi_seat_to_entry_rate !== undefined) pushSet('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate);
+        if (kpi_entry_to_interview_rate !== undefined) pushSet('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate);
+        if (kpi_interview_to_inflow_rate !== undefined) pushSet('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate);
+        if (kpi_inflow_to_reservation_rate !== undefined) pushSet('kpi_inflow_to_reservation_rate', kpi_inflow_to_reservation_rate);
+        if (kpi_custom_steps !== undefined) pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
+        
         if (yomi_statuses !== undefined) {
             values.push(JSON.stringify(yomi_statuses));
             setParts.push(`yomi_statuses = $${values.length}`);
@@ -326,17 +327,74 @@ export const updateEvent = async (req: Request, res: Response) => {
             res.status(404).json({ error: 'Event not found' });
             return;
         }
-        await pool.query('DELETE FROM event_dates WHERE event_id = $1', [id]);
-        for (const dt of dates) {
-            await pool.query(
-                'INSERT INTO event_dates (event_id, event_date) VALUES ($1, $2)',
-                [id, dt]
-            );
+        if (event_dates !== undefined || event_slots !== undefined || event_date !== undefined) {
+            await pool.query('DELETE FROM event_dates WHERE event_id = $1', [id]);
+            for (const dt of dates) {
+                await pool.query(
+                    'INSERT INTO event_dates (event_id, event_date) VALUES ($1, $2)',
+                    [id, dt]
+                );
+            }
         }
         await pool.query('COMMIT');
         res.json({ ...result.rows[0], event_dates: dates });
     } catch (err: any) {
         try { await pool.query('ROLLBACK'); } catch { }
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const updateEventKpi = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const {
+        entry_deadline, capacity, target_seats, unit_price, target_sales, current_sales,
+        kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate,
+        kpi_inflow_to_reservation_rate, kpi_custom_steps
+    } = req.body;
+    try {
+        await ensureEventDatesTable();
+        const cols = await getEventColumns();
+        const setParts: string[] = [];
+        const values: any[] = [];
+        const pushSet = (col: string, val: any) => {
+            if (!cols.has(col) || val === undefined) return;
+            values.push(val);
+            setParts.push(`${col} = $${values.length}`);
+        };
+
+        pushSet('entry_deadline', entry_deadline);
+        pushSet('capacity', capacity);
+        pushSet('target_seats', target_seats);
+        pushSet('unit_price', unit_price);
+        pushSet('target_sales', target_sales);
+        pushSet('current_sales', current_sales);
+        pushSet('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate);
+        pushSet('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate);
+        pushSet('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate);
+        pushSet('kpi_inflow_to_reservation_rate', kpi_inflow_to_reservation_rate);
+        if (kpi_custom_steps !== undefined) {
+          pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
+        }
+
+        if (setParts.length === 0) {
+            res.status(400).json({ error: 'No fields to update' });
+            return;
+        }
+
+        values.push(id);
+        const result = await pool.query(
+            `UPDATE events
+             SET ${setParts.join(', ')}
+             WHERE id = $${values.length}
+             RETURNING *`,
+            values
+        );
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Event not found' });
+            return;
+        }
+        res.json(result.rows[0]);
+    } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
 };
