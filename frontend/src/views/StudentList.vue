@@ -893,14 +893,14 @@ watch(filteredStudents, () => {
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <details class="relative">
-            <summary class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 cursor-pointer text-sm">
+            <summary class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 cursor-pointer text-base md:text-sm">
               出力項目を選択
             </summary>
             <div class="absolute right-0 z-20 mt-1 w-64 max-h-72 overflow-auto bg-white border border-gray-200 rounded-lg shadow p-2">
               <label
                 v-for="col in exportColumnOptions"
                 :key="`export-col-${col.key}`"
-                class="flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-gray-50 rounded"
+                class="flex items-center gap-2 px-2 py-1.5 text-base md:text-sm hover:bg-gray-50 rounded"
               >
                 <input
                   v-model="selectedExportColumns"
@@ -985,7 +985,7 @@ watch(filteredStudents, () => {
       </div>
 
       <div v-if="false" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-        <h3 class="text-sm font-semibold text-gray-800 mb-2">日別申込/設定数（直近31日）</h3>
+        <h3 class="text-base md:text-sm font-semibold text-gray-800 mb-2">日別申込/設定数（直近31日）</h3>
         <div class="overflow-x-auto">
           <table class="w-full min-w-[360px] text-xs">
             <thead class="bg-gray-50">
@@ -1011,9 +1011,9 @@ watch(filteredStudents, () => {
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6 flex flex-col gap-4">
         <div class="hidden md:flex lg:hidden items-center justify-between">
-          <p class="text-sm font-medium text-gray-700">フィルタ</p>
+          <p class="text-base md:text-sm font-medium text-gray-700">フィルタ</p>
           <button
-            class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
+            class="px-3 py-1.5 text-base md:text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
             @click="filterPanelOpen = !filterPanelOpen"
           >
             {{ filterPanelOpen ? '閉じる' : '開く' }}
@@ -1024,7 +1024,7 @@ watch(filteredStudents, () => {
             <div class="flex flex-wrap items-center gap-2">
               <Filter class="w-4 h-4 text-gray-400" />
               <details class="relative">
-                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-sm cursor-pointer bg-white">
+                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-base md:text-sm cursor-pointer bg-white">
                   氏名: {{ selectedNames.length ? `${selectedNames.length}件` : 'すべて' }}
                 </summary>
                 <div class="absolute z-20 mt-1 w-64 max-h-60 overflow-auto bg-white border border-gray-200 rounded-lg shadow">
@@ -1033,10 +1033,10 @@ watch(filteredStudents, () => {
                       v-model="nameSearch"
                       type="text"
                       placeholder="氏名で検索..."
-                      class="w-full px-2 py-1.5 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      class="w-full px-2 py-1.5 border border-gray-200 rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
-                  <label v-for="n in filteredNames" :key="n" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50">
+                  <label v-for="n in filteredNames" :key="n" class="flex items-center gap-2 px-3 py-2 text-base md:text-sm hover:bg-gray-50">
                     <input type="checkbox" :value="n" v-model="selectedNames" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                     <span>{{ n }}</span>
                   </label>
@@ -1046,7 +1046,7 @@ watch(filteredStudents, () => {
                 </div>
               </details>
               <details class="relative">
-                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-sm cursor-pointer bg-white">
+                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-base md:text-sm cursor-pointer bg-white">
                   大学: {{ selectedUniversities.length ? `${selectedUniversities.length}件` : 'すべて' }}
                 </summary>
                 <div class="absolute z-20 mt-1 w-72 max-h-60 overflow-auto bg-white border border-gray-200 rounded-lg shadow">
@@ -1055,10 +1055,10 @@ watch(filteredStudents, () => {
                       v-model="universitySearch"
                       type="text"
                       placeholder="大学名で検索..."
-                      class="w-full px-2 py-1.5 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      class="w-full px-2 py-1.5 border border-gray-200 rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
-                  <label v-for="u in filteredUniversityOptions" :key="u" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50">
+                  <label v-for="u in filteredUniversityOptions" :key="u" class="flex items-center gap-2 px-3 py-2 text-base md:text-sm hover:bg-gray-50">
                     <input type="checkbox" :value="u" v-model="selectedUniversities" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                     <span>{{ u }}</span>
                   </label>
@@ -1070,17 +1070,17 @@ watch(filteredStudents, () => {
               <select
                 v-if="user.role === 'admin'"
                 v-model="staffFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="ALL">担当者: すべて</option>
                 <option v-for="u in staffUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
               </select>
               <details class="relative">
-                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-sm cursor-pointer bg-white">
+                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-base md:text-sm cursor-pointer bg-white">
                   流入経路: {{ selectedSourceCompanies.length ? `${selectedSourceCompanies.length}件` : 'すべて' }}
                 </summary>
                 <div class="absolute z-20 mt-1 w-64 max-h-60 overflow-auto bg-white border border-gray-200 rounded-lg shadow">
-                  <label v-for="v in sourceCompanyOptions" :key="`source-${v}`" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50">
+                  <label v-for="v in sourceCompanyOptions" :key="`source-${v}`" class="flex items-center gap-2 px-3 py-2 text-base md:text-sm hover:bg-gray-50">
                     <input type="checkbox" :value="v" v-model="selectedSourceCompanies" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                     <span>{{ v }}</span>
                   </label>
@@ -1088,11 +1088,11 @@ watch(filteredStudents, () => {
                 </div>
               </details>
               <details class="relative">
-                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-sm cursor-pointer bg-white">
+                <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-base md:text-sm cursor-pointer bg-white">
                   所在地: {{ selectedPrefectures.length ? `${selectedPrefectures.length}件` : 'すべて' }}
                 </summary>
                 <div class="absolute z-20 mt-1 w-56 max-h-60 overflow-auto bg-white border border-gray-200 rounded-lg shadow">
-                  <label v-for="v in prefectureOptions" :key="`pref-${v}`" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50">
+                  <label v-for="v in prefectureOptions" :key="`pref-${v}`" class="flex items-center gap-2 px-3 py-2 text-base md:text-sm hover:bg-gray-50">
                     <input type="checkbox" :value="v" v-model="selectedPrefectures" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                     <span>{{ v }}</span>
                   </label>
@@ -1101,7 +1101,7 @@ watch(filteredStudents, () => {
               </details>
               <select
                 v-model="academicTrackFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="ALL">文理: すべて</option>
                 <option value="文系">文系</option>
@@ -1110,70 +1110,70 @@ watch(filteredStudents, () => {
               </select>
               <select
                 v-model="referralStatusFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="ALL">ステータス: すべて</option>
                 <option v-for="s in referralStatusOptions" :key="s" :value="s">{{ s }}</option>
               </select>
               <select
                 v-model="progressStageFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="ALL">進捗: すべて</option>
                 <option v-for="s in progressStageOptions" :key="s" :value="s">{{ s }}</option>
               </select>
               <select
                 v-model="graduationYearFilter"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                class="px-3 py-2 border border-gray-200 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option v-for="g in graduationYearOptions" :key="g" :value="g">
                   {{ g === 'ALL' ? '卒業年度: すべて' : `${g}年` }}
                 </option>
               </select>
               <div class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-white">
-                <span class="text-sm text-gray-600 whitespace-nowrap">面談日</span>
+                <span class="text-base md:text-sm text-gray-600 whitespace-nowrap">面談日</span>
                 <input
                   v-model="nextMeetingDateFrom"
                   type="date"
-                  class="px-2 py-1 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  class="px-2 py-1 border border-gray-200 rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <span class="text-gray-400">〜</span>
                 <input
                   v-model="nextMeetingDateTo"
                   type="date"
-                  class="px-2 py-1 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  class="px-2 py-1 border border-gray-200 rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-white">
-                <span class="text-sm text-gray-600 whitespace-nowrap">タスク履行日</span>
+                <span class="text-base md:text-sm text-gray-600 whitespace-nowrap">タスク履行日</span>
                 <input
                   v-model="taskDueDateFrom"
                   type="date"
-                  class="px-2 py-1 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  class="px-2 py-1 border border-gray-200 rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <span class="text-gray-400">〜</span>
                 <input
                   v-model="taskDueDateTo"
                   type="date"
-                  class="px-2 py-1 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  class="px-2 py-1 border border-gray-200 rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
           </div>
-          <label v-if="user.role === 'admin'" class="flex items-center gap-2 text-sm text-gray-600">
+          <label v-if="user.role === 'admin'" class="flex items-center gap-2 text-base md:text-sm text-gray-600">
             <input type="checkbox" v-model="showAll" @change="fetchStudents" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
             全学生を表示
           </label>
           <div class="flex flex-col sm:flex-row gap-2 justify-end">
             <button
               @click="applyFilters"
-              class="px-3 py-2 rounded-lg text-sm text-white bg-blue-600 border border-blue-600 hover:bg-blue-700"
+              class="px-3 py-2 rounded-lg text-base md:text-sm text-white bg-blue-600 border border-blue-600 hover:bg-blue-700"
             >
               検索
             </button>
             <button
               @click="clearFilters"
-              class="px-3 py-2 rounded-lg text-sm text-red-600 border border-red-200 hover:bg-red-50"
+              class="px-3 py-2 rounded-lg text-base md:text-sm text-red-600 border border-red-200 hover:bg-red-50"
             >
               フィルタクリア
             </button>
@@ -1183,7 +1183,7 @@ watch(filteredStudents, () => {
 
       <div
         v-if="toastMessage"
-        class="fixed right-4 bottom-4 z-[100] px-4 py-3 rounded-lg shadow-lg text-sm"
+        class="fixed right-4 bottom-4 z-[100] px-4 py-3 rounded-lg shadow-lg text-base md:text-sm"
         :class="toastType === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'"
       >
         {{ toastMessage }}
@@ -1218,7 +1218,7 @@ watch(filteredStudents, () => {
               <div class="space-y-1">
                 <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">ステータス</p>
                 <select
-                  class="w-full h-10 px-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
+                  class="w-full h-10 px-3 bg-slate-50 border-none rounded-xl text-base md:text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
                   :value="s.referral_status || '不明'"
                   @change="updateStudentMeta(s.id, { referral_status: ($event.target as HTMLSelectElement).value })"
                 >
@@ -1228,7 +1228,7 @@ watch(filteredStudents, () => {
               <div class="space-y-1">
                 <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">フェーズ</p>
                 <select
-                  class="w-full h-10 px-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
+                  class="w-full h-10 px-3 bg-slate-50 border-none rounded-xl text-base md:text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
                   :value="s.progress_stage || '初回面談'"
                   @change="updateStudentMeta(s.id, { progress_stage: ($event.target as HTMLSelectElement).value })"
                 >
@@ -1241,7 +1241,7 @@ watch(filteredStudents, () => {
               <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">次回面談日</p>
               <input
                 type="date"
-                class="w-full h-10 px-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
+                class="w-full h-10 px-3 bg-slate-50 border-none rounded-xl text-base md:text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
                 :value="s.next_meeting_date || ''"
                 @change="updateStudentMeta(s.id, { next_meeting_date: ($event.target as HTMLInputElement).value || null })"
               />
@@ -1263,7 +1263,7 @@ watch(filteredStudents, () => {
             </div>
           </div>
         </div>
-        <div v-if="totalFilteredCount === 0" class="bg-gray-50 rounded-2xl p-12 text-center text-sm text-gray-400 font-bold">
+        <div v-if="totalFilteredCount === 0" class="bg-gray-50 rounded-2xl p-12 text-center text-base md:text-sm text-gray-400 font-bold">
           該当する学生が見つかりませんでした。
         </div>
       </div>
@@ -1310,7 +1310,7 @@ watch(filteredStudents, () => {
                   <select
                     :value="s.staff_id || ''"
                     @change="updateStaff(s.id, ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
-                    class="w-full px-2 py-1 border border-gray-200 rounded-lg text-sm"
+                    class="w-full px-2 py-1 border border-gray-200 rounded-lg text-base md:text-sm"
                   >
                     <option value="">未割当</option>
                     <option v-for="u in staffUsers" :key="u.id" :value="u.id">{{ u.name }}</option>
@@ -1331,7 +1331,7 @@ watch(filteredStudents, () => {
               <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(s.latest_task_due_date) }}</td>
               <td class="px-6 py-3 text-right text-xs whitespace-nowrap">
                 <button
-                  class="text-blue-600 hover:text-blue-800 text-sm font-semibold inline-flex items-center gap-1"
+                  class="text-blue-600 hover:text-blue-800 text-base md:text-sm font-semibold inline-flex items-center gap-1"
                   @click="router.push(`/students/${s.id}`)"
                 >
                   詳細
@@ -1354,14 +1354,14 @@ watch(filteredStudents, () => {
               </td>
             </tr>
             <tr v-if="totalFilteredCount === 0">
-                <td colSpan="12" class="px-6 py-10 text-center text-sm text-gray-400">
+                <td colSpan="12" class="px-6 py-10 text-center text-base md:text-sm text-gray-400">
                   該当する学生が見つかりませんでした。
                 </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <div v-if="totalFilteredCount > 0" class="mt-3 flex items-center justify-between text-sm text-gray-600">
+      <div v-if="totalFilteredCount > 0" class="mt-3 flex items-center justify-between text-base md:text-sm text-gray-600">
         <p>{{ totalFilteredCount }}件中 {{ (currentPage - 1) * pageSize + 1 }}〜{{ Math.min(currentPage * pageSize, totalFilteredCount) }}件を表示</p>
         <div class="flex items-center gap-2">
           <button
@@ -1387,12 +1387,12 @@ watch(filteredStudents, () => {
       <div v-if="showCreate" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[80]">
         <div class="bg-white rounded-xl shadow-xl w-[95vw] md:w-[88vw] lg:w-[80vw] max-w-4xl h-[85vh] md:h-[80vh] overflow-y-auto p-4 md:p-6">
           <h2 class="text-xl font-bold mb-4 text-gray-900">新規学生登録</h2>
-          <p v-if="createError" class="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <p v-if="createError" class="mb-4 text-base md:text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
             {{ createError }}
           </p>
           <div class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">流入経路</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">流入経路</label>
             <input
               v-model="newStudent.source_company"
               list="source-category-options"
@@ -1405,19 +1405,19 @@ watch(filteredStudents, () => {
             </datalist>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">氏名</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">氏名</label>
             <input v-model="newStudent.name" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">大学</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">大学</label>
             <input v-model="newStudent.university" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">学部</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">学部</label>
             <input v-model="newStudent.faculty" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">面談理由</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">面談理由</label>
             <select v-model="newStudent.interview_reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
               <option value="">未設定</option>
               <option value="企業相談">企業相談</option>
@@ -1426,17 +1426,17 @@ watch(filteredStudents, () => {
             </select>
           </div>
           <div v-if="user.role === 'admin'">
-            <label class="block text-sm font-medium text-gray-700 mb-1">担当</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">担当</label>
             <select v-model="newStudent.staff_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
               <option value="">未割当</option>
               <option v-for="u in staffUsers" :key="`create-staff-${u.id}`" :value="String(u.id)">{{ u.name }}</option>
             </select>
           </div>
           <div class="pt-1 border-t border-gray-100">
-            <p class="text-sm font-semibold text-gray-800 mb-2">申込み起点で登録</p>
+            <p class="text-base md:text-sm font-semibold text-gray-800 mb-2">申込み起点で登録</p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">申込日（時間単位）</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">申込日（時間単位）</label>
             <div class="grid grid-cols-12 gap-2">
               <input
                 :value="getDatePart(newStudent.applied_at)"
@@ -1454,11 +1454,11 @@ watch(filteredStudents, () => {
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">所在地（都道府県）</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">所在地（都道府県）</label>
             <input v-model="newStudent.prefecture" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">文理</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">文理</label>
             <select v-model="newStudent.academic_track" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
               <option value="">未設定</option>
               <option value="文系">文系</option>
@@ -1466,7 +1466,7 @@ watch(filteredStudents, () => {
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">卒業年</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">卒業年</label>
             <select v-model="newStudent.graduation_year" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
               <option value="">未設定</option>
               <option v-for="y in registrationGraduationYearOptions" :key="`grad-create-${y}`" :value="y">{{ y }}年</option>
@@ -1488,13 +1488,13 @@ watch(filteredStudents, () => {
         <div class="w-full max-w-6xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-gray-200 p-6">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-2xl font-extrabold text-gray-900">面談ファネル登録: {{ selectedFunnelStudent.name }}</h2>
-            <button class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="showFunnel = false">閉じる</button>
+            <button class="px-3 py-1.5 text-base md:text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="showFunnel = false">閉じる</button>
           </div>
-          <p class="text-sm text-gray-600 mb-4">申込 → 予約（初回面談） → 初回面談実施 を順番に登録します。</p>
+          <p class="text-base md:text-sm text-gray-600 mb-4">申込 → 予約（初回面談） → 初回面談実施 を順番に登録します。</p>
 
           <!-- ステップインジケーター -->
           <div class="mb-6 rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
-            <div class="flex items-center justify-between gap-2 text-xs sm:text-sm font-semibold text-slate-700">
+            <div class="flex items-center justify-between gap-2 text-xs sm:text-base md:text-sm font-semibold text-slate-700">
               <span class="inline-flex items-center gap-2"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white font-bold">1</span>申込</span>
               <span class="h-1 flex-1 bg-slate-300 rounded-full"></span>
               <span class="inline-flex items-center gap-2"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-white font-bold">2</span>予約</span>
@@ -1503,29 +1503,29 @@ watch(filteredStudents, () => {
             </div>
           </div>
 
-          <p v-if="funnelError" class="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{{ funnelError }}</p>
+          <p v-if="funnelError" class="mb-4 text-base md:text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{{ funnelError }}</p>
 
           <div class="flex flex-col lg:flex-row lg:items-stretch gap-4">
             <!-- ステップ1: 申込登録 -->
             <div class="flex-1 rounded-2xl border border-blue-200 bg-blue-50/40 p-5 shadow-sm">
               <p class="text-xl font-extrabold text-gray-900 mb-3">1) 申込登録</p>
-              <label class="block text-sm font-medium text-gray-700 mb-2">申込日</label>
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">申込日</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(funnelForm.applied_at)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @input="funnelForm.applied_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.applied_at))"
                 />
                 <select
                   :value="getHourPart(funnelForm.applied_at)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @change="funnelForm.applied_at = mergeDateHour(getDatePart(funnelForm.applied_at), ($event.target as HTMLSelectElement).value)"
                 >
                   <option v-for="h in hourOptions" :key="`funnel-apply-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
-              <button class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm" @click="submitApplication">申込登録</button>
+              <button class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm" @click="submitApplication">申込登録</button>
             </div>
 
             <div class="hidden lg:flex items-center text-3xl font-black text-slate-300 px-1">→</div>
@@ -1533,33 +1533,33 @@ watch(filteredStudents, () => {
             <!-- ステップ2: 予約登録 -->
             <div class="flex-1 rounded-2xl border border-amber-200 bg-amber-50/50 p-5 shadow-sm">
               <p class="text-xl font-extrabold text-gray-900 mb-3">2) 予約登録（初回面談）</p>
-              <label class="block text-sm font-medium text-gray-700 mb-2">予約作成日（TimeRex）</label>
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">予約作成日（TimeRex）</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(funnelForm.reservation_date)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @input="funnelForm.reservation_date = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.reservation_date))"
                 />
                 <select
                   :value="getHourPart(funnelForm.reservation_date)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @change="funnelForm.reservation_date = mergeDateHour(getDatePart(funnelForm.reservation_date), ($event.target as HTMLSelectElement).value)"
                 >
                   <option v-for="h in hourOptions" :key="`funnel-reserve-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">初回面談予定日</label>
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">初回面談予定日</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(funnelForm.interview_scheduled_at)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @input="funnelForm.interview_scheduled_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.interview_scheduled_at))"
                 />
                 <select
                   :value="getHourPart(funnelForm.interview_scheduled_at)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @change="funnelForm.interview_scheduled_at = mergeDateHour(getDatePart(funnelForm.interview_scheduled_at), ($event.target as HTMLSelectElement).value)"
                 >
                   <option v-for="h in hourOptions" :key="`funnel-scheduled-hour-${h}`" :value="h">{{ h }}:00</option>
@@ -1568,7 +1568,7 @@ watch(filteredStudents, () => {
               <div class="mb-4 text-center">
                 <span class="inline-flex items-center px-4 py-1.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold border border-amber-200">予約ステータス: 初回面談</span>
               </div>
-              <button class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 transition-colors shadow-sm" @click="submitReservation">予約登録</button>
+              <button class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 transition-colors shadow-sm" @click="submitReservation">予約登録</button>
             </div>
 
             <div class="hidden lg:flex items-center text-3xl font-black text-slate-300 px-1">→</div>
@@ -1576,30 +1576,30 @@ watch(filteredStudents, () => {
             <!-- ステップ3: 面談実施登録 -->
             <div class="flex-1 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
               <p class="text-xl font-extrabold text-gray-900 mb-3">3) 初回面談実施登録</p>
-              <label class="block text-sm font-medium text-gray-700 mb-2">初回面談実施日</label>
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">初回面談実施日</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(funnelForm.interview_interviewed_at)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @input="funnelForm.interview_interviewed_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(funnelForm.interview_interviewed_at))"
                 />
                 <select
                   :value="getHourPart(funnelForm.interview_interviewed_at)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @change="funnelForm.interview_interviewed_at = mergeDateHour(getDatePart(funnelForm.interview_interviewed_at), ($event.target as HTMLSelectElement).value)"
                 >
                   <option v-for="h in hourOptions" :key="`funnel-actual-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">面談結果</label>
-              <select v-model="funnelForm.interview_status" class="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg text-sm mb-4 bg-white">
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">面談結果</label>
+              <select v-model="funnelForm.interview_status" class="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm mb-4 bg-white">
                 <option value="completed">実施</option>
                 <option value="no_show">トビ</option>
                 <option value="rescheduled">リスケ</option>
               </select>
               <button 
-                class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white transition-colors shadow-sm" 
+                class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white transition-colors shadow-sm" 
                 :class="funnelForm.interview_status === 'no_show' ? 'bg-red-600 hover:bg-red-700' : funnelForm.interview_status === 'rescheduled' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'"
                 @click="submitInterview"
               >

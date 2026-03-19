@@ -23,6 +23,7 @@ import { getStatusLabel, getStatusBadgeClass } from '../lib/statusConfig'
 const route = useRoute();
 const router = useRouter();
 const studentId = route.params.id;
+const activeTab = ref('基本情報');
 const student = ref<any>({});
 const studentEvents = ref<any[]>([]);
 const interviewLogs = ref<any[]>([]);
@@ -821,7 +822,20 @@ watch(selectedEventId, () => {
 <template>
   <Layout>
     <div class="p-4 md:p-6 lg:p-8">
-      <div class="mb-8 flex items-center gap-4">
+      <!-- モバイルのみタブ表示 -->
+      <div class="flex md:hidden border-b border-gray-200 mb-6 bg-white sticky top-0 z-10 -mx-4 px-4">
+        <button
+          v-for="tab in ['基本情報', 'ログ', 'イベント', 'その他']"
+          :key="tab"
+          @click="activeTab = tab"
+          class="flex-1 py-3 text-sm font-bold border-b-2 transition-colors"
+          :class="activeTab === tab
+            ? 'border-blue-600 text-blue-600'
+            : 'border-transparent text-gray-400'"
+        >{{ tab }}</button>
+      </div>
+
+      <div class="mb-8 flex flex-col sm:flex-row sm:items-center gap-4">
         <button @click="router.push('/students')" class="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-600">
           <ArrowLeft class="w-6 h-6" />
         </button>
@@ -861,7 +875,7 @@ watch(selectedEventId, () => {
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
         <div class="lg:col-span-1 space-y-8">
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div :class="activeTab === '基本情報' ? 'block' : 'hidden md:block'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div class="flex items-start justify-between mb-4">
               <div>
                 <h2 class="text-lg font-bold text-gray-900 mb-1">基本情報</h2>
@@ -881,24 +895,24 @@ watch(selectedEventId, () => {
             </div>
 
             <div class="flex items-center gap-2 mb-4">
-              <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="statusClass(student.referral_status)">
+              <span class="text-base md:text-sm font-semibold px-2 py-1 rounded-full" :class="statusClass(student.referral_status)">
                 {{ student.referral_status || '不明' }}
               </span>
-              <span class="text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-700">
+              <span class="text-base md:text-sm font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-700">
                 進捗: {{ student.progress_stage || '面談調整中' }}
               </span>
               <div v-if="editingStatus" class="flex items-center gap-2">
-                <select v-model="referralStatusDraft" class="px-2 py-1 border border-gray-300 rounded-md text-xs">
+                <select v-model="referralStatusDraft" class="px-2 py-1 border border-gray-300 rounded-md text-base md:text-sm">
                   <option value="キーマン">キーマン</option>
                   <option value="出そう">出そう</option>
                   <option value="ほぼ無理ワンチャン">ほぼ無理ワンチャン</option>
                   <option value="無理">無理</option>
                   <option value="不明">不明</option>
                 </select>
-                <select v-model="progressStageDraft" class="px-2 py-1 border border-gray-300 rounded-md text-xs">
+                <select v-model="progressStageDraft" class="px-2 py-1 border border-gray-300 rounded-md text-base md:text-sm">
                   <option v-for="v in progressStageOptions" :key="`detail-progress-${v}`" :value="v">{{ v }}</option>
                 </select>
-                <button class="text-xs px-2 py-1 bg-blue-600 text-white rounded-md" @click="updateStatus">保存</button>
+                <button class="text-base md:text-sm px-4 py-2 min-h-[44px] bg-blue-600 text-white rounded-md" @click="updateStatus">保存</button>
               </div>
             </div>
 
@@ -906,160 +920,160 @@ watch(selectedEventId, () => {
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">流入経路</p>
+                  <p class="text-base md:text-sm text-gray-500">流入経路</p>
                   <p class="text-sm font-medium">{{ student.source_company || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">大学</p>
+                  <p class="text-base md:text-sm text-gray-500">大学</p>
                   <p class="text-sm font-medium">{{ student.university || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">所在地（都道府県）</p>
+                  <p class="text-base md:text-sm text-gray-500">所在地（都道府県）</p>
                   <p class="text-sm font-medium">{{ student.prefecture || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">文理</p>
+                  <p class="text-base md:text-sm text-gray-500">文理</p>
                   <p class="text-sm font-medium">{{ student.academic_track || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">学部</p>
+                  <p class="text-base md:text-sm text-gray-500">学部</p>
                   <p class="text-sm font-medium">{{ student.faculty || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <MessageSquare class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">面談理由</p>
+                  <p class="text-base md:text-sm text-gray-500">面談理由</p>
                   <p class="text-sm font-medium">{{ student.interview_reason || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">卒業年度</p>
+                  <p class="text-base md:text-sm text-gray-500">卒業年度</p>
                   <p class="text-sm font-medium">{{ student.graduation_year || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">志望業界</p>
+                  <p class="text-base md:text-sm text-gray-500">志望業界</p>
                   <p class="text-sm font-medium">{{ student.desired_industry || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">志望職種</p>
+                  <p class="text-base md:text-sm text-gray-500">志望職種</p>
                   <p class="text-sm font-medium">{{ student.desired_role || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Mail class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">メールアドレス</p>
+                  <p class="text-base md:text-sm text-gray-500">メールアドレス</p>
                   <p class="text-sm font-medium">{{ student.email }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Phone class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">電話番号</p>
+                  <p class="text-base md:text-sm text-gray-500">電話番号</p>
                   <p class="text-sm font-medium">{{ student.phone }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Calendar class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">面談決定日</p>
+                  <p class="text-base md:text-sm text-gray-500">面談決定日</p>
                   <p class="text-sm font-medium">{{ student.meeting_decided_date || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Calendar class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">初回面談日</p>
+                  <p class="text-base md:text-sm text-gray-500">初回面談日</p>
                   <p class="text-sm font-medium">{{ student.first_interview_date || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Calendar class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">2回目面談日</p>
+                  <p class="text-base md:text-sm text-gray-500">2回目面談日</p>
                   <p class="text-sm font-medium">{{ student.second_interview_date || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Calendar class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">次回面談日</p>
+                  <p class="text-base md:text-sm text-gray-500">次回面談日</p>
                   <p class="text-sm font-medium">{{ student.next_meeting_date || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0 sm:col-span-2">
                 <MessageSquare class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">ネクストアクション</p>
+                  <p class="text-base md:text-sm text-gray-500">ネクストアクション</p>
                   <p class="text-sm font-medium">{{ student.next_action || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">選考ステータス</p>
+                  <p class="text-base md:text-sm text-gray-500">選考ステータス</p>
                   <p class="text-sm font-medium">{{ student.status || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <GraduationCap class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">担当ID</p>
+                  <p class="text-base md:text-sm text-gray-500">担当ID</p>
                   <p class="text-sm font-medium">{{ student.staff_id || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Calendar class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">登録日時</p>
+                  <p class="text-base md:text-sm text-gray-500">登録日時</p>
                   <p class="text-sm font-medium">{{ formatDateTime(student.created_at) }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Calendar class="w-5 h-5" />
                 <div>
-                  <p class="text-xs text-gray-500">更新日時</p>
+                  <p class="text-base md:text-sm text-gray-500">更新日時</p>
                   <p class="text-sm font-medium">{{ formatDateTime(student.updated_at) }}</p>
                 </div>
               </div>
             </div>
 
             <div v-if="tags.length" class="mt-4 flex flex-wrap gap-2">
-              <span v-for="tag in tags" :key="tag" class="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-full">{{ tag }}</span>
+              <span v-for="tag in tags" :key="tag" class="text-base md:text-sm px-2 py-1 bg-slate-100 text-slate-600 rounded-full">{{ tag }}</span>
             </div>
           </div>
 
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div :class="activeTab === 'その他' ? 'block' : 'hidden md:block'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="text-lg font-bold text-gray-900 mb-4">タスク</h2>
             <div class="space-y-2 mb-4">
               <div v-for="t in tasks" :key="t.id" class="flex items-start justify-between gap-3 bg-gray-50 rounded-lg p-3">
                 <div>
-                  <p class="text-xs text-gray-500">{{ t.due_date || '履行日未設定' }}</p>
+                  <p class="text-base md:text-sm text-gray-500">{{ t.due_date || '履行日未設定' }}</p>
                   <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ t.content }}</p>
                 </div>
                 <div class="flex items-center gap-2">
-                  <label class="inline-flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                  <label class="inline-flex items-center gap-1 text-base md:text-sm text-gray-600 cursor-pointer">
                     <input type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" @change="completeTask(t.id)" />
                     完了
                   </label>
@@ -1068,24 +1082,24 @@ watch(selectedEventId, () => {
                   </button>
                 </div>
               </div>
-              <p v-if="tasks.length === 0" class="text-sm text-gray-400">タスクはまだありません</p>
+              <p v-if="tasks.length === 0" class="text-base md:text-sm text-gray-400">タスクはまだありません</p>
             </div>
             <div class="space-y-2">
-              <label class="block text-xs text-gray-500">タスク履行日</label>
-              <input v-model="newTaskDate" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-              <textarea v-model="newTaskContent" placeholder="やることを入力..." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm h-24"></textarea>
-              <button class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700" @click="addTask">
+              <label class="block text-base md:text-sm text-gray-500">タスク履行日</label>
+              <input v-model="newTaskDate" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+              <textarea v-model="newTaskContent" placeholder="やることを入力..." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm h-24"></textarea>
+              <button class="w-full bg-blue-600 text-white px-4 py-2 min-h-[44px] rounded-lg text-base md:text-sm hover:bg-blue-700" @click="addTask">
                 タスクを追加
               </button>
             </div>
           </div>
 
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div :class="activeTab === 'その他' ? 'block' : 'hidden md:block'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="text-lg font-bold text-gray-900 mb-4">面談スケジュール</h2>
             <div class="space-y-2 mb-4">
               <div v-for="sc in interviewSchedules" :key="sc.id" class="rounded-lg border border-gray-200 p-3">
                 <div class="flex items-center justify-between gap-2 mb-2">
-                  <div class="text-sm font-semibold text-gray-900">第{{ sc.round_no }}回</div>
+                  <div class="text-base md:text-sm font-semibold text-gray-900">第{{ sc.round_no }}回</div>
                   <button class="text-gray-400 hover:text-red-600" @click="deleteInterviewSchedule(sc.id)">
                     <Trash2 class="w-4 h-4" />
                   </button>
@@ -1095,79 +1109,79 @@ watch(selectedEventId, () => {
                     type="date"
                     :value="sc.scheduled_at ? new Date(sc.scheduled_at).toISOString().slice(0,10) : ''"
                     @change="updateInterviewSchedule(sc.id, { scheduled_at: ($event.target as HTMLInputElement).value || null })"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   />
                   <select
                     :value="sc.schedule_type || '面談'"
                     @change="updateInterviewSchedule(sc.id, { schedule_type: ($event.target as HTMLSelectElement).value as '流入日' | '面談' | 'リスケ' })"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   >
                     <option value="流入日">流入日</option>
                     <option value="面談">面談</option>
                     <option value="リスケ">リスケ</option>
                   </select>
                 </div>
-                <p class="text-xs text-gray-500 mt-2">リスケ回数: {{ sc.reschedule_count || 0 }}</p>
+                <p class="text-base md:text-sm text-gray-500 mt-2">リスケ回数: {{ sc.reschedule_count || 0 }}</p>
               </div>
-              <p v-if="interviewSchedules.length === 0" class="text-sm text-gray-400">面談予定はまだありません</p>
+              <p v-if="interviewSchedules.length === 0" class="text-base md:text-sm text-gray-400">面談予定はまだありません</p>
             </div>
             <div class="pt-3 border-t border-gray-100 flex flex-col sm:flex-row gap-2">
-              <input v-model="newScheduleDate" type="date" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-              <select v-model="newScheduleType" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <input v-model="newScheduleDate" type="date" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+              <select v-model="newScheduleType" class="px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
                 <option value="流入日">流入日</option>
                 <option value="面談">面談</option>
                 <option value="リスケ">リスケ</option>
               </select>
-              <button class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700" @click="addInterviewSchedule">
+              <button class="bg-blue-600 text-white px-4 py-2 min-h-[44px] rounded-lg text-base md:text-sm hover:bg-blue-700" @click="addInterviewSchedule">
                 追加
               </button>
             </div>
           </div>
 
 
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div :class="activeTab === 'イベント' ? 'block' : 'hidden md:block'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="text-lg font-bold text-gray-900 mb-4">イベント提案管理（複数登録）</h2>
             <div class="space-y-2 mb-4">
-              <div v-for="p in eventProposals" :key="`proposal-${p.id}`" class="rounded-lg border border-gray-200 p-3 text-sm">
+              <div v-for="p in eventProposals" :key="`proposal-${p.id}`" class="rounded-lg border border-gray-200 p-3 text-base md:text-sm">
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="font-semibold text-gray-900">{{ p.event_name || '-' }}</span>
-                  <span class="text-xs text-gray-500">{{ formatDateTime(p.proposed_at) }}</span>
-                  <span v-if="p.selected_event_date" class="text-xs text-blue-600">参加日: {{ formatDateTime(p.selected_event_date, p) }}</span>
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{{ p.status || '-' }}</span>
-                  <span v-if="p.reason || p.lost_reason_name" class="text-xs text-gray-700">理由: {{ p.reason || p.lost_reason_name }}</span>
+                  <span class="text-base md:text-sm text-gray-500">{{ formatDateTime(p.proposed_at) }}</span>
+                  <span v-if="p.selected_event_date" class="text-base md:text-sm text-blue-600">参加日: {{ formatDateTime(p.selected_event_date, p) }}</span>
+                  <span class="text-base md:text-sm px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{{ p.status || '-' }}</span>
+                  <span v-if="p.reason || p.lost_reason_name" class="text-base md:text-sm text-gray-700">理由: {{ p.reason || p.lost_reason_name }}</span>
                 </div>
-                <p v-if="p.memo" class="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{{ p.memo }}</p>
+                <p v-if="p.memo" class="text-base md:text-sm text-gray-600 mt-1 whitespace-pre-wrap">{{ p.memo }}</p>
               </div>
-              <p v-if="eventProposals.length === 0" class="text-sm text-gray-400">提案履歴はまだありません</p>
+              <p v-if="eventProposals.length === 0" class="text-base md:text-sm text-gray-400">提案履歴はまだありません</p>
             </div>
             <div class="pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-2">
-              <select v-model="proposalForm.event_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <select v-model="proposalForm.event_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
                 <option value="">イベントを選択</option>
                 <option v-for="e in proposalEvents" :key="`proposal-event-${e.id}`" :value="String(e.id)">
                   {{ e.event_name || e.title }}（{{ e.event_date ? formatDateTime(e.event_date) : '-' }}）
                 </option>
               </select>
-              <select v-model="proposalForm.selected_event_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" :disabled="!proposalForm.event_id">
+              <select v-model="proposalForm.selected_event_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" :disabled="!proposalForm.event_id">
                 <option value="">参加日程を選択</option>
                 <option v-for="d in selectedProposalEventDates" :key="`proposal-date-${d}`" :value="d">{{ formatDateTime(d, selectedProposalEvent) }}</option>
               </select>
-              <select v-model="proposalForm.status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <select v-model="proposalForm.status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
                 <option value="proposed">提案済み</option>
                 <option value="joined">参加</option>
                 <option value="lost">失注</option>
               </select>
-              <select v-model="proposalForm.reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <select v-model="proposalForm.reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
                 <option value="">理由（任意）</option>
                 <option v-for="reason in unifiedReasonOptions" :key="`proposal-reason-${reason}`" :value="reason">{{ reason }}</option>
               </select>
-              <input v-model="proposalForm.memo" type="text" placeholder="メモ（任意）" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              <input v-model="proposalForm.memo" type="text" placeholder="メモ（任意）" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
             </div>
-            <button class="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700" @click="submitEventProposal">
+            <button class="mt-3 bg-blue-600 text-white px-4 py-2 min-h-[44px] rounded-lg text-base md:text-sm hover:bg-blue-700" @click="submitEventProposal">
               イベント提案を追加
             </button>
           </div>
 
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div :class="activeTab === 'イベント' ? 'block' : 'hidden md:block'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Calendar class="w-5 h-5 text-blue-600" />
               参加・エントリーイベント
@@ -1176,13 +1190,13 @@ watch(selectedEventId, () => {
               <div v-for="e in studentEvents" :key="e.student_event_id || e.id" class="p-3 bg-gray-50 rounded-lg">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div class="min-w-0 flex-1">
-                    <span class="text-sm font-bold text-gray-900 block truncate">{{ e.title }}</span>
-                    <p class="text-xs text-gray-500 mt-0.5">{{ e.selected_event_date ? formatDateTime(e.selected_event_date, e) : formatDateTime(e.event_date, e) }}</p>
+                    <span class="text-base md:text-sm font-bold text-gray-900 block truncate">{{ e.title }}</span>
+                    <p class="text-base md:text-sm text-gray-500 mt-0.5">{{ e.selected_event_date ? formatDateTime(e.selected_event_date, e) : formatDateTime(e.event_date, e) }}</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-2 sm:justify-end">
                     <select
                       v-if="eventDateOptions(e).length > 1"
-                      class="px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-[140px]"
+                      class="px-2 py-1.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-[140px]"
                       :value="e.selected_event_date || ''"
                       @change="updateEventParticipationDate(e.id, e.student_event_id, e.participation_status, ($event.target as HTMLSelectElement).value)"
                     >
@@ -1196,35 +1210,35 @@ watch(selectedEventId, () => {
                     </span>
                     <button
                       @click="openStatusModal(e)"
-                      class="text-xs font-bold px-2 py-1 rounded-full border whitespace-nowrap"
+                      class="text-base md:text-sm font-bold px-2 py-1 rounded-full border whitespace-nowrap"
                       :class="getStatusBadgeClass(e.participation_status)"
                     >{{ getStatusLabel(e.participation_status) }} ▼</button>
                   </div>
                 </div>
               </div>
-              <div v-if="studentEvents.length === 0" class="text-sm text-gray-400 text-center py-4">
+              <div v-if="studentEvents.length === 0" class="text-base md:text-sm text-gray-400 text-center py-4">
                 イベントへの参加はありません
               </div>
             </div>
 
             <div class="pt-5 border-t border-gray-100">
-              <label class="block text-xs font-bold text-gray-600 mb-3 ml-1">新しいイベントに紐付ける</label>
+              <label class="block text-base md:text-sm font-bold text-gray-600 mb-3 ml-1">新しいイベントに紐付ける</label>
               <div class="flex flex-col gap-2">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <select v-model="selectedEventId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                  <select v-model="selectedEventId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                     <option disabled value="">イベントを選択</option>
                     <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
                   </select>
                   <select
                     v-if="selectedLinkEventDates.length > 1"
                     v-model="selectedEventDate"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   >
                     <option v-for="d in selectedLinkEventDates" :key="`add-link-date-${d}`" :value="d">{{ formatDateTime(d, selectedLinkEvent) }}</option>
                   </select>
                 </div>
                 <div class="flex gap-2">
-                  <select v-model="selectedEventStatus" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                  <select v-model="selectedEventStatus" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                     <option value="A_ENTRY">A:エントリー</option>
                     <option value="B_WAITING">B:回答待ち</option>
                     <option value="C_WAITING">C:回答待ち</option>
@@ -1232,14 +1246,14 @@ watch(selectedEventId, () => {
                     <option value="E_FAIL">E:不合格</option>
                     <option value="XA_CANCEL">XA:キャンセル</option>
                   </select>
-                  <button @click="linkEvent" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm">追加</button>
+                  <button @click="linkEvent" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-base md:text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm min-h-[44px]">追加</button>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="lg:col-span-2">
+        <div :class="activeTab === 'ログ' ? 'block' : 'hidden md:block'" class="lg:col-span-2">
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-[560px] lg:h-[600px] overflow-hidden">
             <div class="p-6 border-b border-gray-200">
               <h2 class="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -1252,10 +1266,10 @@ watch(selectedEventId, () => {
               <div v-for="log in interviewLogs" :key="log.id" class="bg-gray-50 rounded-lg p-4">
                 <div class="flex flex-col gap-2">
                   <div class="flex items-start justify-between gap-3">
-                    <div class="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                    <div class="flex flex-wrap items-center gap-2 text-base md:text-sm text-gray-600">
                       <span class="font-semibold text-blue-600">
                         {{ log.log_type || '面談' }}
-                        <span v-if="log.log_type === 'エントリー' && log.event_title" class="text-xs text-gray-500 ml-2">
+                        <span v-if="log.log_type === 'エントリー' && log.event_title" class="text-base md:text-sm text-gray-500 ml-2">
                           ({{ log.event_title }})
                         </span>
                       </span>
@@ -1290,22 +1304,22 @@ watch(selectedEventId, () => {
                       </button>
                     </div>
                   </div>
-                  <div v-if="expandedLogId === log.id" class="text-sm text-gray-800">
+                  <div v-if="expandedLogId === log.id" class="text-base md:text-sm text-gray-800">
                     <div v-if="editingLogId === log.id" class="space-y-3">
                       <textarea
                         v-model="editingLogContent"
-                        class="w-full p-3 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 h-32 bg-white"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 h-32 bg-white"
                         placeholder="ログ内容を編集..."
                       ></textarea>
                       <div class="flex justify-end gap-2">
                         <button
-                          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-base md:text-sm hover:bg-gray-50 transition-colors"
                           @click="cancelEditLog"
                         >
                           キャンセル
                         </button>
                         <button
-                          class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+                          class="px-4 py-2 bg-blue-600 text-white rounded-lg text-base md:text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
                           :disabled="savingLogId === log.id"
                           @click="updateLog(log.id)"
                         >
@@ -1324,7 +1338,7 @@ watch(selectedEventId, () => {
 
             <div class="p-6 border-t border-gray-200 bg-gray-50">
               <div class="flex flex-col sm:flex-row gap-2 mb-3">
-                <select v-model="newLogType" class="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <select v-model="newLogType" class="px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                   <option value="面談">面談</option>
                   <option value="エントリー">エントリー</option>
                   <option value="その他">その他</option>
@@ -1332,7 +1346,7 @@ watch(selectedEventId, () => {
                 <select
                   v-if="newLogType === 'エントリー'"
                   v-model="newLogEventId"
-                  class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   <option disabled value="">エントリーしたイベントを選択</option>
                   <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
@@ -1341,10 +1355,10 @@ watch(selectedEventId, () => {
               <textarea
                 v-model="newLog"
                 :placeholder="newLogType === '面談' ? '面談内容を入力...' : newLogType === 'エントリー' ? 'エントリー内容を入力...' : 'メモを入力...'"
-                class="w-full p-4 border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 h-24 mb-3 bg-white"
+                class="w-full p-4 border border-gray-300 rounded-xl text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 h-24 mb-3 bg-white"
               ></textarea>
               <div class="flex justify-end">
-                <button @click="addLog" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2">
+                <button @click="addLog" class="bg-blue-600 text-white px-6 py-2 min-h-[44px] rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2">
                   <Plus class="w-4 h-4" />
                   <span>ログを追加</span>
                 </button>
@@ -1364,12 +1378,12 @@ watch(selectedEventId, () => {
         <div class="w-full max-w-6xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-gray-200 p-6">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-2xl font-extrabold text-gray-900">Matcher面談ファネル</h2>
-            <button class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="showMatcherFunnel = false">閉じる</button>
+            <button class="px-3 py-1.5 text-base md:text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="showMatcherFunnel = false">閉じる</button>
           </div>
-          <p class="text-sm text-gray-600 mb-4">申込 → 予約（初回面談） → 初回面談実施 を順番に登録します。</p>
+          <p class="text-base md:text-sm text-gray-600 mb-4">申込 → 予約（初回面談） → 初回面談実施 を順番に登録します。</p>
 
           <div class="mb-6 rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
-            <div class="flex items-center justify-between gap-2 text-xs sm:text-sm font-semibold text-slate-700">
+            <div class="flex items-center justify-between gap-2 text-base md:text-sm sm:text-base md:text-sm font-semibold text-slate-700">
               <span class="inline-flex items-center gap-2"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white">1</span>申込</span>
               <span class="h-1 flex-1 bg-slate-300 rounded-full"></span>
               <span class="inline-flex items-center gap-2"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-white">2</span>予約</span>
@@ -1381,95 +1395,95 @@ watch(selectedEventId, () => {
           <div class="flex flex-col lg:flex-row lg:items-stretch gap-4">
             <div class="flex-1 rounded-2xl border border-blue-200 bg-blue-50/40 p-5 shadow-sm">
               <p class="text-xl font-extrabold text-gray-900 mb-3">1) 申込登録</p>
-              <label class="block text-sm font-medium text-gray-700 mb-2">申込日</label>
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">申込日</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(matcherForm.applied_at)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @input="matcherForm.applied_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.applied_at))"
                 />
                 <select
                   :value="getHourPart(matcherForm.applied_at)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @change="matcherForm.applied_at = mergeDateHour(getDatePart(matcherForm.applied_at), ($event.target as HTMLSelectElement).value)"
                 >
                   <option v-for="h in hourOptions" :key="`matcher-apply-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
-              <button class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors" @click="registerMatcherApply">申込登録</button>
+              <button class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors" @click="registerMatcherApply">申込登録</button>
             </div>
 
             <div class="hidden lg:flex items-center text-3xl font-black text-slate-300 px-1">→</div>
 
             <div class="flex-1 rounded-2xl border border-amber-200 bg-amber-50/50 p-5 shadow-sm">
               <p class="text-xl font-extrabold text-gray-900 mb-3">2) 予約登録（初回面談）</p>
-              <label class="block text-sm font-medium text-gray-700 mb-2">予約作成日（TimeRex）</label>
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">予約作成日（TimeRex）</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(matcherForm.reservation_created_at)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @input="matcherForm.reservation_created_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.reservation_created_at))"
                 />
                 <select
                   :value="getHourPart(matcherForm.reservation_created_at)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @change="matcherForm.reservation_created_at = mergeDateHour(getDatePart(matcherForm.reservation_created_at), ($event.target as HTMLSelectElement).value)"
                 >
                   <option v-for="h in hourOptions" :key="`matcher-reserve-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">初回面談予定日</label>
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">初回面談予定日</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(matcherForm.interview_scheduled_at)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @input="matcherForm.interview_scheduled_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.interview_scheduled_at))"
                 />
                 <select
                   :value="getHourPart(matcherForm.interview_scheduled_at)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @change="matcherForm.interview_scheduled_at = mergeDateHour(getDatePart(matcherForm.interview_scheduled_at), ($event.target as HTMLSelectElement).value)"
                 >
                   <option v-for="h in hourOptions" :key="`matcher-scheduled-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
               <div class="mb-4">
-                <span class="inline-flex items-center px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-sm font-semibold border border-amber-200">予約ステータス: 初回面談</span>
+                <span class="inline-flex items-center px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-base md:text-sm font-semibold border border-amber-200">予約ステータス: 初回面談</span>
               </div>
-              <button class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 transition-colors" @click="registerMatcherReservation">予約登録</button>
+              <button class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 transition-colors" @click="registerMatcherReservation">予約登録</button>
             </div>
 
             <div class="hidden lg:flex items-center text-3xl font-black text-slate-300 px-1">→</div>
 
             <div class="flex-1 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
               <p class="text-xl font-extrabold text-gray-900 mb-3">3) 初回面談実施登録</p>
-              <label class="block text-sm font-medium text-gray-700 mb-2">初回面談実施日</label>
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">初回面談実施日</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
                   :value="getDatePart(matcherForm.interview_actual_at)"
                   type="date"
-                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @input="matcherForm.interview_actual_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.interview_actual_at))"
                 />
                 <select
                   :value="getHourPart(matcherForm.interview_actual_at)"
-                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   @change="matcherForm.interview_actual_at = mergeDateHour(getDatePart(matcherForm.interview_actual_at), ($event.target as HTMLSelectElement).value)"
                 >
                   <option v-for="h in hourOptions" :key="`matcher-actual-hour-${h}`" :value="h">{{ h }}:00</option>
                 </select>
               </div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">面談結果</label>
-              <select v-model="matcherForm.interview_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-4">
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">面談結果</label>
+              <select v-model="matcherForm.interview_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm mb-4">
                 <option value="completed">実施</option>
                 <option value="no_show">飛ばれ</option>
                 <option value="rescheduled">リスケ</option>
                 <option value="cancel">キャンセル</option>
               </select>
-              <button class="w-full h-11 px-4 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors" @click="registerMatcherInterview">面談実施登録</button>
+              <button class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors" @click="registerMatcherInterview">面談実施登録</button>
             </div>
           </div>
         </div>
@@ -1484,9 +1498,9 @@ watch(selectedEventId, () => {
         <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
             <h3 class="text-lg font-bold text-gray-900">開催中・未終了イベント概要</h3>
-            <p class="text-xs text-gray-500">イベント名を開いて詳細を確認</p>
+            <p class="text-base md:text-sm text-gray-500">イベント名を開いて詳細を確認</p>
           </div>
-          <button class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="showEventOverviewPanel = false">閉じる</button>
+          <button class="px-3 py-1.5 text-base md:text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="showEventOverviewPanel = false">閉じる</button>
         </div>
         <div class="flex-1 overflow-y-auto p-4 space-y-3">
           <div
@@ -1500,36 +1514,36 @@ watch(selectedEventId, () => {
             >
               <div class="min-w-0">
                 <p class="text-base font-bold text-gray-900 truncate">{{ ev.title }}</p>
-                <p class="text-xs text-gray-500 mt-0.5">クリックで概要を表示</p>
+                <p class="text-base md:text-sm text-gray-500 mt-0.5">クリックで概要を表示</p>
               </div>
               <component :is="expandedOverviewEventId === ev.id ? ChevronUp : ChevronDown" class="w-5 h-5 text-gray-500 shrink-0" />
             </button>
 
             <div v-if="expandedOverviewEventId === ev.id" class="px-4 pb-4 border-t border-gray-200">
               <div class="pt-3">
-                <span class="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">提案候補</span>
+                <span class="text-base md:text-sm px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">提案候補</span>
               </div>
-              <p class="text-xs text-gray-500 mt-3 mb-1">開催日</p>
-              <div class="text-sm text-gray-800 mb-2">
+              <p class="text-base md:text-sm text-gray-500 mt-3 mb-1">開催日</p>
+              <div class="text-base md:text-sm text-gray-800 mb-2">
                 <div v-for="d in eventDateList(ev)" :key="`upcoming-date-${ev.id}-${d}`">{{ formatDateTime(d, ev) }}</div>
                 <div v-if="eventDateList(ev).length === 0">未設定</div>
               </div>
-              <p class="text-xs text-gray-500 mb-1">開催場所</p>
-              <p class="text-sm text-gray-800 mb-2">{{ ev.location || '未設定' }}</p>
-              <p class="text-xs text-gray-500 mb-1">概要</p>
-              <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ ev.description || '概要未設定' }}</p>
+              <p class="text-base md:text-sm text-gray-500 mb-1">開催場所</p>
+              <p class="text-base md:text-sm text-gray-800 mb-2">{{ ev.location || '未設定' }}</p>
+              <p class="text-base md:text-sm text-gray-500 mb-1">概要</p>
+              <p class="text-base md:text-sm text-gray-800 whitespace-pre-wrap">{{ ev.description || '概要未設定' }}</p>
               <a
                 v-if="ev.lp_url"
                 :href="ev.lp_url"
                 target="_blank"
                 rel="noreferrer"
-                class="inline-block mt-2 text-sm text-blue-600 hover:underline"
+                class="inline-block mt-2 text-base md:text-sm text-blue-600 hover:underline"
               >
                 LPを開く
               </a>
             </div>
           </div>
-          <div v-if="upcomingEvents.length === 0" class="text-sm text-gray-400 text-center py-8">
+          <div v-if="upcomingEvents.length === 0" class="text-base md:text-sm text-gray-400 text-center py-8">
             提案候補イベントはありません
           </div>
         </div>
@@ -1540,40 +1554,40 @@ watch(selectedEventId, () => {
       <div v-if="editingBasic" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[90]">
         <div class="bg-white rounded-xl shadow-xl w-[90vw] max-w-2xl max-h-[85vh] overflow-y-auto p-6">
           <h3 class="text-lg font-bold text-gray-900 mb-4">基本情報を編集</h3>
-          <p v-if="basicSaveError" class="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <p v-if="basicSaveError" class="mb-3 text-base md:text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
             {{ basicSaveError }}
           </p>
-          <p v-if="basicSaveMessage" class="mb-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+          <p v-if="basicSaveMessage" class="mb-3 text-base md:text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
             {{ basicSaveMessage }}
           </p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input v-model="basicDraft.name" type="text" placeholder="氏名" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.university" type="text" placeholder="大学" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.prefecture" type="text" placeholder="所在地（都道府県）" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <select v-model="basicDraft.academic_track" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <input v-model="basicDraft.name" type="text" placeholder="氏名" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.university" type="text" placeholder="大学" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.prefecture" type="text" placeholder="所在地（都道府県）" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <select v-model="basicDraft.academic_track" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
               <option value="">文理（未設定）</option>
               <option value="文系">文系</option>
               <option value="理系">理系</option>
             </select>
-            <input v-model="basicDraft.faculty" type="text" placeholder="学部" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.graduation_year" type="number" placeholder="卒業年" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.email" type="email" placeholder="メールアドレス" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.phone" type="text" placeholder="電話番号" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.source_company" type="text" placeholder="流入経路" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <select v-model="basicDraft.interview_reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <input v-model="basicDraft.faculty" type="text" placeholder="学部" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.graduation_year" type="number" placeholder="卒業年" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.email" type="email" placeholder="メールアドレス" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.phone" type="text" placeholder="電話番号" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.source_company" type="text" placeholder="流入経路" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <select v-model="basicDraft.interview_reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
               <option value="">面談理由（未設定）</option>
               <option value="就活相談">就活相談</option>
               <option value="企業分析">企業分析</option>
               <option value="企業相談">企業相談</option>
               <option value="面接対策">面接対策</option>
             </select>
-            <input v-model="basicDraft.meeting_decided_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.first_interview_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.second_interview_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.desired_industry" type="text" placeholder="志望業界" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.desired_role" type="text" placeholder="志望職種" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.next_meeting_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-            <input v-model="basicDraft.next_action" type="text" placeholder="ネクストアクション" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm md:col-span-2" />
+            <input v-model="basicDraft.meeting_decided_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.first_interview_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.second_interview_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.desired_industry" type="text" placeholder="志望業界" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.desired_role" type="text" placeholder="志望職種" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.next_meeting_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            <input v-model="basicDraft.next_action" type="text" placeholder="ネクストアクション" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm md:col-span-2" />
           </div>
           <div class="mt-6 flex justify-end gap-3">
             <button class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50" @click="cancelEditBasic">

@@ -375,7 +375,7 @@ onMounted(fetchDetail);
           <div class="flex items-center justify-between mb-4">
             <h1 class="text-2xl font-bold text-gray-900">{{ event.title }}</h1>
             <button
-              class="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50"
+              class="px-4 py-2 text-base md:text-sm min-h-[44px] border border-gray-200 rounded-lg hover:bg-gray-50"
               @click="isEditing = !isEditing"
             >
               {{ isEditing ? '編集を閉じる' : 'イベント編集' }}
@@ -427,39 +427,39 @@ onMounted(fetchDetail);
           <div v-if="isEditing" class="border-t border-gray-100 pt-4 space-y-3">
             <div>
               <label class="block text-xs text-gray-500 mb-1">イベント名</label>
-              <input v-model="form.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              <input v-model="form.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">開催日時・場所・備考</label>
               <div class="space-y-2">
                 <div v-for="(slot, idx) in form.event_slots" :key="`edit-event-slot-${idx}`" class="flex flex-col sm:flex-row gap-2 pb-2 border-b border-gray-100 sm:border-0 items-end sm:items-center">
                   <div class="flex-[2] w-full">
-                    <input v-model="slot.datetime" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                    <input v-model="slot.datetime" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
                   </div>
                   <div class="flex-1 w-full">
-                    <input v-model="slot.location" type="text" placeholder="場所" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                    <input v-model="slot.location" type="text" placeholder="場所" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
                   </div>
                   <div class="flex-1 w-full">
-                    <input v-model="slot.note" type="text" placeholder="備考" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                    <input v-model="slot.note" type="text" placeholder="備考" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
                   </div>
-                  <button type="button" class="px-3 py-2 border border-gray-300 rounded-lg text-xs hover:bg-gray-50 text-red-600 whitespace-nowrap" @click="removeSlot(idx)">削除</button>
+                  <button type="button" class="px-4 py-2 text-base md:text-sm min-h-[44px] hover:bg-gray-50 text-red-600 whitespace-nowrap" @click="removeSlot(idx)">削除</button>
                 </div>
                 <button type="button" class="px-3 py-2 border border-blue-200 text-blue-700 rounded-lg text-xs hover:bg-blue-50" @click="addSlot">日程追加</button>
               </div>
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">場所（オンライン/会場）</label>
-              <input v-model="form.location" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              <input v-model="form.location" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">LPリンク</label>
-              <input v-model="form.lp_url" type="url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              <input v-model="form.lp_url" type="url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">概要</label>
-              <textarea v-model="form.description" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm h-24"></textarea>
+              <textarea v-model="form.description" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm h-24"></textarea>
             </div>
-            <button class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700" @click="updateEvent">
+            <button class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-base md:text-sm hover:bg-blue-700" @click="updateEvent">
               保存
             </button>
           </div>
@@ -535,7 +535,7 @@ onMounted(fetchDetail);
               </div>
               <button
                 @click="downloadCSV"
-                class="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 whitespace-nowrap"
+                class="flex items-center gap-1.5 px-4 py-2 min-h-[44px] bg-gray-50 border border-gray-200 rounded-lg text-base md:text-sm font-medium text-gray-700 hover:bg-gray-100 whitespace-nowrap"
                 title="CSVダウンロード"
               >
                 <Download class="w-4 h-4" />

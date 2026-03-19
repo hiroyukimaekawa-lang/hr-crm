@@ -404,17 +404,17 @@ onMounted(async () => {
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-6">
         <div class="flex flex-wrap gap-2">
-          <button class="px-4 py-2 rounded-lg border text-sm" :class="activeSection === 'categories' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'categories'">流入経路カテゴリ登録</button>
-          <button class="px-4 py-2 rounded-lg border text-sm" :class="activeSection === 'invite' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'invite'">担当者招待URL</button>
-          <button class="px-4 py-2 rounded-lg border text-sm" :class="activeSection === 'event-kpi' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'event-kpi'">イベントKPI</button>
-          <button class="px-4 py-2 rounded-lg border text-sm" :class="activeSection === 'event-status' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'event-status'">イベントステータス登録</button>
+          <button class="px-4 py-2 rounded-lg border text-base md:text-sm min-h-[44px]" :class="activeSection === 'categories' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'categories'">流入経路カテゴリ登録</button>
+          <button class="px-4 py-2 rounded-lg border text-base md:text-sm min-h-[44px]" :class="activeSection === 'invite' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'invite'">担当者招待URL</button>
+          <button class="px-4 py-2 rounded-lg border text-base md:text-sm min-h-[44px]" :class="activeSection === 'event-kpi' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'event-kpi'">イベントKPI</button>
+          <button class="px-4 py-2 rounded-lg border text-base md:text-sm min-h-[44px]" :class="activeSection === 'event-status' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'event-status'">イベントステータス登録</button>
         </div>
       </div>
 
       <div v-if="activeSection === 'categories'" class="space-y-6">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-3">流入経路カテゴリ登録</h2>
-          <p v-if="user.role !== 'admin'" class="text-sm text-gray-500">閲覧のみ可能です（管理者のみ追加・削除可能）。</p>
+          <p v-if="user.role !== 'admin'" class="text-base md:text-sm text-gray-500">閲覧のみ可能です（管理者のみ追加・削除可能）。</p>
           <div class="flex gap-2 max-w-xl">
             <input
               v-model="newCategoryName"
@@ -424,20 +424,20 @@ onMounted(async () => {
               :disabled="user.role !== 'admin'"
             />
             <button
-              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              class="px-4 py-2 text-base md:text-sm min-h-[44px]"
               :disabled="user.role !== 'admin'"
               @click="addCategory"
             >
               追加
             </button>
           </div>
-          <p v-if="message" class="text-sm text-green-600 mt-2">{{ message }}</p>
+          <p v-if="message" class="text-base md:text-sm text-green-600 mt-2">{{ message }}</p>
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-3">登録済みカテゴリ</h2>
           <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="w-full text-base md:text-sm">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">カテゴリ名</th>
@@ -469,7 +469,7 @@ onMounted(async () => {
 
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-3">卒業年度カテゴリ登録</h2>
-          <p v-if="user.role !== 'admin'" class="text-sm text-gray-500">閲覧のみ可能です（管理者のみ追加・削除可能）。</p>
+          <p v-if="user.role !== 'admin'" class="text-base md:text-sm text-gray-500">閲覧のみ可能です（管理者のみ追加・削除可能）。</p>
           <div class="flex gap-2 max-w-xl">
             <input
               v-model="newGraduationYear"
@@ -481,7 +481,7 @@ onMounted(async () => {
               :disabled="user.role !== 'admin'"
             />
             <button
-              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              class="px-4 py-2 text-base md:text-sm min-h-[44px]"
               :disabled="user.role !== 'admin'"
               @click="addGraduationYearCategory"
             >
@@ -493,7 +493,7 @@ onMounted(async () => {
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-3">登録済み卒業年度</h2>
           <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="w-full text-base md:text-sm">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">卒業年度</th>
@@ -526,10 +526,10 @@ onMounted(async () => {
 
       <div v-else-if="activeSection === 'invite'" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
         <h2 class="text-lg font-semibold text-gray-900 mb-3">担当者招待URL</h2>
-        <p v-if="user.role !== 'admin'" class="text-sm text-gray-500">管理者のみ操作できます。</p>
+        <p v-if="user.role !== 'admin'" class="text-base md:text-sm text-gray-500">管理者のみ操作できます。</p>
         <div class="flex flex-wrap items-center gap-2 mb-3">
           <button
-            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            class="px-4 py-2 text-base md:text-sm min-h-[44px]"
             :disabled="user.role !== 'admin'"
             @click="createInvite"
           >
@@ -537,28 +537,28 @@ onMounted(async () => {
           </button>
         </div>
         <div v-if="inviteUrl" class="flex flex-col md:flex-row items-start md:items-center gap-2">
-          <input :value="inviteUrl" readonly class="w-full md:flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-          <button class="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50" @click="copyInvite">コピー</button>
+          <input :value="inviteUrl" readonly class="w-full md:flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+          <button class="px-4 py-2 border border-gray-300 rounded-lg text-base md:text-sm hover:bg-gray-50" @click="copyInvite">コピー</button>
         </div>
-        <p v-if="inviteMessage" class="text-sm text-gray-600 mt-2">{{ inviteMessage }}</p>
+        <p v-if="inviteMessage" class="text-base md:text-sm text-gray-600 mt-2">{{ inviteMessage }}</p>
       </div>
 
       <div v-else-if="activeSection === 'event-kpi'" class="space-y-4">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-1">イベントKPI</h2>
-          <p class="text-sm text-gray-500 mb-4">目標着座数から逆算して、必要なエントリー/面談/流入数を自動計算します。</p>
+          <p class="text-base md:text-sm text-gray-500 mb-4">目標着座数から逆算して、必要なエントリー/面談/流入数を自動計算します。</p>
 
           <!-- ── 対象イベント選択（最上部に移動） ── -->
           <div class="mb-6 pb-6 border-b border-gray-200">
-            <label class="block text-sm font-bold text-gray-700 mb-1">対象イベント</label>
-            <select v-model.number="selectedEventId" class="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg text-sm" @change="onSelectEvent">
+            <label class="block text-base md:text-sm font-bold text-gray-700 mb-1">対象イベント</label>
+            <select v-model.number="selectedEventId" class="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" @change="onSelectEvent">
               <option v-for="e in events" :key="e.id" :value="e.id">{{ e.title }}</option>
             </select>
           </div>
           
           <!-- ── 売上・目標設定セクション ── -->
           <div class="space-y-4 mb-6 pb-6 border-b border-gray-200">
-            <h3 class="text-sm font-bold text-gray-700">売上・目標設定</h3>
+            <h3 class="text-base md:text-sm font-bold text-gray-700">売上・目標設定</h3>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <!-- エントリー期日 -->
@@ -569,7 +569,7 @@ onMounted(async () => {
                 <input
                   v-model="form.entry_deadline"
                   type="date"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                 />
               </div>
 
@@ -583,7 +583,7 @@ onMounted(async () => {
                   type="number"
                   min="0"
                   placeholder="例: 21"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                 />
               </div>
 
@@ -597,7 +597,7 @@ onMounted(async () => {
                   type="number"
                   min="0"
                   placeholder="例: 5"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                 />
               </div>
 
@@ -611,7 +611,7 @@ onMounted(async () => {
                   type="number"
                   min="0"
                   placeholder="例: 19000"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                 />
               </div>
 
@@ -628,7 +628,7 @@ onMounted(async () => {
                   type="number"
                   min="0"
                   :placeholder="autoTargetSales ? String(autoTargetSales) : '例: 95000'"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                 />
               </div>
 
@@ -642,7 +642,7 @@ onMounted(async () => {
                   type="number"
                   min="0"
                   placeholder="例: 38000"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                 />
               </div>
             </div>
@@ -650,25 +650,25 @@ onMounted(async () => {
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm text-gray-600 mb-1">エントリー→イベント出席率（%）</label>
+              <label class="block text-base md:text-sm text-gray-600 mb-1">エントリー→イベント出席率（%）</label>
               <input v-model="form.seat_to_entry_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
             <div>
-              <label class="block text-sm text-gray-600 mb-1">面談→エントリー率（%）</label>
+              <label class="block text-base md:text-sm text-gray-600 mb-1">面談→エントリー率（%）</label>
               <input v-model="form.entry_to_interview_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
             <div>
-              <label class="block text-sm text-gray-600 mb-1">面談予約→面談出席率（%）</label>
+              <label class="block text-base md:text-sm text-gray-600 mb-1">面談予約→面談出席率（%）</label>
               <input v-model="form.interview_to_inflow_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
             <div>
-              <label class="block text-sm text-gray-600 mb-1">流入→面談予約率（%）</label>
+              <label class="block text-base md:text-sm text-gray-600 mb-1">流入→面談予約率（%）</label>
               <input v-model="form.inflow_to_reservation_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
           </div>
 
           <div class="mt-6 border-t border-gray-100 pt-4">
-            <p class="text-sm font-semibold text-gray-800 mb-3">テンプレートから設定</p>
+            <p class="text-base md:text-sm font-semibold text-gray-800 mb-3">テンプレートから設定</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <button
                 class="p-4 border border-gray-200 rounded-xl hover:bg-blue-50 hover:border-blue-300 transition-all text-left group"
@@ -689,13 +689,13 @@ onMounted(async () => {
 
           <div class="mt-4">
             <div class="flex items-center justify-between mb-2">
-              <p class="text-sm font-semibold text-gray-800">追加項目（イベント別）</p>
-              <button class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="addCustomStep">項目追加</button>
+              <p class="text-base md:text-sm font-semibold text-gray-800">追加項目（イベント別）</p>
+              <button class="px-3 py-1.5 text-base md:text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="addCustomStep">項目追加</button>
             </div>
             <div class="space-y-2">
               <div v-for="(step, idx) in customSteps" :key="`custom-${idx}`" class="grid grid-cols-1 md:grid-cols-[1fr_160px_140px_70px] gap-2 items-center">
                 <input v-model="step.label" type="text" placeholder="項目名（例: 選考）" class="px-3 py-2 border border-gray-300 rounded-lg" />
-                <select v-model.number="step.position" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <select v-model.number="step.position" class="px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
                   <option v-for="opt in POSITION_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                 </select>
                 <input v-model.number="step.rate" type="number" min="1" max="100" placeholder="前段階比(%)" class="px-3 py-2 border border-gray-300 rounded-lg" />
@@ -705,15 +705,15 @@ onMounted(async () => {
           </div>
 
           <div class="mt-5">
-            <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700" @click="saveKpi">保存</button>
-            <span v-if="saveMessage" class="ml-3 text-sm text-green-600">{{ saveMessage }}</span>
+            <button class="px-4 py-2 bg-blue-600 text-white rounded-lg text-base md:text-sm min-h-[44px] hover:bg-blue-700" @click="saveKpi">保存</button>
+            <span v-if="saveMessage" class="ml-3 text-base md:text-sm text-green-600">{{ saveMessage }}</span>
           </div>
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-3">逆算結果</h3>
           <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="w-full text-base md:text-sm">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th class="px-3 py-2 text-left">項目</th>
@@ -769,16 +769,16 @@ onMounted(async () => {
               </tbody>
             </table>
           </div>
-          <p v-if="loading" class="text-sm text-gray-500 mt-3">読み込み中...</p>
+          <p v-if="loading" class="text-base md:text-sm text-gray-500 mt-3">読み込み中...</p>
         </div>
       </div>
 
       <div v-else class="space-y-4">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-1">イベントステータス登録</h2>
-          <p class="text-sm text-gray-500 mb-4">イベントごとに表示・使用するステータスを管理します。</p>
+          <p class="text-base md:text-sm text-gray-500 mb-4">イベントごとに表示・使用するステータスを管理します。</p>
           <div class="mb-4">
-            <label class="block text-sm text-gray-600 mb-1">対象イベント</label>
+            <label class="block text-base md:text-sm text-gray-600 mb-1">対象イベント</label>
             <select
               v-model.number="selectedStatusEventId"
               class="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg"
@@ -789,10 +789,10 @@ onMounted(async () => {
             </select>
           </div>
           <div v-if="selectedStatusEventId">
-            <p class="text-sm font-semibold text-gray-700 mb-2">現在のステータス一覧</p>
+            <p class="text-base md:text-sm font-semibold text-gray-700 mb-2">現在のステータス一覧</p>
             <div class="space-y-2 mb-4">
               <div v-for="(st, idx) in eventStatuses" :key="`status-${idx}`" class="flex items-center gap-2">
-                <span class="px-3 py-1.5 rounded border border-gray-200 bg-gray-50 text-sm flex-1">
+                <span class="px-3 py-1.5 rounded border border-gray-200 bg-gray-50 text-base md:text-sm flex-1">
                   {{ STATUS_LABEL_MAP[st] || st }}
                   <span class="text-xs text-gray-400 ml-1">({{ st }})</span>
                 </span>
@@ -808,16 +808,16 @@ onMounted(async () => {
                 v-model="newStatusInput"
                 type="text"
                 placeholder="カスタムステータスを追加（例: D_PASS）"
-                class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
               />
               <button
-                class="px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-200"
+                class="px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg text-base md:text-sm hover:bg-gray-200"
                 @click="() => { if (newStatusInput.trim()) { eventStatuses.push(newStatusInput.trim()); newStatusInput = ''; } }"
               >追加</button>
             </div>
             <div class="flex items-center gap-3">
-              <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm" @click="saveEventStatuses">保存</button>
-              <span v-if="statusSaveMessage" class="text-sm text-green-600">{{ statusSaveMessage }}</span>
+              <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-base md:text-sm" @click="saveEventStatuses">保存</button>
+              <span v-if="statusSaveMessage" class="text-base md:text-sm text-green-600">{{ statusSaveMessage }}</span>
             </div>
           </div>
         </div>

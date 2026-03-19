@@ -770,7 +770,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
       </div>
 
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6 relative">
           <div class="flex flex-col md:flex-row md:items-center gap-4">
             <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
               <span class="w-1.5 h-6 bg-emerald-600 rounded-full"></span>
@@ -778,7 +778,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
             </h2>
             <button 
               @click="openMonthlyAttendanceModal"
-              class="px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-sm font-black hover:bg-emerald-100 transition-all flex items-center gap-2 w-fit"
+              class="px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-base md:text-sm min-h-[44px] font-black hover:bg-emerald-100 transition-all flex items-center gap-2 w-fit"
             >
               {{ calendarBaseMonth.getMonth() + 1 }}月の参加: {{ monthlyAttendanceCount }}名
               <ArrowRight class="w-4 h-4" />
@@ -787,7 +787,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
           <span class="text-sm font-bold text-slate-400 bg-slate-50 px-3 py-1 rounded-full w-fit">開催予定: {{ upcomingEvents }}件</span>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div v-for="row in eventYomiRows" :key="row.id" class="bg-slate-50/50 rounded-2xl p-5 border border-slate-100 transition-all hover:shadow-lg hover:border-blue-200 hover:bg-white group">
             <h3 class="font-black text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 min-h-[3rem] text-lg mb-4">
               {{ row.title }}

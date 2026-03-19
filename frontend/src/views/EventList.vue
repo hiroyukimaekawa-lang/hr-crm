@@ -317,7 +317,7 @@ onMounted(fetchEvents);
         </div>
         <button
           @click="showCreate = true"
-          class="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
+          class="bg-blue-600 text-white px-4 py-2 text-base md:text-sm min-h-[44px] rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
         >
           <Plus class="w-4 h-4" />
           <span>イベント作成</span>
@@ -519,35 +519,35 @@ onMounted(fetchEvents);
         </div>
         <div class="px-4 md:px-6 py-4 overflow-y-auto space-y-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">イベント名</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">イベント名</label>
             <input v-model="newEvent.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">概要</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">概要</label>
             <textarea v-model="newEvent.description" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-24"></textarea>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">開催日時（複数可）</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">開催日時（複数可）</label>
             <div class="space-y-2">
               <div v-for="(_, idx) in newEvent.event_dates" :key="`new-event-date-${idx}`" class="flex gap-2">
                 <input v-model="newEvent.event_dates[idx]" type="datetime-local" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                <button type="button" class="px-3 py-2 border border-gray-300 rounded-lg text-xs hover:bg-gray-50" @click="removeEventDateInput(idx)">削除</button>
+                <button type="button" class="px-4 py-2 text-base md:text-sm min-h-[44px] hover:bg-gray-50" @click="removeEventDateInput(idx)">削除</button>
               </div>
-              <button type="button" class="px-3 py-2 border border-blue-200 text-blue-700 rounded-lg text-xs hover:bg-blue-50" @click="addEventDateInput">日程追加</button>
+              <button type="button" class="px-4 py-2 text-base md:text-sm min-h-[44px] hover:bg-blue-50" @click="addEventDateInput">日程追加</button>
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">会場</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">会場</label>
             <input v-model="newEvent.location" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">LPリンク</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">LPリンク</label>
             <input v-model="newEvent.lp_url" type="url" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
         </div>
         <div class="px-4 md:px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-white">
-          <button @click="showCreate = false" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">キャンセル</button>
-          <button @click="createEvent" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">作成</button>
+          <button @click="showCreate = false" class="px-4 py-2 text-base md:text-sm min-h-[44px] text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">キャンセル</button>
+          <button @click="createEvent" class="px-4 py-2 text-base md:text-sm min-h-[44px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">作成</button>
         </div>
       </div>
     </div>

@@ -50,7 +50,7 @@ const login = async () => {
                 v-model="username"
                 id="username"
                 type="text" 
-                class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-base md:text-sm"
               >
             </div>
           </div>
@@ -62,7 +62,7 @@ const login = async () => {
                 v-model="password"
                 id="password"
                 type="password" 
-                class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-base md:text-sm"
               >
             </div>
           </div>
@@ -74,7 +74,7 @@ const login = async () => {
           <div>
             <button 
               @click="login"
-              class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-base md:text-sm min-h-[44px] font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
             >
               ログイン
             </button>
