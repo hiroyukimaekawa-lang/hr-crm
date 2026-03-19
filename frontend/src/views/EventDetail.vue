@@ -13,6 +13,8 @@ import {
   XCircle,
   Download
 } from 'lucide-vue-next';
+import StatusChangeModal from '../components/StatusChangeModal.vue'
+import { getStatusLabel, getStatusBadgeClass } from '../lib/statusConfig'
 
 interface Participant {
   id?: number; // student_events row id
@@ -76,6 +78,13 @@ const sortField = ref<'status' | null>(null);
 const sortOrder = ref<'asc' | 'desc'>('asc');
 const kgiData = ref<EventKgi | null>(null);
 const kgiLoading = ref(false);
+
+const statusModalOpen = ref(false)
+const statusModalTarget = ref<any>(null)
+const openStatusModal = (p: any) => {
+  statusModalTarget.value = p
+  statusModalOpen.value = true
+}
 
 const STATUS_ORDER: Record<string, number> = {
   A_ENTRY: 1, registered: 1,
@@ -535,13 +544,7 @@ onMounted(fetchDetail);
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2 mb-4">
-            <span class="text-xs text-gray-500">ステータス操作:</span>
-            <button type="button" class="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs">A:エントリー</button>
-            <button type="button" class="px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700 text-xs">B:回答待ち</button>
-            <button type="button" class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs">C:回答待ち</button>
-            <button type="button" class="px-2 py-1 rounded border border-green-200 bg-green-50 text-green-700 text-xs">D:合格</button>
-            <button type="button" class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs">E:不合格</button>
-            <button type="button" class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs">XA:エントリーキャンセル</button>
+            <span class="text-xs text-gray-500">ステータス操作: 氏名の右側のステータスをクリックして変更できます</span>
           </div>
 
           <div class="overflow-x-auto">
@@ -579,37 +582,14 @@ onMounted(fetchDetail);
                   <td class="px-4 py-3 text-gray-600">{{ formatDateKey(p.created_at) }}</td>
                   <td class="px-4 py-3 text-gray-900 font-medium">{{ formatDateKey(p.selected_event_date) }}</td>
                   <td class="px-4 py-3">
-                    <span class="text-xs font-semibold px-2 py-1 rounded-full" :class="statusBadge(p.status)">
-                      {{ statusLabel(p.status) }}
-                    </span>
+                    <button
+                      @click="openStatusModal(p)"
+                      class="text-xs font-bold px-2 py-1 rounded-full border"
+                      :class="getStatusBadgeClass(p.status)"
+                    >{{ getStatusLabel(p.status) }} ▼</button>
                   </td>
                   <td class="px-4 py-3 text-right">
-                    <div class="inline-flex items-center gap-1.5 flex-wrap justify-end max-w-[260px] ml-auto">
-                      <button class="px-2 py-1 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs hover:bg-blue-100" @click="updateStatus(p.id!, 'A_ENTRY')" title="A:エントリー">
-                        A
-                      </button>
-                      <button class="px-2 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700 text-xs hover:bg-amber-100" @click="updateStatus(p.id!, 'B_WAITING')" title="B:回答待ち">
-                        B
-                      </button>
-                      <button class="px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700 text-xs hover:bg-purple-100" @click="updateStatus(p.id!, 'C_WAITING')" title="C:回答待ち">
-                        C
-                      </button>
-                      <button class="px-2 py-1 rounded border border-green-200 bg-green-50 text-green-700 text-xs hover:bg-green-100" @click="updateStatus(p.id!, 'D_PASS')" title="D:合格">
-                        D
-                      </button>
-                      <button class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs hover:bg-red-100" @click="updateStatus(p.id!, 'E_FAIL')" title="E:不合格">
-                        E
-                      </button>
-                      <button class="px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-xs hover:bg-red-100" @click="updateStatus(p.id!, 'XA_CANCEL')" title="XA:エントリーキャンセル">
-                        XA
-                      </button>
-                      <button class="px-2 py-1 rounded border border-green-200 bg-green-50 text-green-700 text-xs hover:bg-green-100" @click="updateStatus(p.id!, 'attended')" title="出席（任意）">
-                        <CheckCircle class="w-4 h-4" />
-                      </button>
-                      <button class="px-2 py-1 rounded border border-gray-200 bg-gray-50 text-gray-600 text-xs hover:bg-gray-100" @click="updateStatus(p.id!, 'canceled')" title="旧キャンセル">
-                        <XCircle class="w-4 h-4" />
-                      </button>
-                    </div>
+                    <button @click="router.push(`/students/${p.student_id}`)" class="text-xs text-blue-600 hover:underline">詳細</button>
                   </td>
                 </tr>
                 <tr v-if="filteredParticipants.length === 0">
@@ -622,5 +602,14 @@ onMounted(fetchDetail);
         </div>
       </div>
     </div>
+    <StatusChangeModal
+      v-model="statusModalOpen"
+      :studentName="statusModalTarget?.name || ''"
+      :eventTitle="event?.title || ''"
+      :eventId="Number(eventId)"
+      :studentEventId="statusModalTarget?.id || 0"
+      :currentStatus="statusModalTarget?.status || 'A_ENTRY'"
+      @updated="fetchDetail"
+    />
   </Layout>
 </template>

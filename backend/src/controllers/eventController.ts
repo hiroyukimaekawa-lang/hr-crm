@@ -484,15 +484,34 @@ export const getKgiProgress = async (req: Request, res: Response) => {
                 COALESCE(e.kpi_custom_steps, '[]') AS kpi_custom_steps,
                 COALESCE(
                     e.entry_deadline,
-                    e.event_date,
-                    (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id)
+                    (
+                      SELECT MAX((slot->>'datetime')::text)
+                      FROM jsonb_array_elements(
+                        CASE WHEN e.event_slots IS NOT NULL
+                             AND jsonb_array_length(e.event_slots) > 0
+                        THEN e.event_slots ELSE '[]'::jsonb END
+                      ) AS slot
+                    )
                 ) AS deadline,
-                (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id) AS last_event_date
+                (
+                  SELECT MAX((slot->>'datetime')::text)
+                  FROM jsonb_array_elements(
+                    CASE WHEN e.event_slots IS NOT NULL
+                         AND jsonb_array_length(e.event_slots) > 0
+                    THEN e.event_slots ELSE '[]'::jsonb END
+                  ) AS slot
+                ) AS last_slot_date
             FROM events e
             ORDER BY COALESCE(
                 e.entry_deadline,
-                e.event_date,
-                (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id)
+                (
+                  SELECT MAX((slot->>'datetime')::text)
+                  FROM jsonb_array_elements(
+                    CASE WHEN e.event_slots IS NOT NULL
+                         AND jsonb_array_length(e.event_slots) > 0
+                    THEN e.event_slots ELSE '[]'::jsonb END
+                  ) AS slot
+                )
             ) DESC NULLS LAST
         `);
 
@@ -545,10 +564,15 @@ export const getKgiProgress = async (req: Request, res: Response) => {
             
             let daysRemaining = 0;
             let deadlineStr: string | null = null;
-            const effectiveDeadline = e.deadline || e.last_event_date;
+            const effectiveDeadline = e.deadline || e.last_slot_date;
             if (effectiveDeadline) {
-                const deadlineDate = new Date(effectiveDeadline);
-                deadlineStr = deadlineDate.toISOString().slice(0, 10);
+                const raw = String(effectiveDeadline)
+                    .replace('Z', '')
+                    .replace('+09:00', '')
+                    .replace('+09', '');
+                const deadlineDateStr = raw.slice(0, 10);
+                deadlineStr = deadlineDateStr;
+                const deadlineDate = new Date(deadlineDateStr + 'T00:00:00');
                 const diffMs = deadlineDate.getTime() - todayDate.getTime();
                 daysRemaining = Math.floor(diffMs / 86400000);
             }

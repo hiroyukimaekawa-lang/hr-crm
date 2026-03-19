@@ -489,6 +489,11 @@ const onDrop = async (e: DragEvent, newStatusKey: string) => {
   try {
     const token = localStorage.getItem('token');
     const studentEventId = draggingParticipant.value.student_event_id;
+    if (!studentEventId) {
+        console.error('student_event_id が取得できませんでした');
+        onDragEnd();
+        return;
+    }
     if (studentEventId) {
       await api.put(
         `/api/events/${selectedYomiEvent.value.id}/participants/${studentEventId}`,

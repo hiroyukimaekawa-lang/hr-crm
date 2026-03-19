@@ -17,6 +17,8 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-vue-next';
+import StatusChangeModal from '../components/StatusChangeModal.vue'
+import { getStatusLabel, getStatusBadgeClass } from '../lib/statusConfig'
 
 const route = useRoute();
 const router = useRouter();
@@ -58,6 +60,13 @@ const newTaskDate = ref('');
 const newTaskContent = ref('');
 const newScheduleDate = ref('');
 const newScheduleType = ref<'流入日' | '面談' | 'リスケ'>('面談');
+
+const statusModalOpen = ref(false)
+const statusModalTarget = ref<any>(null)
+const openStatusModal = (e: any) => {
+  statusModalTarget.value = e
+  statusModalOpen.value = true
+}
 
 const newLog = ref('');
 const newLogType = ref<'面談' | 'エントリー' | 'その他'>('面談');
@@ -1185,18 +1194,11 @@ watch(selectedEventId, () => {
                     <span class="text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap" :class="participationStatusClass(e.participation_status)">
                       {{ participationStatusLabel(e.participation_status) }}
                     </span>
-                    <select
-                      class="px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none w-[130px]"
-                      :value="e.participation_status === 'registered' ? 'A_ENTRY' : (e.participation_status || 'A_ENTRY')"
-                      @change="updateEventParticipationStatus(e.id, e.student_event_id, ($event.target as HTMLSelectElement).value as 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'D_PASS' | 'E_FAIL' | 'XA_CANCEL')"
-                    >
-                      <option value="A_ENTRY">A:エントリー</option>
-                      <option value="B_WAITING">B:回答待ち</option>
-                      <option value="C_WAITING">C:回答待ち</option>
-                      <option value="D_PASS">D:合格</option>
-                      <option value="E_FAIL">E:不合格</option>
-                      <option value="XA_CANCEL">XA:ｷｬﾝｾﾙ</option>
-                    </select>
+                    <button
+                      @click="openStatusModal(e)"
+                      class="text-xs font-bold px-2 py-1 rounded-full border whitespace-nowrap"
+                      :class="getStatusBadgeClass(e.participation_status)"
+                    >{{ getStatusLabel(e.participation_status) }} ▼</button>
                   </div>
                 </div>
               </div>
@@ -1584,5 +1586,14 @@ watch(selectedEventId, () => {
         </div>
       </div>
     </teleport>
+    <StatusChangeModal
+      v-model="statusModalOpen"
+      :studentName="student?.name || ''"
+      :eventTitle="statusModalTarget?.title || ''"
+      :eventId="statusModalTarget?.id || 0"
+      :studentEventId="statusModalTarget?.student_event_id || 0"
+      :currentStatus="statusModalTarget?.participation_status || 'A_ENTRY'"
+      @updated="fetchDetail"
+    />
   </Layout>
 </template>
