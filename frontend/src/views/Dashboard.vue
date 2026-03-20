@@ -1009,7 +1009,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
 
     <div v-if="selectedYomiEvent" class="fixed inset-0 z-[90]">
       <div class="absolute inset-0 bg-black/30" @click="closeYomiEventDetail" />
-      <div class="absolute right-0 top-0 h-full w-[80vw] max-w-5xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
+      <div class="absolute right-0 top-0 h-full w-full md:w-[80vw] md:max-w-5xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <div>
             <h2 class="text-xl font-bold text-gray-900">イベント参加詳細</h2>
@@ -1098,7 +1098,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
     <!-- Monthly Attendance Modal -->
     <div v-if="showMonthlyAttendanceModal" class="fixed inset-0 z-[90]">
       <div class="absolute inset-0 bg-black/30" @click="closeMonthlyAttendanceModal" />
-      <div class="absolute right-0 top-0 h-full w-full md:w-2/3 lg:w-1/2 xl:w-7/12 bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto flex flex-col">
+      <div class="absolute right-0 top-0 h-full w-full md:w-[80vw] md:max-w-5xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto flex flex-col">
         <div class="flex items-center justify-between mb-6 shrink-0">
           <div>
             <h2 class="text-xl font-bold text-gray-900">{{ calendarBaseMonth.getMonth() + 1 }}月の全イベント参加者一覧</h2>
