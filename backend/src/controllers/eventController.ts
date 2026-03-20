@@ -398,7 +398,7 @@ export const getEventDetail = async (req: Request, res: Response) => {
         );
         const participantsRes = await pool.query(`
             SELECT 
-                se.id,
+                se.id as student_event_id,
                 se.student_id,
                 se.status,
                 se.created_at,

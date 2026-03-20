@@ -373,7 +373,7 @@ const getEventDetail = (req, res) => __awaiter(void 0, void 0, void 0, function*
         const eventDatesRes = yield db_1.default.query('SELECT event_date FROM event_dates WHERE event_id = $1 ORDER BY event_date ASC', [id]);
         const participantsRes = yield db_1.default.query(`
             SELECT 
-                se.id,
+                se.id as student_event_id,
                 se.student_id,
                 se.status,
                 se.created_at,

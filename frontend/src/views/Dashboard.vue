@@ -334,7 +334,9 @@ const openYomiEventDetail = async (eventId: number) => {
   try {
     const token = localStorage.getItem('token');
     const res = await api.get(`/api/events/${eventId}`, { headers: { Authorization: token } });
+    console.log('API Response Participants:', res.data.participants);
     yomiParticipants.value = res.data.participants || [];
+    console.log('yomiParticipants value:', yomiParticipants.value);
   } catch (err) {
     console.error(err);
   } finally {
@@ -401,6 +403,7 @@ const normalizedYomiKey = (status?: string): 'A' | 'B' | 'C' | 'XA' | 'OTHER' =>
   if (status === 'B_WAITING') return 'B';
   if (status === 'C_WAITING') return 'C';
   if (status === 'XA_CANCEL' || status === 'canceled') return 'XA';
+  if (status) console.log('Unexpected status in normalizedYomiKey:', status);
   return 'OTHER';
 };
 
@@ -448,20 +451,24 @@ const yomiAmounts = computed(() => {
   };
 });
 
-const yomiGroups = computed<Record<YomiKey, EventParticipant[]>>(() => ({
-  A: yomiParticipants.value.filter((p) =>
-    normalizedYomiKey(p.status) === 'A' && !EXCLUDED_STATUSES.includes(p.status)
-  ),
-  B: yomiParticipants.value.filter((p) =>
-    normalizedYomiKey(p.status) === 'B' && !EXCLUDED_STATUSES.includes(p.status)
-  ),
-  C: yomiParticipants.value.filter((p) =>
-    normalizedYomiKey(p.status) === 'C' && !EXCLUDED_STATUSES.includes(p.status)
-  ),
-  XA: yomiParticipants.value.filter((p) =>
-    normalizedYomiKey(p.status) === 'XA' && !EXCLUDED_STATUSES.includes(p.status)
-  )
-}));
+const yomiGroups = computed<Record<YomiKey, EventParticipant[]>>(() => {
+  const result = {
+    A: yomiParticipants.value.filter((p) =>
+      normalizedYomiKey(p.status) === 'A' && !EXCLUDED_STATUSES.includes(p.status)
+    ),
+    B: yomiParticipants.value.filter((p) =>
+      normalizedYomiKey(p.status) === 'B' && !EXCLUDED_STATUSES.includes(p.status)
+    ),
+    C: yomiParticipants.value.filter((p) =>
+      normalizedYomiKey(p.status) === 'C' && !EXCLUDED_STATUSES.includes(p.status)
+    ),
+    XA: yomiParticipants.value.filter((p) =>
+      normalizedYomiKey(p.status) === 'XA' && !EXCLUDED_STATUSES.includes(p.status)
+    )
+  };
+  console.log('yomiGroups result:', result);
+  return result;
+});
 
 const markAttended = async (participant: EventParticipant) => {
   if (!selectedYomiEvent.value) return;
