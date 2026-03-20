@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteGraduationYearCategory = exports.createGraduationYearCategory = exports.getGraduationYearCategories = exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.getStudentEventProposals = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.updateInterviewLog = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = void 0;
+exports.deleteGraduationYearCategory = exports.createGraduationYearCategory = exports.getGraduationYearCategories = exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.getStudentEventProposals = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.updateInterviewLog = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = exports.normalizeToHour = void 0;
 const db_1 = __importDefault(require("../config/db"));
 let interviewScheduleTableReady = false;
 let interviewScheduleTablePromise = null;
@@ -392,7 +392,7 @@ const normalizeToHour = (value) => {
         return null;
     // 日付のみ (YYYY-MM-DD)
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-        return `${raw} 00:00:00+09`;
+        return `${raw} 00:00:00`;
     }
     // YYYY-MM-DDTHH:mm または YYYY-MM-DD HH:mm 形式（フロントのdatetime-local）
     // → JSTとしてそのまま保存（UTCに変換しない）
@@ -400,7 +400,8 @@ const normalizeToHour = (value) => {
     if (directMatch) {
         const datePart = directMatch[1];
         const hourPart = directMatch[2];
-        return `${datePart} ${hourPart}:00:00+09`;
+        const minutePart = directMatch[3] || '00';
+        return `${datePart} ${hourPart}:${minutePart}:00`;
     }
     // ISO文字列（末尾にZまたはタイムゾーンあり）→ JSTに変換
     const d = new Date(raw);
@@ -412,8 +413,11 @@ const normalizeToHour = (value) => {
     const mm = String(jstDate.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(jstDate.getUTCDate()).padStart(2, '0');
     const hh = String(jstDate.getUTCHours()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd} ${hh}:00:00+09`;
+    const min = String(jstDate.getUTCMinutes()).padStart(2, '0');
+    const sec = String(jstDate.getUTCSeconds()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${sec}`;
 };
+exports.normalizeToHour = normalizeToHour;
 const normalizeReferralStatus = (value) => {
     const raw = String(value !== null && value !== void 0 ? value : '').trim();
     if (!raw)
@@ -569,8 +573,8 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         pushCol('staff_id', staff_id || null);
         pushCol('source_company', source_company || null);
         pushCol('interview_reason', interview_reason || null);
-        const normalizedMeetingDecidedDate = normalizeToHour(meeting_decided_date);
-        const normalizedFirstInterviewDate = normalizeToHour(first_interview_date);
+        const normalizedMeetingDecidedDate = (0, exports.normalizeToHour)(meeting_decided_date);
+        const normalizedFirstInterviewDate = (0, exports.normalizeToHour)(first_interview_date);
         pushCol('meeting_decided_date', normalizedMeetingDecidedDate);
         pushCol('first_interview_date', normalizedFirstInterviewDate);
         pushCol('second_interview_date', second_interview_date || null);
@@ -589,7 +593,7 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
                reservation_created_at = COALESCE(EXCLUDED.reservation_created_at, matcher_funnel_logs.reservation_created_at),
                interview_scheduled_at = COALESCE(EXCLUDED.interview_scheduled_at, matcher_funnel_logs.interview_scheduled_at)`, [
             created.id,
-            normalizeToHour((_a = req.body) === null || _a === void 0 ? void 0 : _a.applied_at),
+            (0, exports.normalizeToHour)((_a = req.body) === null || _a === void 0 ? void 0 : _a.applied_at),
             'pending',
             normalizedMeetingDecidedDate,
             normalizedFirstInterviewDate
@@ -600,7 +604,7 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             created.id,
             created.name,
             normalizedSourceCompany,
-            normalizeToHour(applied_at) || normalizedMeetingDecidedDate || null,
+            (0, exports.normalizeToHour)(applied_at) || normalizedMeetingDecidedDate || null,
             '初回面談',
             normalizedMeetingDecidedDate
         ]);
@@ -626,13 +630,29 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
         const studentRes = yield db_1.default.query('SELECT * FROM students WHERE id = $1', [id]);
         const eventsRes = yield db_1.default.query(`
             SELECT
-                e.*,
+                e.id,
+                e.title,
+                e.description,
+                e.location,
+                e.event_slots,
+                e.capacity,
+                e.target_seats,
+                e.unit_price,
+                e.target_sales,
+                e.current_sales,
+                e.kpi_seat_to_entry_rate,
+                e.kpi_entry_to_interview_rate,
+                e.kpi_interview_to_inflow_rate,
+                e.kpi_custom_steps,
+                e.yomi_statuses,
+                e.entry_deadline,
+                e.lp_url,
                 to_char(e.event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as event_date,
                 COALESCE(eds.event_dates, '[]'::json) as event_dates,
                 se.id as student_event_id,
                 se.status as participation_status,
                 se.created_at as participation_created_at,
-                to_char(se.selected_event_date AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
+                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
             FROM events e
             JOIN student_events se ON e.id = se.event_id
             LEFT JOIN LATERAL (
@@ -1054,7 +1074,7 @@ const linkEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
              VALUES ($1, $2, $3, $4)
              ON CONFLICT (student_id, event_id, selected_event_date)
              DO UPDATE SET
-                status = EXCLUDED.status`, [id, event_id, safeStatus, normalizeToHour(selected_event_date)]);
+                status = EXCLUDED.status`, [id, event_id, safeStatus, (0, exports.normalizeToHour)(selected_event_date)]);
         res.json({ success: true });
     }
     catch (err) {
@@ -1334,7 +1354,7 @@ const registerMatcherApply = (req, res) => __awaiter(void 0, void 0, void 0, fun
     const { applied_at } = req.body || {};
     try {
         const row = yield upsertMatcherFunnelByStudentId(String(id), {
-            applied_at: normalizeToHour(applied_at) || normalizeToHour(new Date().toISOString())
+            applied_at: (0, exports.normalizeToHour)(applied_at) || (0, exports.normalizeToHour)(new Date().toISOString())
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
@@ -1352,7 +1372,7 @@ const registerMatcherMessage = (req, res) => __awaiter(void 0, void 0, void 0, f
     const { message_sent_at } = req.body || {};
     try {
         const row = yield upsertMatcherFunnelByStudentId(String(id), {
-            message_sent_at: normalizeToHour(message_sent_at) || normalizeToHour(new Date().toISOString())
+            message_sent_at: (0, exports.normalizeToHour)(message_sent_at) || (0, exports.normalizeToHour)(new Date().toISOString())
         });
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
@@ -1369,8 +1389,8 @@ const registerMatcherReservation = (req, res) => __awaiter(void 0, void 0, void 
     const { id } = req.params;
     const { reservation_created_at, reservation_status, interview_scheduled_at } = req.body || {};
     try {
-        const normalizedReservationCreatedAt = normalizeToHour(reservation_created_at) || normalizeToHour(new Date().toISOString());
-        const normalizedInterviewScheduledAt = normalizeToHour(interview_scheduled_at);
+        const normalizedReservationCreatedAt = (0, exports.normalizeToHour)(reservation_created_at) || (0, exports.normalizeToHour)(new Date().toISOString());
+        const normalizedInterviewScheduledAt = (0, exports.normalizeToHour)(interview_scheduled_at);
         const row = yield upsertMatcherFunnelByStudentId(String(id), {
             reservation_created_at: normalizedReservationCreatedAt,
             reservation_status: normalizeNullableText(reservation_status) || 'reserved',
@@ -1396,8 +1416,8 @@ const registerMatcherInterview = (req, res) => __awaiter(void 0, void 0, void 0,
     const { id } = req.params;
     const { interview_actual_at, interview_status, interview_scheduled_at } = req.body || {};
     try {
-        const normalizedInterviewActualAt = normalizeToHour(interview_actual_at);
-        const normalizedInterviewScheduledAt = normalizeToHour(interview_scheduled_at);
+        const normalizedInterviewActualAt = (0, exports.normalizeToHour)(interview_actual_at);
+        const normalizedInterviewScheduledAt = (0, exports.normalizeToHour)(interview_scheduled_at);
         const row = yield upsertMatcherFunnelByStudentId(String(id), {
             interview_actual_at: normalizedInterviewActualAt,
             interview_status: normalizeNullableText(interview_status) || 'completed',
@@ -1523,11 +1543,11 @@ const createApplication = (req, res) => __awaiter(void 0, void 0, void 0, functi
             st.id,
             st.name,
             normalizeNullableText(source) || st.source_company || null,
-            normalizeToHour(applied_at),
+            (0, exports.normalizeToHour)(applied_at),
             normalizeNullableText(first_message_sent_at),
             normalizeNullableText(reservation_status),
-            normalizeToHour(reservation_date),
-            normalizeToHour(reservation_created_at)
+            (0, exports.normalizeToHour)(reservation_date),
+            (0, exports.normalizeToHour)(reservation_created_at)
         ]);
         res.status(201).json(result.rows[0]);
     }
@@ -1541,9 +1561,9 @@ const updateApplicationReservation = (req, res) => __awaiter(void 0, void 0, voi
     const { reservation_status, reservation_date, reservation_created_at, first_message_sent_at } = req.body || {};
     try {
         yield ensureSalesFunnelTables();
-        const normalizedReservationDate = normalizeToHour(reservation_date);
-        const normalizedReservationCreatedAt = normalizeToHour(reservation_created_at);
-        const normalizedFirstMessageSentAt = normalizeToHour(first_message_sent_at);
+        const normalizedReservationDate = (0, exports.normalizeToHour)(reservation_date);
+        const normalizedReservationCreatedAt = (0, exports.normalizeToHour)(reservation_created_at);
+        const normalizedFirstMessageSentAt = (0, exports.normalizeToHour)(first_message_sent_at);
         const appRes = yield db_1.default.query('SELECT * FROM applications WHERE student_id = $1 ORDER BY applied_at DESC NULLS LAST, id DESC LIMIT 1', [id]);
         if (appRes.rows.length === 0) {
             const studentRes = yield db_1.default.query('SELECT id, name, source_company, created_at FROM students WHERE id = $1 LIMIT 1', [id]);
@@ -1603,8 +1623,8 @@ const createInterviewRecord = (req, res) => __awaiter(void 0, void 0, void 0, fu
     const { scheduled_at, interviewed_at, status } = req.body || {};
     try {
         yield ensureSalesFunnelTables();
-        const normalizedScheduledAt = normalizeToHour(scheduled_at);
-        const normalizedInterviewedAt = normalizeToHour(interviewed_at);
+        const normalizedScheduledAt = (0, exports.normalizeToHour)(scheduled_at);
+        const normalizedInterviewedAt = (0, exports.normalizeToHour)(interviewed_at);
         const result = yield db_1.default.query(`INSERT INTO interviews (student_id, scheduled_at, interviewed_at, status)
              VALUES ($1, $2, $3, $4)
              RETURNING *`, [
@@ -1641,7 +1661,7 @@ const createEventProposal = (req, res) => __awaiter(void 0, void 0, void 0, func
             normalizeNullableText(proposed_at),
             normalizeNullableText(status) || 'proposed',
             lost_reason_id ? Number(lost_reason_id) : null,
-            normalizeToHour(selected_event_date),
+            (0, exports.normalizeToHour)(selected_event_date),
             normalizeNullableText(memo),
             normalizeNullableText(reason)
         ]);
@@ -1718,11 +1738,20 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
                     FROM interviews WHERE scheduled_at IS NOT NULL GROUP BY 1
                 ),
+                first_interview_per_student AS (
+                    SELECT DISTINCT ON (student_id)
+                        student_id,
+                        scheduled_at,
+                        interviewed_at,
+                        status
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
+                    ORDER BY student_id, COALESCE(scheduled_at, interviewed_at, created_at) ASC, id ASC
+                ),
                 completed_bm AS (
                     SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
-                    FROM interviews
-                    WHERE scheduled_at IS NOT NULL
-                      AND (COALESCE(status,'') IN ('completed','面談実施','interviewed') OR interviewed_at IS NOT NULL)
+                    FROM first_interview_per_student
+                    WHERE COALESCE(status,'') IN ('completed','面談実施','interviewed') OR interviewed_at IS NOT NULL
                     GROUP BY 1
                 ),
                 noshow_bm AS (
@@ -1781,12 +1810,21 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     FROM interviews i JOIN students s ON s.id = i.student_id
                     WHERE i.student_id IS NOT NULL AND i.scheduled_at IS NOT NULL ${intMonthCond} GROUP BY 1
                 ),
+                first_interview_per_student AS (
+                    SELECT DISTINCT ON (student_id)
+                        student_id,
+                        scheduled_at,
+                        interviewed_at,
+                        status
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
+                    ORDER BY student_id, COALESCE(scheduled_at, interviewed_at, created_at) ASC, id ASC
+                ),
                 interview_completed_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
-                           COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL
-                      AND (COALESCE(i.status,'') IN ('completed','面談実施','interviewed') OR i.interviewed_at IS NOT NULL)
+                           COUNT(DISTINCT fi.student_id)::int AS cnt
+                    FROM first_interview_per_student fi JOIN students s ON s.id = fi.student_id
+                    WHERE (COALESCE(fi.status,'') IN ('completed','面談実施','interviewed') OR fi.interviewed_at IS NOT NULL)
                       ${intMonthCond} GROUP BY 1
                 ),
                 interview_no_show_s AS (
@@ -1917,10 +1955,23 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     SELECT COUNT(DISTINCT student_id)::int AS cnt FROM interviews
                     WHERE student_id IS NOT NULL AND scheduled_at IS NOT NULL ${intMonthCond}
                 ),
+                first_interview_per_student AS (
+                    SELECT DISTINCT ON (student_id)
+                        student_id,
+                        scheduled_at,
+                        interviewed_at,
+                        status
+                    FROM interviews
+                    WHERE student_id IS NOT NULL
+                    ORDER BY student_id,
+                             COALESCE(scheduled_at, interviewed_at, created_at) ASC,
+                             id ASC
+                ),
                 interview_completed_s AS (
-                    SELECT COUNT(DISTINCT student_id)::int AS cnt FROM interviews
-                    WHERE student_id IS NOT NULL ${intMonthCond}
-                      AND (COALESCE(status,'') IN ('completed','面談実施','interviewed') OR interviewed_at IS NOT NULL)
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt
+                    FROM first_interview_per_student
+                    WHERE COALESCE(status,'') IN ('completed','面談実施','interviewed')
+                       OR interviewed_at IS NOT NULL
                 ),
                 interview_no_show_s AS (
                     SELECT COUNT(DISTINCT student_id)::int AS cnt FROM interviews

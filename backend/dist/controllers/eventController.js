@@ -12,8 +12,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getKgiProgress = exports.deleteEvent = exports.updateParticipantStatus = exports.getEventDetail = exports.updateEvent = exports.createEvent = exports.getEvents = void 0;
+exports.getKgiProgress = exports.deleteEvent = exports.updateParticipantStatus = exports.getEventDetail = exports.updateEventKpi = exports.updateEvent = exports.createEvent = exports.getEvents = void 0;
 const db_1 = __importDefault(require("../config/db"));
+const studentController_1 = require("./studentController");
 let eventDatesTableReady = false;
 let eventDatesTablePromise = null;
 let cachedEventColumns = null;
@@ -42,11 +43,19 @@ const ensureEventDatesTable = () => __awaiter(void 0, void 0, void 0, function* 
             `);
             yield db_1.default.query(`
                 ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS kpi_inflow_to_reservation_rate NUMERIC(5,2) DEFAULT 50
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE events
                 ADD COLUMN IF NOT EXISTS kpi_custom_steps TEXT DEFAULT '[]'
             `);
             yield db_1.default.query(`
                 ALTER TABLE events
                 ADD COLUMN IF NOT EXISTS yomi_statuses JSONB DEFAULT '["A_ENTRY", "B_WAITING", "C_WAITING", "D_PASS", "E_FAIL", "XA_CANCEL"]'
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS event_slots JSONB DEFAULT '[]'
             `);
             yield db_1.default.query(`
                 CREATE TABLE IF NOT EXISTS event_dates (
@@ -148,6 +157,7 @@ const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const result = yield db_1.default.query(`
             SELECT 
                 e.*,
+                COALESCE(e.event_slots, '[]'::jsonb) as event_slots,
                 COALESCE(date_stats.event_dates, '[]'::json) as event_dates,
                 COALESCE(part_stats.registered_count, 0) as registered_count,
                 COALESCE(part_stats.attended_count, 0) as attended_count,
@@ -191,10 +201,14 @@ const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.getEvents = getEvents;
 const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline, kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps } = req.body;
+    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline, kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_inflow_to_reservation_rate, kpi_custom_steps, event_slots } = req.body;
     try {
         yield ensureEventDatesTable();
-        const dates = normalizeEventDates(event_dates, event_date);
+        let dates = normalizeEventDates(event_dates, event_date);
+        // event_slotsがあればevent_datesを同期
+        if (Array.isArray(event_slots) && event_slots.length > 0) {
+            dates = event_slots.map((s) => s.datetime).filter(Boolean);
+        }
         const primaryDate = dates.length > 0 ? dates[0] : null;
         const cols = yield getEventColumns();
         const insertCols = [];
@@ -219,7 +233,9 @@ const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         push('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate !== null && kpi_seat_to_entry_rate !== void 0 ? kpi_seat_to_entry_rate : 70);
         push('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate !== null && kpi_entry_to_interview_rate !== void 0 ? kpi_entry_to_interview_rate : 60);
         push('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate !== null && kpi_interview_to_inflow_rate !== void 0 ? kpi_interview_to_inflow_rate : 50);
+        push('kpi_inflow_to_reservation_rate', kpi_inflow_to_reservation_rate !== null && kpi_inflow_to_reservation_rate !== void 0 ? kpi_inflow_to_reservation_rate : 50);
         push('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
+        push('event_slots', Array.isArray(event_slots) ? JSON.stringify(event_slots) : '[]');
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
         yield db_1.default.query('BEGIN');
         const result = yield db_1.default.query(`INSERT INTO events (${insertCols.join(', ')}) VALUES (${placeholders}) RETURNING *`, insertVals);
@@ -241,38 +257,36 @@ const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 exports.createEvent = createEvent;
 const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline, kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_custom_steps, yomi_statuses } = req.body;
+    const { title, description, location, lp_url, yomi_statuses, event_slots, 
+    // event_date, event_dates are used for legacy/internal syncing
+    event_date, event_dates } = req.body;
     try {
         yield ensureEventDatesTable();
-        const dates = normalizeEventDates(event_dates, event_date);
-        const primaryDate = dates.length > 0 ? dates[0] : null;
+        let dates = normalizeEventDates(event_dates, event_date);
+        // event_slotsがあればevent_datesを同期
+        if (Array.isArray(event_slots) && event_slots.length > 0) {
+            dates = event_slots.map((s) => s.datetime).filter(Boolean);
+        }
         const cols = yield getEventColumns();
         const setParts = [];
         const values = [];
         const pushSet = (col, val) => {
-            if (!cols.has(col))
+            if (!cols.has(col) || val === undefined)
                 return;
             values.push(val);
             setParts.push(`${col} = $${values.length}`);
         };
         pushSet('title', title);
-        pushSet('description', description || null);
-        pushSet('event_date', primaryDate);
-        pushSet('location', location || null);
-        pushSet('lp_url', lp_url || null);
-        pushSet('capacity', capacity || null);
-        pushSet('target_seats', target_seats || null);
-        pushSet('unit_price', unit_price || null);
-        pushSet('target_sales', target_sales || null);
-        pushSet('current_sales', current_sales || 0);
-        pushSet('entry_deadline', entry_deadline || null);
-        pushSet('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate !== null && kpi_seat_to_entry_rate !== void 0 ? kpi_seat_to_entry_rate : 70);
-        pushSet('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate !== null && kpi_entry_to_interview_rate !== void 0 ? kpi_entry_to_interview_rate : 60);
-        pushSet('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate !== null && kpi_interview_to_inflow_rate !== void 0 ? kpi_interview_to_inflow_rate : 50);
-        pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
+        pushSet('description', description);
+        pushSet('location', location);
+        pushSet('lp_url', lp_url);
         if (yomi_statuses !== undefined) {
             values.push(JSON.stringify(yomi_statuses));
             setParts.push(`yomi_statuses = $${values.length}`);
+        }
+        if (event_slots !== undefined) {
+            values.push(Array.isArray(event_slots) ? JSON.stringify(event_slots) : '[]');
+            setParts.push(`event_slots = $${values.length}`);
         }
         values.push(id);
         yield db_1.default.query('BEGIN');
@@ -285,9 +299,11 @@ const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             res.status(404).json({ error: 'Event not found' });
             return;
         }
-        yield db_1.default.query('DELETE FROM event_dates WHERE event_id = $1', [id]);
-        for (const dt of dates) {
-            yield db_1.default.query('INSERT INTO event_dates (event_id, event_date) VALUES ($1, $2)', [id, dt]);
+        if (event_dates !== undefined || event_slots !== undefined || event_date !== undefined) {
+            yield db_1.default.query('DELETE FROM event_dates WHERE event_id = $1', [id]);
+            for (const dt of dates) {
+                yield db_1.default.query('INSERT INTO event_dates (event_id, event_date) VALUES ($1, $2)', [id, dt]);
+            }
         }
         yield db_1.default.query('COMMIT');
         res.json(Object.assign(Object.assign({}, result.rows[0]), { event_dates: dates }));
@@ -301,6 +317,53 @@ const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.updateEvent = updateEvent;
+const updateEventKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { entry_deadline, capacity, target_seats, unit_price, target_sales, current_sales, kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_inflow_to_reservation_rate, kpi_custom_steps } = req.body;
+    try {
+        yield ensureEventDatesTable();
+        const cols = yield getEventColumns();
+        const setParts = [];
+        const values = [];
+        const pushSet = (col, val) => {
+            if (!cols.has(col) || val === undefined)
+                return;
+            values.push(val);
+            setParts.push(`${col} = $${values.length}`);
+        };
+        pushSet('entry_deadline', entry_deadline);
+        pushSet('capacity', capacity);
+        pushSet('target_seats', target_seats);
+        pushSet('unit_price', unit_price);
+        pushSet('target_sales', target_sales);
+        pushSet('current_sales', current_sales);
+        pushSet('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate);
+        pushSet('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate);
+        pushSet('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate);
+        pushSet('kpi_inflow_to_reservation_rate', kpi_inflow_to_reservation_rate);
+        if (kpi_custom_steps !== undefined) {
+            pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
+        }
+        if (setParts.length === 0) {
+            res.status(400).json({ error: 'No fields to update' });
+            return;
+        }
+        values.push(id);
+        const result = yield db_1.default.query(`UPDATE events
+             SET ${setParts.join(', ')}
+             WHERE id = $${values.length}
+             RETURNING *`, values);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Event not found' });
+            return;
+        }
+        res.json(result.rows[0]);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.updateEventKpi = updateEventKpi;
 const getEventDetail = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
     try {
@@ -314,7 +377,7 @@ const getEventDetail = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 se.student_id,
                 se.status,
                 se.created_at,
-                to_char(se.selected_event_date AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
+                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
                 s.name,
                 s.university,
                 s.email,
@@ -346,7 +409,7 @@ const updateParticipantStatus = (req, res) => __awaiter(void 0, void 0, void 0, 
              SET status = $1,
                  selected_event_date = COALESCE($2, selected_event_date)
              WHERE id = $3 AND event_id = $4
-             RETURNING *`, [status, selected_event_date || null, studentId, id]);
+             RETURNING *`, [status, (0, studentController_1.normalizeToHour)(selected_event_date) || null, studentId, id]);
         res.json(result.rows[0]);
     }
     catch (err) {
@@ -378,7 +441,7 @@ const getKgiProgress = (req, res) => __awaiter(void 0, void 0, void 0, function*
         const now = new Date();
         const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
         const todayStr = jstNow.toISOString().slice(0, 10);
-        const todayDate = new Date(todayStr + 'T00:00:00+09:00');
+        const todayDate = new Date(todayStr + 'T00:00:00');
         const eventsRes = yield db_1.default.query(`
             SELECT
                 e.id,
@@ -390,16 +453,35 @@ const getKgiProgress = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 COALESCE(e.kpi_interview_to_inflow_rate, 50) AS kpi_interview_to_inflow_rate,
                 COALESCE(e.kpi_custom_steps, '[]') AS kpi_custom_steps,
                 COALESCE(
-                    e.entry_deadline,
-                    e.event_date,
-                    (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id)
+                    e.entry_deadline::text,
+                    (
+                      SELECT MAX(slot->>'datetime')
+                      FROM jsonb_array_elements(
+                        CASE WHEN e.event_slots IS NOT NULL
+                             AND jsonb_array_length(e.event_slots) > 0
+                        THEN e.event_slots ELSE '[]'::jsonb END
+                      ) AS slot
+                    )
                 ) AS deadline,
-                (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id) AS last_event_date
+                (
+                  SELECT MAX(slot->>'datetime')
+                  FROM jsonb_array_elements(
+                    CASE WHEN e.event_slots IS NOT NULL
+                         AND jsonb_array_length(e.event_slots) > 0
+                    THEN e.event_slots ELSE '[]'::jsonb END
+                  ) AS slot
+                ) AS last_slot_date
             FROM events e
             ORDER BY COALESCE(
-                e.entry_deadline,
-                e.event_date,
-                (SELECT MAX(ed.event_date) FROM event_dates ed WHERE ed.event_id = e.id)
+                e.entry_deadline::text,
+                (
+                  SELECT MAX(slot->>'datetime')
+                  FROM jsonb_array_elements(
+                    CASE WHEN e.event_slots IS NOT NULL
+                         AND jsonb_array_length(e.event_slots) > 0
+                    THEN e.event_slots ELSE '[]'::jsonb END
+                  ) AS slot
+                )
             ) DESC NULLS LAST
         `);
         const statusBreakdownRes = yield db_1.default.query(`
@@ -421,9 +503,6 @@ const getKgiProgress = (req, res) => __awaiter(void 0, void 0, void 0, function*
             const currentEntry = (breakdown['A_ENTRY'] || 0) + (breakdown['registered'] || 0);
             const currentSeats = breakdown['attended'] || 0;
             const targetSeats = Number(e.target_seats || 0);
-            const capacityEntry = Number(e.capacity_entry || 0);
-            const kpiRate = Number(e.kpi_seat_to_entry_rate || 70);
-            const kpiEntryToInterview = Number(e.kpi_entry_to_interview_rate || 60);
             const kpiInterviewToInflow = Number(e.kpi_interview_to_inflow_rate || 50);
             // カスタムステップをパース
             let customSteps = [];
@@ -442,43 +521,51 @@ const getKgiProgress = (req, res) => __awaiter(void 0, void 0, void 0, function*
             catch (_a) {
                 customSteps = [];
             }
-            // KPI連動: 目標着座を着座率(%)で割り、必要エントリー数を逆算
-            const kpiTargetEntry = targetSeats > 0 && kpiRate > 0
-                ? Math.ceil(targetSeats / (kpiRate / 100))
-                : 0;
-            // 目標エントリー: capacityが設定されていればそれを使用、なければKPI逆算値
-            const targetEntry = capacityEntry > 0 ? capacityEntry : kpiTargetEntry;
+            // ① 目標エントリー数：常にKPI逆算値を使用
+            const kpiRate = Number(e.kpi_seat_to_entry_rate || 70);
+            const targetEntry = targetSeats > 0 ? Math.round(targetSeats / (kpiRate / 100)) : 0;
+            // ② 残り必要エントリー数
+            const remainingEntry = Math.max(targetEntry - currentEntry, 0);
+            // ③ デイリー必要面談数
+            const kpiEntryToInterview = Number(e.kpi_entry_to_interview_rate || 60);
             let daysRemaining = 0;
             let deadlineStr = null;
-            // entry_deadlineがない場合はevent_datesの最終日をdeadlineとして使用
-            const effectiveDeadline = e.deadline || e.last_event_date;
-            if (effectiveDeadline) {
-                const deadlineDate = new Date(effectiveDeadline);
-                deadlineStr = deadlineDate.toISOString().slice(0, 10);
+            // 優先順位：
+            // 1. entry_deadline（設定されている場合）
+            // 2. event_slots の最終日程（last_slot_date）
+            // 3. どちらもない場合は null
+            const rawDeadline = e.entry_deadline
+                ? String(e.entry_deadline).replace('Z', '').replace('+09:00', '').replace('+09', '').slice(0, 10)
+                : e.last_slot_date
+                    ? String(e.last_slot_date).slice(0, 10)
+                    : null;
+            if (rawDeadline) {
+                deadlineStr = rawDeadline;
+                const deadlineDate = new Date(rawDeadline + 'T00:00:00');
                 const diffMs = deadlineDate.getTime() - todayDate.getTime();
                 daysRemaining = Math.floor(diffMs / 86400000);
             }
-            // デイリー必要エントリー数
-            let dailyEntryGap = 0;
-            if (daysRemaining > 0) {
-                const effectiveTarget = kpiTargetEntry > 0 ? kpiTargetEntry : targetEntry;
-                dailyEntryGap = Math.round(((effectiveTarget - currentEntry) / daysRemaining) * 10) / 10;
-            }
+            const dailyRequiredInterview = daysRemaining > 0
+                ? Math.round((remainingEntry / (kpiEntryToInterview / 100) / daysRemaining) * 10) / 10
+                : null; // 締切済みはnull
             return {
                 event_id: e.id,
                 event_title: e.title,
                 deadline: deadlineStr,
                 days_remaining: daysRemaining,
                 target_entry: targetEntry,
-                kpi_target_entry: kpiTargetEntry,
+                kpi_target_entry: targetEntry, // 目標エントリー（KPI逆算値）
+                remaining_entry: remainingEntry, // 残り必要エントリー数
+                daily_required_interview: dailyRequiredInterview, // デイリー必要面談数
                 kpi_rate: kpiRate,
                 kpi_entry_to_interview_rate: kpiEntryToInterview,
                 kpi_interview_to_inflow_rate: kpiInterviewToInflow,
+                kpi_inflow_to_reservation_rate: Number(e.kpi_inflow_to_reservation_rate || 50),
                 kpi_custom_steps: customSteps,
                 current_entry: currentEntry,
                 target_seats: targetSeats,
                 current_seats: currentSeats,
-                daily_entry_gap: dailyEntryGap,
+                daily_entry_gap: dailyRequiredInterview || 0, // 互換性のため
                 status_breakdown: breakdown
             };
         });

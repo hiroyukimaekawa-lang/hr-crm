@@ -483,9 +483,9 @@ export const getKgiProgress = async (req: Request, res: Response) => {
                 COALESCE(e.kpi_interview_to_inflow_rate, 50) AS kpi_interview_to_inflow_rate,
                 COALESCE(e.kpi_custom_steps, '[]') AS kpi_custom_steps,
                 COALESCE(
-                    e.entry_deadline,
+                    e.entry_deadline::text,
                     (
-                      SELECT MAX((slot->>'datetime')::text)
+                      SELECT MAX(slot->>'datetime')
                       FROM jsonb_array_elements(
                         CASE WHEN e.event_slots IS NOT NULL
                              AND jsonb_array_length(e.event_slots) > 0
@@ -494,7 +494,7 @@ export const getKgiProgress = async (req: Request, res: Response) => {
                     )
                 ) AS deadline,
                 (
-                  SELECT MAX((slot->>'datetime')::text)
+                  SELECT MAX(slot->>'datetime')
                   FROM jsonb_array_elements(
                     CASE WHEN e.event_slots IS NOT NULL
                          AND jsonb_array_length(e.event_slots) > 0
@@ -503,9 +503,9 @@ export const getKgiProgress = async (req: Request, res: Response) => {
                 ) AS last_slot_date
             FROM events e
             ORDER BY COALESCE(
-                e.entry_deadline,
+                e.entry_deadline::text,
                 (
-                  SELECT MAX((slot->>'datetime')::text)
+                  SELECT MAX(slot->>'datetime')
                   FROM jsonb_array_elements(
                     CASE WHEN e.event_slots IS NOT NULL
                          AND jsonb_array_length(e.event_slots) > 0
@@ -564,17 +564,22 @@ export const getKgiProgress = async (req: Request, res: Response) => {
             
             let daysRemaining = 0;
             let deadlineStr: string | null = null;
-            const effectiveDeadline = e.deadline || e.last_slot_date;
-            if (effectiveDeadline) {
-                const raw = String(effectiveDeadline)
-                    .replace('Z', '')
-                    .replace('+09:00', '')
-                    .replace('+09', '');
-                const deadlineDateStr = raw.slice(0, 10);
-                deadlineStr = deadlineDateStr;
-                const deadlineDate = new Date(deadlineDateStr + 'T00:00:00');
-                const diffMs = deadlineDate.getTime() - todayDate.getTime();
-                daysRemaining = Math.floor(diffMs / 86400000);
+            
+            // 優先順位：
+            // 1. entry_deadline（設定されている場合）
+            // 2. event_slots の最終日程（last_slot_date）
+            // 3. どちらもない場合は null
+            const rawDeadline = e.entry_deadline
+              ? String(e.entry_deadline).replace('Z', '').replace('+09:00', '').replace('+09', '').slice(0, 10)
+              : e.last_slot_date
+                ? String(e.last_slot_date).slice(0, 10)
+                : null;
+
+            if (rawDeadline) {
+              deadlineStr = rawDeadline;
+              const deadlineDate = new Date(rawDeadline + 'T00:00:00');
+              const diffMs = deadlineDate.getTime() - todayDate.getTime();
+              daysRemaining = Math.floor(diffMs / 86400000);
             }
 
             const dailyRequiredInterview = daysRemaining > 0

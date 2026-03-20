@@ -12,6 +12,7 @@ router.post('/', auth_1.authenticate, eventController_1.createEvent);
 router.get('/kgi-progress', auth_1.authenticate, eventController_1.getKgiProgress);
 router.get('/:id', auth_1.authenticate, eventController_1.getEventDetail);
 router.put('/:id', auth_1.authenticate, eventController_1.updateEvent);
+router.put('/:id/kpi', auth_1.authenticate, eventController_1.updateEventKpi);
 router.put('/:id/participants/:studentId', auth_1.authenticate, eventController_1.updateParticipantStatus);
 router.delete('/:id', auth_1.authenticate, eventController_1.deleteEvent);
 exports.default = router;
