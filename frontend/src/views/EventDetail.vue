@@ -13,7 +13,6 @@ import {
   XCircle,
   Download
 } from 'lucide-vue-next';
-import StatusChangeModal from '../components/StatusChangeModal.vue'
 import { getStatusLabel, getStatusBadgeClass } from '../lib/statusConfig'
 
 interface Participant {
@@ -79,12 +78,7 @@ const sortOrder = ref<'asc' | 'desc'>('asc');
 const kgiData = ref<EventKgi | null>(null);
 const kgiLoading = ref(false);
 
-const statusModalOpen = ref(false)
-const statusModalTarget = ref<any>(null)
-const openStatusModal = (p: any) => {
-  statusModalTarget.value = p
-  statusModalOpen.value = true
-}
+// statusModal related state removed as per refactor plan
 
 const STATUS_ORDER: Record<string, number> = {
   A_ENTRY: 1, registered: 1,
@@ -582,11 +576,10 @@ onMounted(fetchDetail);
                   <td class="px-4 py-3 text-gray-600">{{ formatDateKey(p.created_at) }}</td>
                   <td class="px-4 py-3 text-gray-900 font-medium">{{ formatDateKey(p.selected_event_date) }}</td>
                   <td class="px-4 py-3">
-                    <button
-                      @click="openStatusModal(p)"
+                    <span
                       class="text-xs font-bold px-2 py-1 rounded-full border"
                       :class="getStatusBadgeClass(p.status)"
-                    >{{ getStatusLabel(p.status) }} ▼</button>
+                    >{{ getStatusLabel(p.status) }}</span>
                   </td>
                   <td class="px-4 py-3 text-right">
                     <button @click="router.push(`/students/${p.student_id}`)" class="text-xs text-blue-600 hover:underline">詳細</button>
@@ -602,14 +595,6 @@ onMounted(fetchDetail);
         </div>
       </div>
     </div>
-    <StatusChangeModal
-      v-model="statusModalOpen"
-      :studentName="statusModalTarget?.name || ''"
-      :eventTitle="event?.title || ''"
-      :eventId="Number(eventId)"
-      :studentEventId="statusModalTarget?.id || 0"
-      :currentStatus="statusModalTarget?.status || 'A_ENTRY'"
-      @updated="fetchDetail"
-    />
+    <!-- StatusChangeModal removed from EventDetail to unify status changes -->
   </Layout>
 </template>

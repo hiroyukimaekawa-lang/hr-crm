@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { api } from '../lib/api';
 import Layout from '../components/Layout.vue';
-import { ArrowRight } from 'lucide-vue-next';
+import { ArrowRight, CheckCircle } from 'lucide-vue-next';
 
 interface Student {
   id: number;
@@ -409,11 +409,31 @@ const formatDateKey = (value: string | Date | null | undefined) => {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 };
 
+const EXCLUDED_STATUSES = ['attended', 'E_FAIL', 'D_PASS'];
+
+const attendedCount = computed(() =>
+  yomiParticipants.value.filter(p => p.status === 'attended').length
+);
+
+const xaCount = computed(() =>
+  yomiParticipants.value.filter(p =>
+    p.status === 'XA_CANCEL' || p.status === 'canceled'
+  ).length
+);
+
 const yomiCounts = computed(() => ({
-  A: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'A').length,
-  B: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'B').length,
-  C: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'C').length,
-  XA: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'XA').length
+  A: yomiParticipants.value.filter((p) =>
+    normalizedYomiKey(p.status) === 'A' && !EXCLUDED_STATUSES.includes(p.status)
+  ).length,
+  B: yomiParticipants.value.filter((p) =>
+    normalizedYomiKey(p.status) === 'B' && !EXCLUDED_STATUSES.includes(p.status)
+  ).length,
+  C: yomiParticipants.value.filter((p) =>
+    normalizedYomiKey(p.status) === 'C' && !EXCLUDED_STATUSES.includes(p.status)
+  ).length,
+  XA: yomiParticipants.value.filter((p) =>
+    normalizedYomiKey(p.status) === 'XA' && !EXCLUDED_STATUSES.includes(p.status)
+  ).length
 }));
 
 const yomiAmounts = computed(() => {
@@ -427,11 +447,51 @@ const yomiAmounts = computed(() => {
 });
 
 const yomiGroups = computed<Record<YomiKey, EventParticipant[]>>(() => ({
-  A: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'A'),
-  B: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'B'),
-  C: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'C'),
-  XA: yomiParticipants.value.filter((p) => normalizedYomiKey(p.status) === 'XA')
+  A: yomiParticipants.value.filter((p) =>
+    normalizedYomiKey(p.status) === 'A' && !EXCLUDED_STATUSES.includes(p.status)
+  ),
+  B: yomiParticipants.value.filter((p) =>
+    normalizedYomiKey(p.status) === 'B' && !EXCLUDED_STATUSES.includes(p.status)
+  ),
+  C: yomiParticipants.value.filter((p) =>
+    normalizedYomiKey(p.status) === 'C' && !EXCLUDED_STATUSES.includes(p.status)
+  ),
+  XA: yomiParticipants.value.filter((p) =>
+    normalizedYomiKey(p.status) === 'XA' && !EXCLUDED_STATUSES.includes(p.status)
+  )
 }));
+
+const markAttended = async (participant: EventParticipant) => {
+  if (!selectedYomiEvent.value) return;
+  const studentEventId = participant.student_event_id;
+
+  if (!studentEventId) {
+    console.error('student_event_id が取得できません');
+    return;
+  }
+
+  try {
+    // 楽観的UI更新（即時ヨミ表から消える）
+    const target = yomiParticipants.value.find(
+      p => p.student_event_id === studentEventId
+    );
+    if (target) {
+      target.status = 'attended';
+    }
+
+    const token = localStorage.getItem('token');
+    await api.put(
+      `/api/events/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
+      { status: 'attended' },
+      { headers: { Authorization: token } }
+    );
+    fetchData();
+  } catch (err) {
+    console.error('出席更新エラー:', err);
+    // エラー時はリロードして元に戻す
+    fetchData();
+  }
+};
 
 const yomiSections: Array<{ key: YomiKey; label: string; accent: string }> = [
   { key: 'A', label: 'A:エントリー', accent: 'text-blue-700 border-blue-200 bg-blue-50' },
@@ -776,6 +836,16 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
               <span class="w-1.5 h-6 bg-emerald-600 rounded-full"></span>
               イベント別ヨミ表 (A/B/C)
             </h2>
+            <div v-if="selectedYomiEvent" class="flex flex-wrap gap-4 text-xs font-bold text-slate-500 mb-2 md:mb-0">
+              <span class="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg border border-emerald-100">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                出席：{{ attendedCount }}名
+              </span>
+              <span class="flex items-center gap-1 bg-rose-50 text-rose-700 px-2 py-1 rounded-lg border border-rose-100">
+                <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+                欠席：{{ xaCount }}名
+              </span>
+            </div>
             <button 
               @click="openMonthlyAttendanceModal"
               class="px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-base md:text-sm min-h-[44px] font-black hover:bg-emerald-100 transition-all flex items-center gap-2 w-fit"
@@ -976,13 +1046,30 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                     :draggable="true"
                     @dragstart="onDragStart($event, p)"
                     @dragend="onDragEnd"
-                    class="flex items-center gap-4 px-4 py-3 bg-white border border-gray-200 rounded-lg cursor-grab active:cursor-grabbing select-none w-full"
+                    class="flex flex-col gap-2 p-3 bg-white border border-gray-200 rounded-lg cursor-grab active:cursor-grabbing select-none w-full shadow-sm hover:border-emerald-200 transition-colors"
                     :class="{ 'opacity-40': draggingParticipant?.student_event_id === p.student_event_id }"
                   >
-                    <span class="text-sm font-bold text-gray-900 w-28 shrink-0 truncate">{{ p.name }}</span>
-                    <span class="text-xs text-gray-700 w-24 shrink-0 truncate">{{ p.university || '-' }}</span>
-                    <span class="text-xs text-gray-700 w-16 shrink-0 truncate">{{ p.staff_name || '-' }}</span>
-                    <span class="text-xs font-medium text-gray-900 w-16 shrink-0">{{ formatDateKey(p.selected_event_date) || '-' }}</span>
+                    <div class="flex items-center gap-3">
+                      <span class="text-sm font-bold text-gray-900 flex-1 truncate">{{ p.name }}</span>
+                      <span class="text-[10px] font-medium text-gray-400 shrink-0">{{ formatDateKey(p.selected_event_date) || '-' }}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px] text-gray-500">
+                      <span class="truncate max-w-[120px]">{{ p.university || '-' }}</span>
+                      <span class="truncate">{{ p.staff_name || '-' }}</span>
+                    </div>
+
+                    <!-- 出席ボタン (A/B/C セクションのみ表示) -->
+                    <button
+                      v-if="['A', 'B', 'C'].includes(section.key)"
+                      @click.stop="markAttended(p)"
+                      class="mt-1 w-full py-1.5 text-[10px] font-black rounded-lg
+                             bg-emerald-50 border border-emerald-200 text-emerald-700
+                             hover:bg-emerald-100 transition-all active:scale-95 flex items-center justify-center gap-1"
+                      title="出席済みにする"
+                    >
+                      <CheckCircle class="w-3 h-3" />
+                      出席
+                    </button>
                   </div>
                 <div v-if="yomiGroups[section.key].length === 0" class="py-6 text-center text-gray-400 text-xs">
                   該当学生はいません。
