@@ -1,4 +1,13 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -10,6 +19,15 @@ const router = express_1.default.Router();
 router.get('/', auth_1.authenticate, studentController_1.getStudents);
 router.get('/metrics/interviews', auth_1.authenticate, studentController_1.getInterviewMetrics);
 router.get('/metrics/funnel', auth_1.authenticate, studentController_1.getFunnelKpi);
+router.get('/metrics/funnel-sources', auth_1.authenticate, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const result = yield (require('../lib/db').pool).query('SELECT name FROM source_categories ORDER BY created_at ASC');
+        res.json(result.rows.map((r) => r.name));
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+}));
 router.get('/funnel/master', auth_1.authenticate, studentController_1.getFunnelMasterData);
 router.get('/source-categories', auth_1.authenticate, studentController_1.getSourceCategories);
 router.post('/source-categories', auth_1.authenticate, studentController_1.createSourceCategory);

@@ -46,6 +46,16 @@ const router = express.Router();
 router.get('/', authenticate, getStudents);
 router.get('/metrics/interviews', authenticate, getInterviewMetrics);
 router.get('/metrics/funnel', authenticate, getFunnelKpi);
+router.get('/metrics/funnel-sources', authenticate, async (req, res) => {
+    try {
+        const result = await (require('../lib/db').pool).query(
+            'SELECT name FROM source_categories ORDER BY created_at ASC'
+        );
+        res.json(result.rows.map((r: any) => r.name));
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
 router.get('/funnel/master', authenticate, getFunnelMasterData);
 router.get('/source-categories', authenticate, getSourceCategories);
 router.post('/source-categories', authenticate, createSourceCategory);

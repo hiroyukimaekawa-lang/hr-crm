@@ -6,6 +6,23 @@ import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-vue-next';
 
 /* ───────── 月別テーブルの折りたたみ ───────── */
 const isMonthlyTableOpen = ref(false);
+const isLoading = ref(false);
+
+/* ───────── 企業フィルタ ───────── */
+const sourceCategories = ref<string[]>([]);
+const selectedSource = ref<string>(''); // 空文字 = 全体
+
+const fetchSources = async () => {
+  const token = localStorage.getItem('token');
+  try {
+    const res = await api.get('/api/students/metrics/funnel-sources', {
+      headers: { Authorization: token }
+    });
+    sourceCategories.value = res.data;
+  } catch (err) {
+    console.error('Error fetching sources:', err);
+  }
+};
 
 /* ───────── KPI データ ───────── */
 const funnelKpi = ref({
@@ -31,14 +48,29 @@ const monthlyHistory = ref<Array<{
 
 /* ───────── API取得 ───────── */
 const fetchFunnelData = async () => {
-  const token = localStorage.getItem('token');
-  const [kpiRes, historyRes] = await Promise.all([
-    api.get('/api/students/metrics/funnel', { headers: { Authorization: token } }),
-    api.get('/api/students/metrics/funnel', { headers: { Authorization: token }, params: { group_by_month: '1' } })
-  ]);
+  isLoading.value = true;
+  try {
+    const token = localStorage.getItem('token');
+    const sourceParam = selectedSource.value ? { source_company: selectedSource.value } : {};
 
-  funnelKpi.value = kpiRes.data;
-  monthlyHistory.value = historyRes.data;
+    const [kpiRes, historyRes] = await Promise.all([
+      api.get('/api/students/metrics/funnel', {
+        headers: { Authorization: token },
+        params: sourceParam
+      }),
+      api.get('/api/students/metrics/funnel', {
+        headers: { Authorization: token },
+        params: { group_by_month: '1', ...sourceParam }
+      })
+    ]);
+
+    funnelKpi.value = kpiRes.data;
+    monthlyHistory.value = historyRes.data;
+  } catch (err) {
+    console.error('Error fetching funnel data:', err);
+  } finally {
+    isLoading.value = false;
+  }
 };
 
 /* ───────── computed ───────── */
@@ -102,10 +134,11 @@ const checkMobile = () => {
   isMobile.value = window.innerWidth < 768;
 };
 
-onMounted(() => {
-  fetchFunnelData();
+onMounted(async () => {
   checkMobile();
   window.addEventListener('resize', checkMobile);
+  await fetchSources();
+  await fetchFunnelData();
 });
 </script>
 
@@ -117,6 +150,34 @@ onMounted(() => {
         <h1 class="text-3xl font-bold text-gray-900">初回ファネル登録</h1>
         <p class="text-gray-600">初回申し込み → 初回面談実施までの流入指標</p>
         <p class="text-[10px] text-gray-400">※トビ・リスケを経て最初に面談が実施された時点までを集計</p>
+      </div>
+
+      <!-- プルダウン -->
+      <div class="flex flex-wrap items-center gap-4 bg-white p-4 rounded-xl border border-gray-200">
+        <div class="flex items-center gap-3">
+          <label class="text-sm font-bold text-gray-600 whitespace-nowrap">流入元企業</label>
+          <select
+            v-model="selectedSource"
+            @change="fetchFunnelData"
+            :disabled="isLoading"
+            class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 min-w-[200px] disabled:bg-gray-50 disabled:cursor-not-allowed transition-all"
+          >
+            <option value="">全体（すべての企業）</option>
+            <option v-for="name in sourceCategories" :key="name" :value="name">
+              {{ name }}
+            </option>
+          </select>
+        </div>
+        <div v-if="isLoading" class="flex items-center gap-2 text-blue-600">
+          <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span class="text-sm font-medium">更新中...</span>
+        </div>
+        <span v-else-if="selectedSource" class="text-xs text-blue-500 font-medium px-2 py-1 bg-blue-50 rounded-md">
+          {{ selectedSource }} のみ表示中
+        </span>
       </div>
 
       <!-- セクション①：初回面談フロー可視化 -->
