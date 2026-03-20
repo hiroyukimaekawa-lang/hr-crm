@@ -42,6 +42,21 @@ const eventDetails = ref<EventDetail[]>([]);
 const loading   = ref(false);
 const activeTab = ref<'all' | number>('all');
 const route     = useRoute();
+const showExpired = ref(false);
+
+const activeKgiList = computed(() =>
+  kgiList.value.filter(kgi => {
+    if (!kgi.deadline) return true;
+    return kgi.days_remaining >= -1;
+  })
+);
+
+const expiredKgiList = computed(() =>
+  kgiList.value.filter(kgi => {
+    if (!kgi.deadline) return false;
+    return kgi.days_remaining < -1;
+  })
+);
 
 /* ───────── データ取得 ───────── */
 const fetchData = async () => {
@@ -197,7 +212,7 @@ const allDerived = computed(() => {
   let minDays            = Infinity;
   let nearestDeadline: string | null = null;
 
-  kgiList.value.forEach(kgi => {
+  activeKgiList.value.forEach(kgi => {
     const detail = eventDetails.value.find(e => e.id === kgi.event_id);
     const seatToEntry = toRate(detail?.kpi_seat_to_entry_rate, 70) / 100;
     const tEntry = kgi.target_seats > 0 ? Math.ceil(kgi.target_seats / seatToEntry) : 0;
@@ -230,7 +245,7 @@ const allDerived = computed(() => {
     nearestDeadline,
     dailySeat:  days > 0 ? +((totalTargetSeats - totalCurrentSeats) / days).toFixed(1) : 0,
     dailyEntry: days > 0 ? +((totalTargetEntry - totalCurrentEntry) / days).toFixed(1) : 0,
-    eventCount: kgiList.value.length
+    eventCount: activeKgiList.value.length
   };
 });
 </script>
@@ -258,7 +273,7 @@ const allDerived = computed(() => {
             @click="activeTab = 'all'"
           >全体</button>
           <button
-            v-for="kgi in kgiList"
+            v-for="kgi in activeKgiList"
             :key="kgi.event_id"
             class="px-4 py-2 text-sm font-semibold whitespace-nowrap rounded-t-lg transition-colors border-b-2 max-w-[180px] truncate"
             :class="activeTab === kgi.event_id
@@ -308,7 +323,7 @@ const allDerived = computed(() => {
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                  <tr v-for="kgi in kgiList" :key="`all-row-${kgi.event_id}`"
+                  <tr v-for="kgi in activeKgiList" :key="`all-row-${kgi.event_id}`"
                       class="hover:bg-gray-50 cursor-pointer"
                       @click="activeTab = kgi.event_id">
                     <td class="px-3 py-2.5 text-blue-700 font-semibold hover:underline max-w-[200px] truncate" :title="kgi.event_title">
@@ -329,8 +344,38 @@ const allDerived = computed(() => {
                       {{ (Number(eventDetails.find(e => e.id === kgi.event_id)?.unit_price || 0) * kgi.target_seats).toLocaleString() }}円
                     </td>
                   </tr>
-                  <tr v-if="kgiList.length === 0">
+                  <tr v-if="activeKgiList.length === 0">
                     <td colspan="9" class="px-3 py-10 text-center text-gray-400">データがありません</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 終了済みイベント（折りたたみ） -->
+          <div v-if="expiredKgiList.length > 0" class="mt-4">
+            <button
+              @click="showExpired = !showExpired"
+              class="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+            >
+              <span>{{ showExpired ? '▲' : '▼' }}</span>
+              終了済みイベント（{{ expiredKgiList.length }}件）
+            </button>
+            <div v-if="showExpired" class="mt-2 overflow-x-auto opacity-50">
+              <table class="w-full text-sm">
+                <tbody>
+                  <tr v-for="kgi in expiredKgiList" :key="`expired-${kgi.event_id}`"
+                      class="hover:bg-gray-50 cursor-pointer"
+                      @click="activeTab = kgi.event_id">
+                    <td class="px-3 py-2 text-gray-500 max-w-[200px] truncate" :title="kgi.event_title">{{ kgi.event_title }}</td>
+                    <td class="px-3 py-2 text-right text-gray-400 font-mono">{{ formatDeadline(kgi.deadline) }}</td>
+                    <td class="px-3 py-2 text-right text-gray-400 font-mono">{{ kgi.days_remaining }}</td>
+                    <td class="px-3 py-2 text-right text-gray-400">{{ kgi.target_seats || '-' }}</td>
+                    <td class="px-3 py-2 text-right text-gray-400">{{ kgi.current_seats }}</td>
+                    <td class="px-3 py-2 text-right text-gray-400">{{ kgi.kpi_target_entry || '-' }}</td>
+                    <td class="px-3 py-2 text-right text-gray-400">{{ kgi.current_entry }}</td>
+                    <td class="px-3 py-2 text-right text-gray-400">-</td>
+                    <td class="px-3 py-2 text-right text-gray-400">-</td>
                   </tr>
                 </tbody>
               </table>
