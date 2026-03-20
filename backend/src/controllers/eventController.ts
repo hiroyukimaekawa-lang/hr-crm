@@ -408,10 +408,20 @@ export const getEventDetail = async (req: Request, res: Response) => {
                 s.email,
                 s.phone,
                 s.graduation_year,
-                u.name as staff_name
+                u.name as staff_name,
+                t.content as next_task_content,
+                t.due_date as next_task_date
             FROM student_events se
             JOIN students s ON s.id = se.student_id
             LEFT JOIN users u ON u.id = s.staff_id
+            LEFT JOIN LATERAL (
+              SELECT content, due_date
+              FROM tasks
+              WHERE student_id = se.student_id
+                AND completed = false
+              ORDER BY due_date ASC
+              LIMIT 1
+            ) t ON true
             WHERE se.event_id = $1
             ORDER BY se.created_at DESC
         `, [id]);

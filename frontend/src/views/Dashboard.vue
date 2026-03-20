@@ -39,6 +39,8 @@ interface EventParticipant {
   name: string;
   university?: string;
   staff_name?: string;
+  next_task_content?: string | null;
+  next_task_date?: string | null;
 }
 
 interface KgiProgress {
@@ -1007,7 +1009,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
 
     <div v-if="selectedYomiEvent" class="fixed inset-0 z-[90]">
       <div class="absolute inset-0 bg-black/30" @click="closeYomiEventDetail" />
-      <div class="absolute right-0 top-0 h-full w-full md:w-2/3 lg:w-1/2 bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
+      <div class="absolute right-0 top-0 h-full w-[80vw] max-w-5xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <div>
             <h2 class="text-xl font-bold text-gray-900">イベント参加詳細</h2>
@@ -1046,29 +1048,41 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                     :draggable="true"
                     @dragstart="onDragStart($event, p)"
                     @dragend="onDragEnd"
-                    class="flex flex-col gap-2 p-3 bg-white border border-gray-200 rounded-lg cursor-grab active:cursor-grabbing select-none w-full shadow-sm hover:border-emerald-200 transition-colors"
+                    class="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-lg cursor-grab active:cursor-grabbing select-none w-full hover:bg-gray-50 transition-colors"
                     :class="{ 'opacity-40': draggingParticipant?.student_event_id === p.student_event_id }"
                   >
-                    <div class="flex items-center gap-3">
-                      <span class="text-sm font-bold text-gray-900 flex-1 truncate">{{ p.name }}</span>
-                      <span class="text-[10px] font-medium text-gray-400 shrink-0">{{ formatDateKey(p.selected_event_date) || '-' }}</span>
-                    </div>
-                    <div class="flex items-center justify-between text-[10px] text-gray-500">
-                      <span class="truncate max-w-[120px]">{{ p.university || '-' }}</span>
-                      <span class="truncate">{{ p.staff_name || '-' }}</span>
-                    </div>
-
-                    <!-- 出席ボタン (A/B/C セクションのみ表示) -->
+                    <!-- 名前 -->
+                    <span class="text-sm font-bold text-gray-900 w-24 shrink-0 truncate">
+                      {{ p.name }}
+                    </span>
+                    <!-- 大学 -->
+                    <span class="text-xs text-gray-700 w-28 shrink-0 truncate">
+                      {{ p.university || '-' }}
+                    </span>
+                    <!-- 担当者 -->
+                    <span class="text-xs text-gray-700 w-14 shrink-0 truncate">
+                      {{ p.staff_name || '-' }}
+                    </span>
+                    <!-- エントリー日 -->
+                    <span class="text-xs text-gray-600 w-16 shrink-0">
+                      {{ formatDateKey(p.created_at) }}
+                    </span>
+                    <!-- 次回タスク履行日 -->
+                    <span class="text-xs text-gray-600 w-16 shrink-0">
+                      {{ p.next_task_date ? formatDateKey(p.next_task_date) : '-' }}
+                    </span>
+                    <!-- タスク内容 -->
+                    <span class="text-xs text-gray-500 flex-1 truncate">
+                      {{ p.next_task_content || '-' }}
+                    </span>
+                    
+                    <!-- 出席ボタン -->
                     <button
-                      v-if="['A', 'B', 'C'].includes(section.key)"
                       @click.stop="markAttended(p)"
-                      class="mt-1 w-full py-1.5 text-[10px] font-black rounded-lg
-                             bg-emerald-50 border border-emerald-200 text-emerald-700
-                             hover:bg-emerald-100 transition-all active:scale-95 flex items-center justify-center gap-1"
+                      class="shrink-0 text-xs px-2 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap flex items-center gap-1"
                       title="出席済みにする"
                     >
-                      <CheckCircle class="w-3 h-3" />
-                      出席
+                      ✓ 出席
                     </button>
                   </div>
                 <div v-if="yomiGroups[section.key].length === 0" class="py-6 text-center text-gray-400 text-xs">
