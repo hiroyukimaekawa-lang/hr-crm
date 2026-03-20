@@ -28,6 +28,7 @@ interface EventItem {
   b_waiting_count?: number;
   c_waiting_count?: number;
   xa_cancel_count?: number;
+  event_slots?: any[];
 }
 
 interface EventParticipant {
@@ -280,6 +281,7 @@ const eventYomiRows = computed(() =>
       id: e.id,
       title: e.title,
       event_date: e.event_date,
+      event_slots: e.event_slots,
       a: Number(e.a_entry_count || 0),
       b: Number(e.b_waiting_count || 0),
       c: Number(e.c_waiting_count || 0),
@@ -696,7 +698,17 @@ const sourceCompanyOptions = computed(() => {
 const monthlyYomiByEvent = computed(() => {
   const month = selectedMonthKey.value;
   return eventYomiRows.value
-    .filter((row) => String(row.event_date || '').slice(0, 7) === month)
+    .filter((row) => {
+      if (row.event_date) {
+        return String(row.event_date).slice(0, 7) === month;
+      }
+      if (row.event_slots && Array.isArray(row.event_slots) && row.event_slots.length > 0) {
+        return row.event_slots.some((slot: any) =>
+          String(slot.datetime || '').slice(0, 7) === month
+        );
+      }
+      return false;
+    })
     .map((row) => ({
       ...row,
       heldDate: row.event_date ? new Date(row.event_date).toLocaleDateString('ja-JP') : '-'
