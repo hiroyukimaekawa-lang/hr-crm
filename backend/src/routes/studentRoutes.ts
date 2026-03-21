@@ -1,4 +1,6 @@
 import express from 'express';
+import pool from '../config/db';
+
 import {
     getStudents,
     createStudent,
@@ -48,7 +50,7 @@ router.get('/metrics/interviews', authenticate, getInterviewMetrics);
 router.get('/metrics/funnel', authenticate, getFunnelKpi);
 router.get('/metrics/funnel-sources', authenticate, async (req, res) => {
     try {
-        const result = await (require('../lib/db').pool).query(
+        const result = await pool.query(
             'SELECT name FROM source_categories ORDER BY created_at ASC'
         );
         res.json(result.rows.map((r: any) => r.name));
