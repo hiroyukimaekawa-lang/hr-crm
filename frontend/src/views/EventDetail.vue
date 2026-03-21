@@ -542,15 +542,15 @@ onMounted(fetchDetail);
           </div>
 
           <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="w-full text-sm table-fixed">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">氏名</th>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">大学</th>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">担当</th>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">申込日</th>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">参加日程</th>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-32">氏名</th>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">大学</th>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-12">担当</th>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-16">申込日</th>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-36">参加日程</th>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">
                     <button
                       class="flex items-center gap-1 hover:text-gray-800"
                       @click="() => { if (sortField === 'status') { if (sortOrder === 'asc') { sortOrder = 'desc'; } else { sortField = null; sortOrder = 'asc'; } } else { sortField = 'status'; sortOrder = 'asc'; } }"
@@ -561,19 +561,19 @@ onMounted(fetchDetail);
                       <span v-else class="opacity-30">▲</span>
                     </button>
                   </th>
-                  <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
+                  <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase w-40">操作</th>
                 </tr>
               </thead>
                 <tbody class="divide-y divide-gray-200">
                 <tr v-for="p in filteredParticipants" :key="p.id || p.student_id" class="hover:bg-gray-50">
-                  <td class="px-4 py-3">
+                  <td class="px-4 py-3 truncate">
                     <button class="text-blue-600 hover:text-blue-800" @click="router.push(`/students/${p.student_id}`)">
                       {{ p.name }}
                     </button>
                   </td>
-                  <td class="px-4 py-3 text-gray-600">{{ p.university || '-' }}</td>
-                  <td class="px-4 py-3 text-gray-600">{{ p.staff_name || '-' }}</td>
-                  <td class="px-4 py-3 text-gray-600">{{ formatDateKey(p.created_at) }}</td>
+                  <td class="px-4 py-3 text-gray-600 truncate">{{ p.university || '-' }}</td>
+                  <td class="px-4 py-3 text-gray-600 truncate">{{ p.staff_name || '-' }}</td>
+                  <td class="px-4 py-3 text-gray-600 truncate">{{ formatDateKey(p.created_at) }}</td>
                   <td class="px-4 py-3 text-gray-900 font-medium">{{ formatDateKey(p.selected_event_date) }}</td>
                   <td class="px-4 py-3">
                     <span
