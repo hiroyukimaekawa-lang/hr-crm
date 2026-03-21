@@ -46,7 +46,10 @@ const showExpired = ref(false);
 
 const activeKgiList = computed(() =>
   kgiList.value.filter(kgi => {
-    if (!kgi.deadline) return true;
+    // deadline（entry_deadline または last_slot_date）が
+    // 設定されていない場合は非表示
+    if (!kgi.deadline) return false;
+    // 最終開催日から1日以内（当日含む）は表示
     return kgi.days_remaining >= -1;
   })
 );
