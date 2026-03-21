@@ -69,6 +69,10 @@ const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admi
 const selectedYomiEvent = ref<EventItem | null>(null);
 const yomiParticipants = ref<EventParticipant[]>([]);
 const yomiLoading = ref(false);
+
+const rescheduleModalOpen = ref(false);
+const rescheduleTarget = ref<EventParticipant | null>(null);
+const rescheduleSelectedDate = ref('');
 const showMonthlyAttendanceModal = ref(false);
 const selectedMonthlyParticipants = ref<Array<EventParticipant & { event_title?: string; held_date?: string; single_event_date?: string | null }>>([]);
 const monthlyFilters = ref({
@@ -416,6 +420,19 @@ const formatDateKey = (value: string | Date | null | undefined) => {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 };
 
+const formatEventSlot = (datetime?: string | null, location?: string | null) => {
+  if (!datetime) return '-';
+  const raw = String(datetime).replace('Z', '').replace('+09:00', '').replace('+09', '');
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return datetime;
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const base = `${m}/${day} ${hh}:${mm}`;
+  return location ? `${base} ${location}` : base;
+};
+
 const EXCLUDED_STATUSES = ['attended', 'E_FAIL', 'D_PASS'];
 
 const attendedCount = computed(() =>
@@ -529,24 +546,39 @@ const markNoShow = async (participant: EventParticipant) => {
   }
 };
 
-const markReschedule = async (participant: EventParticipant) => {
-  if (!selectedYomiEvent.value) return;
-  const studentEventId = participant.student_event_id;
-  if (!studentEventId) {
-    console.error('student_event_id が取得できません');
-    return;
-  }
+const markReschedule = (participant: EventParticipant) => {
+  rescheduleTarget.value = participant;
+  // 現在の参加日程を初期選択値にセット
+  rescheduleSelectedDate.value = participant.selected_event_date || '';
+  rescheduleModalOpen.value = true;
+};
+
+const confirmReschedule = async () => {
+  if (!rescheduleTarget.value || !selectedYomiEvent.value) return;
+  const studentEventId = rescheduleTarget.value.student_event_id;
+  if (!studentEventId) return;
+
   try {
     const target = yomiParticipants.value.find(
       p => p.student_event_id === studentEventId
     );
-    if (target) target.status = 'B_WAITING';
+    if (target) {
+      target.status = 'B_WAITING';
+      target.selected_event_date = rescheduleSelectedDate.value;
+    }
+
     const token = localStorage.getItem('token');
     await api.put(
       `/api/events/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
-      { status: 'B_WAITING' },
+      {
+        status: 'B_WAITING',
+        selected_event_date: rescheduleSelectedDate.value || null
+      },
       { headers: { Authorization: token } }
     );
+    rescheduleModalOpen.value = false;
+    rescheduleTarget.value = null;
+    rescheduleSelectedDate.value = '';
     fetchData();
   } catch (err) {
     console.error('リスケ更新エラー:', err);
@@ -1283,6 +1315,48 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
         </div>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="rescheduleModalOpen"
+        class="fixed inset-0 z-[300] flex items-center justify-center bg-black/40"
+        @click.self="rescheduleModalOpen = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+          <h3 class="text-base font-bold text-gray-900 mb-1">日程を変更する</h3>
+          <p class="text-xs text-gray-500 mb-4">{{ rescheduleTarget?.name }}</p>
+
+          <div class="mb-6">
+            <p class="text-xs text-gray-500 mb-2">新しい参加日程を選択</p>
+            <select
+              v-model="rescheduleSelectedDate"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+            >
+              <option value="">日程を選択してください</option>
+              <option
+                v-for="slot in (selectedYomiEvent?.event_slots || [])"
+                :key="`reschedule-${slot.datetime}`"
+                :value="slot.datetime"
+              >
+                {{ formatEventSlot(slot.datetime, slot.location) }}
+              </option>
+            </select>
+          </div>
+
+          <div class="flex gap-2">
+            <button
+              @click="rescheduleModalOpen = false"
+              class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50"
+            >キャンセル</button>
+            <button
+              @click="confirmReschedule"
+              :disabled="!rescheduleSelectedDate"
+              class="flex-1 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 disabled:opacity-40"
+            >リスケ確定</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
   </Layout>
 </template>
