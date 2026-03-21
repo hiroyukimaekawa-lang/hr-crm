@@ -73,6 +73,7 @@ const yomiLoading = ref(false);
 const rescheduleModalOpen = ref(false);
 const rescheduleTarget = ref<EventParticipant | null>(null);
 const rescheduleSelectedDate = ref('');
+const actionMenuTarget = ref<EventParticipant | null>(null);
 const showMonthlyAttendanceModal = ref(false);
 const selectedMonthlyParticipants = ref<Array<EventParticipant & { event_title?: string; held_date?: string; single_event_date?: string | null }>>([]);
 const monthlyFilters = ref({
@@ -681,6 +682,14 @@ const updateYomiParticipantStatus = async (
   }
 };
 
+const toggleActionMenu = (participant: EventParticipant) => {
+  if (actionMenuTarget.value?.student_event_id === participant.student_event_id) {
+    actionMenuTarget.value = null;
+  } else {
+    actionMenuTarget.value = participant;
+  }
+};
+
 const calendarBaseMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -858,6 +867,9 @@ onMounted(() => {
   fetchData();
   checkMobile();
   window.addEventListener('resize', checkMobile);
+  document.addEventListener('click', () => {
+    actionMenuTarget.value = null;
+  });
 });
 watch(sourceCompanyFilter, fetchInterviewMetrics);
 </script>
@@ -1110,7 +1122,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
 
     <div v-if="selectedYomiEvent" class="fixed inset-0 z-[90]">
       <div class="absolute inset-0 bg-black/30" @click="closeYomiEventDetail" />
-      <div class="absolute right-0 top-0 h-full w-full md:w-[80vw] md:max-w-5xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
+      <div class="absolute right-0 top-0 h-full w-full md:w-[90vw] md:max-w-6xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <div>
             <h2 class="text-xl font-bold text-gray-900">イベント参加詳細</h2>
@@ -1168,6 +1180,10 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                     <span class="text-xs text-gray-600 w-16 shrink-0">
                       {{ formatDateKey(p.created_at) }}
                     </span>
+                    <!-- 参加日程 -->
+                    <span class="text-xs text-gray-600 w-16 shrink-0">
+                      {{ p.selected_event_date ? formatDateKey(p.selected_event_date) : '-' }}
+                    </span>
                     <!-- 次回タスク履行日 -->
                     <span class="text-xs text-gray-600 w-16 shrink-0">
                       {{ p.next_task_date ? formatDateKey(p.next_task_date) : '-' }}
@@ -1177,34 +1193,39 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                       {{ p.next_task_content || '-' }}
                     </span>
                     
-                    <!-- 操作ボタン -->
-                    <div class="flex gap-1 shrink-0">
-                      <!-- 出席 -->
+                    <!-- 操作メニュー -->
+                    <div class="relative shrink-0">
                       <button
-                        @click.stop="markAttended(p)"
-                        class="text-xs px-2 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap flex items-center gap-1"
-                        title="出席済みにする"
+                        @click.stop="toggleActionMenu(p)"
+                        class="text-xs px-2 py-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 whitespace-nowrap"
                       >
-                        ✓ 出席
+                        ⋯
                       </button>
 
-                      <!-- 不参加 -->
-                      <button
-                        @click.stop="markNoShow(p)"
-                        class="text-xs px-2 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 whitespace-nowrap flex items-center gap-1"
-                        title="不参加にする"
+                      <!-- ドロップダウンメニュー -->
+                      <div
+                        v-if="actionMenuTarget?.student_event_id === p.student_event_id"
+                        class="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[120px]"
                       >
-                        ✗ 不参加
-                      </button>
-
-                      <!-- リスケ -->
-                      <button
-                        @click.stop="markReschedule(p)"
-                        class="text-xs px-2 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 whitespace-nowrap flex items-center gap-1"
-                        title="リスケにする"
-                      >
-                        ↺ リスケ
-                      </button>
+                        <button
+                          @click.stop="markAttended(p); actionMenuTarget = null"
+                          class="w-full text-left px-4 py-2 text-xs text-green-700 hover:bg-green-50"
+                        >
+                          ✓ 出席
+                        </button>
+                        <button
+                          @click.stop="markNoShow(p); actionMenuTarget = null"
+                          class="w-full text-left px-4 py-2 text-xs text-red-700 hover:bg-red-50"
+                        >
+                          ✗ 不参加
+                        </button>
+                        <button
+                          @click.stop="markReschedule(p); actionMenuTarget = null"
+                          class="w-full text-left px-4 py-2 text-xs text-amber-700 hover:bg-amber-50"
+                        >
+                          ↺ リスケ
+                        </button>
+                      </div>
                     </div>
                   </div>
                 <div v-if="yomiGroups[section.key].length === 0" class="py-6 text-center text-gray-400 text-xs">
