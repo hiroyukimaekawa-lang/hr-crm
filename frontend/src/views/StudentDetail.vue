@@ -817,6 +817,17 @@ watch(selectedEventId, () => {
     selectedEventDate.value = list[0] || '';
   }
 });
+
+// 2番の初回面談予定日が変更されたら3番に自動コピー
+watch(
+  () => matcherForm.value.interview_scheduled_at,
+  (newVal) => {
+    // 3番が未入力の場合のみ自動セット
+    if (newVal && !matcherForm.value.interview_actual_at) {
+      matcherForm.value.interview_actual_at = newVal;
+    }
+  }
+);
 </script>
 
 <template>
