@@ -165,6 +165,14 @@ const funnelKpi = ref({
 
 const kgiProgress = ref<KgiProgress[]>([]);
 
+const activeKgiProgress = computed(() =>
+  kgiProgress.value.filter(row =>
+    row.days_remaining !== null &&
+    row.days_remaining !== undefined &&
+    row.days_remaining >= 0
+  )
+);
+
 const fetchKgiProgress = async () => {
   const token = localStorage.getItem('token');
   const res = await api.get('/api/events/kgi-progress', { headers: { Authorization: token } });
@@ -904,7 +912,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <template v-for="row in kgiProgress" :key="`kgi-${row.event_id}`">
+              <template v-for="row in activeKgiProgress" :key="`kgi-${row.event_id}`">
                 <tr class="hover:bg-slate-50/50 transition-colors">
                   <td class="px-3 py-4 text-slate-900 font-bold max-w-[200px] truncate" :title="row.event_title">{{ row.event_title }}</td>
                   <td class="px-3 py-4 text-center text-slate-600 whitespace-nowrap">
