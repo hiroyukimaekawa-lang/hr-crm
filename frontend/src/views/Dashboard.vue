@@ -504,6 +504,56 @@ const markAttended = async (participant: EventParticipant) => {
   }
 };
 
+const markNoShow = async (participant: EventParticipant) => {
+  if (!selectedYomiEvent.value) return;
+  const studentEventId = participant.student_event_id;
+  if (!studentEventId) {
+    console.error('student_event_id が取得できません');
+    return;
+  }
+  try {
+    const target = yomiParticipants.value.find(
+      p => p.student_event_id === studentEventId
+    );
+    if (target) target.status = 'E_FAIL';
+    const token = localStorage.getItem('token');
+    await api.put(
+      `/api/events/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
+      { status: 'E_FAIL' },
+      { headers: { Authorization: token } }
+    );
+    fetchData();
+  } catch (err) {
+    console.error('不参加更新エラー:', err);
+    fetchData();
+  }
+};
+
+const markReschedule = async (participant: EventParticipant) => {
+  if (!selectedYomiEvent.value) return;
+  const studentEventId = participant.student_event_id;
+  if (!studentEventId) {
+    console.error('student_event_id が取得できません');
+    return;
+  }
+  try {
+    const target = yomiParticipants.value.find(
+      p => p.student_event_id === studentEventId
+    );
+    if (target) target.status = 'B_WAITING';
+    const token = localStorage.getItem('token');
+    await api.put(
+      `/api/events/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
+      { status: 'B_WAITING' },
+      { headers: { Authorization: token } }
+    );
+    fetchData();
+  } catch (err) {
+    console.error('リスケ更新エラー:', err);
+    fetchData();
+  }
+};
+
 const yomiSections: Array<{ key: YomiKey; label: string; accent: string }> = [
   { key: 'A', label: 'A:エントリー', accent: 'text-blue-700 border-blue-200 bg-blue-50' },
   { key: 'B', label: 'B:回答待ち', accent: 'text-amber-700 border-amber-200 bg-amber-50' },
@@ -1095,14 +1145,35 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                       {{ p.next_task_content || '-' }}
                     </span>
                     
-                    <!-- 出席ボタン -->
-                    <button
-                      @click.stop="markAttended(p)"
-                      class="shrink-0 text-xs px-2 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap flex items-center gap-1"
-                      title="出席済みにする"
-                    >
-                      ✓ 出席
-                    </button>
+                    <!-- 操作ボタン -->
+                    <div class="flex gap-1 shrink-0">
+                      <!-- 出席 -->
+                      <button
+                        @click.stop="markAttended(p)"
+                        class="text-xs px-2 py-1 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap flex items-center gap-1"
+                        title="出席済みにする"
+                      >
+                        ✓ 出席
+                      </button>
+
+                      <!-- 不参加 -->
+                      <button
+                        @click.stop="markNoShow(p)"
+                        class="text-xs px-2 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 whitespace-nowrap flex items-center gap-1"
+                        title="不参加にする"
+                      >
+                        ✗ 不参加
+                      </button>
+
+                      <!-- リスケ -->
+                      <button
+                        @click.stop="markReschedule(p)"
+                        class="text-xs px-2 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 whitespace-nowrap flex items-center gap-1"
+                        title="リスケにする"
+                      >
+                        ↺ リスケ
+                      </button>
+                    </div>
                   </div>
                 <div v-if="yomiGroups[section.key].length === 0" class="py-6 text-center text-gray-400 text-xs">
                   該当学生はいません。
