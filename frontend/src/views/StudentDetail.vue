@@ -652,6 +652,15 @@ const formatDateTime = (value?: string | null, event?: any) => {
   return timeStr;
 };
 
+const formatDate = (value: string | null | undefined) => {
+  if (!value) return ''
+  const s = String(value).slice(0, 10) // "2026-03-22" のみ取得
+  const parts = s.split('-')
+  if (parts.length < 3) return s
+  const [, m, d] = parts
+  return `${Number(m)}/${Number(d)}`
+}
+
 const parseLocalDate = (value?: string | Date | null) => {
   if (!value) return null;
   if (value instanceof Date) return value;
@@ -1080,7 +1089,7 @@ watch(
             <div class="space-y-2 mb-4">
               <div v-for="t in tasks" :key="t.id" class="flex items-start justify-between gap-3 bg-gray-50 rounded-lg p-3">
                 <div>
-                  <p class="text-base md:text-sm text-gray-500">{{ t.due_date || '履行日未設定' }}</p>
+                  <p class="text-base md:text-sm text-gray-500">{{ t.due_date ? formatDate(t.due_date) : '履行日未設定' }}</p>
                   <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ t.content }}</p>
                 </div>
                 <div class="flex items-center gap-2">
