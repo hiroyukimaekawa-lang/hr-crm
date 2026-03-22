@@ -416,10 +416,10 @@ export const getEventDetail = async (req: Request, res: Response) => {
             LEFT JOIN users u ON u.id = s.staff_id
             LEFT JOIN LATERAL (
               SELECT content, due_date
-              FROM tasks
+              FROM student_tasks
               WHERE student_id = se.student_id
-                AND completed = false
-              ORDER BY due_date ASC
+                AND COALESCE(completed, FALSE) = FALSE
+              ORDER BY due_date ASC NULLS LAST
               LIMIT 1
             ) t ON true
             WHERE se.event_id = $1
