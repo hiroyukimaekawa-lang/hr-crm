@@ -85,7 +85,7 @@ const monthlyFilters = ref({
   selected_event_date: '',
   status: ''
 });
-const monthlySortField = ref<'status' | null>(null);
+const monthlySortField = ref<string | null>(null);
 const monthlySortOrder = ref<'asc' | 'desc'>('asc');
 const STATUS_ORDER_MAP: Record<string, number> = {
   A_ENTRY: 1, registered: 1,
@@ -814,6 +814,28 @@ const monthlyYomiByEvent = computed(() => {
     }));
 });
 
+const uniqueEventTitles = computed(() =>
+  [...new Set(selectedMonthlyParticipants.value.map(p => p.event_title).filter(Boolean))].sort()
+);
+
+const uniqueStaffNames = computed(() =>
+  [...new Set(selectedMonthlyParticipants.value.map(p => p.staff_name).filter(Boolean))].sort()
+);
+
+const toggleSort = (field: string) => {
+  if (monthlySortField.value === field) {
+    if (monthlySortOrder.value === 'asc') {
+      monthlySortOrder.value = 'desc';
+    } else {
+      monthlySortField.value = null;
+      monthlySortOrder.value = 'asc';
+    }
+  } else {
+    monthlySortField.value = field;
+    monthlySortOrder.value = 'asc';
+  }
+};
+
 const monthlyAttendanceCount = computed(() =>
   monthlyYomiByEvent.value.reduce((sum, row) => sum + Number(row.total || 0), 0)
 );
@@ -860,9 +882,17 @@ const filteredMonthlyParticipants = computed(() => {
   });
   if (!monthlySortField.value) return filtered;
   return [...filtered].sort((a, b) => {
-    const aOrder = STATUS_ORDER_MAP[a.status] ?? 99;
-    const bOrder = STATUS_ORDER_MAP[b.status] ?? 99;
-    return monthlySortOrder.value === 'asc' ? aOrder - bOrder : bOrder - aOrder;
+    const field = monthlySortField.value!;
+    if (field === 'status') {
+      const aOrder = STATUS_ORDER_MAP[a.status] ?? 99;
+      const bOrder = STATUS_ORDER_MAP[b.status] ?? 99;
+      return monthlySortOrder.value === 'asc' ? aOrder - bOrder : bOrder - aOrder;
+    }
+    const aVal = String((a as any)[field] || '');
+    const bVal = String((b as any)[field] || '');
+    return monthlySortOrder.value === 'asc'
+      ? aVal.localeCompare(bVal, 'ja')
+      : bVal.localeCompare(aVal, 'ja');
   });
 });
 
@@ -1275,34 +1305,88 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                 <thead class="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                   <tr>
                     <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[140px]">
-                      <div class="mb-1 uppercase">イベント名</div>
-                      <input v-model="monthlyFilters.event_title" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
+                      <button
+                        class="uppercase flex items-center gap-0.5 hover:text-gray-900 mb-1"
+                        @click="toggleSort('event_title')"
+                      >
+                        イベント名
+                        <span v-if="monthlySortField === 'event_title' && monthlySortOrder === 'asc'">▲</span>
+                        <span v-else-if="monthlySortField === 'event_title' && monthlySortOrder === 'desc'">▼</span>
+                        <span v-else class="opacity-30">▲</span>
+                      </button>
+                      <select v-model="monthlyFilters.event_title" class="w-full px-1 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal bg-white">
+                        <option value="">すべて</option>
+                        <option v-for="title in uniqueEventTitles" :key="title" :value="title">{{ title }}</option>
+                      </select>
                     </th>
                     <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[100px]">
-                      <div class="mb-1 uppercase">学生名</div>
+                      <button
+                        class="uppercase flex items-center gap-0.5 hover:text-gray-900 mb-1"
+                        @click="toggleSort('name')"
+                      >
+                        学生名
+                        <span v-if="monthlySortField === 'name' && monthlySortOrder === 'asc'">▲</span>
+                        <span v-else-if="monthlySortField === 'name' && monthlySortOrder === 'desc'">▼</span>
+                        <span v-else class="opacity-30">▲</span>
+                      </button>
                       <input v-model="monthlyFilters.name" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
                     </th>
                     <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[120px]">
-                      <div class="mb-1 uppercase">大学</div>
+                      <button
+                        class="uppercase flex items-center gap-0.5 hover:text-gray-900 mb-1"
+                        @click="toggleSort('university')"
+                      >
+                        大学
+                        <span v-if="monthlySortField === 'university' && monthlySortOrder === 'asc'">▲</span>
+                        <span v-else-if="monthlySortField === 'university' && monthlySortOrder === 'desc'">▼</span>
+                        <span v-else class="opacity-30">▲</span>
+                      </button>
                       <input v-model="monthlyFilters.university" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
                     </th>
                     <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[80px]">
-                      <div class="mb-1 uppercase">担当</div>
-                      <input v-model="monthlyFilters.staff_name" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
+                      <button
+                        class="uppercase flex items-center gap-0.5 hover:text-gray-900 mb-1"
+                        @click="toggleSort('staff_name')"
+                      >
+                        担当
+                        <span v-if="monthlySortField === 'staff_name' && monthlySortOrder === 'asc'">▲</span>
+                        <span v-else-if="monthlySortField === 'staff_name' && monthlySortOrder === 'desc'">▼</span>
+                        <span v-else class="opacity-30">▲</span>
+                      </button>
+                      <select v-model="monthlyFilters.staff_name" class="w-full px-1 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal bg-white">
+                        <option value="">すべて</option>
+                        <option v-for="staff in uniqueStaffNames" :key="staff" :value="staff">{{ staff }}</option>
+                      </select>
                     </th>
                     <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[80px]">
-                      <div class="mb-1 uppercase">申込日</div>
+                      <button
+                        class="uppercase flex items-center gap-0.5 hover:text-gray-900 mb-1"
+                        @click="toggleSort('created_at')"
+                      >
+                        申込日
+                        <span v-if="monthlySortField === 'created_at' && monthlySortOrder === 'asc'">▲</span>
+                        <span v-else-if="monthlySortField === 'created_at' && monthlySortOrder === 'desc'">▼</span>
+                        <span v-else class="opacity-30">▲</span>
+                      </button>
                       <input v-model="monthlyFilters.created_at" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
                     </th>
                     <th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[80px]">
-                      <div class="mb-1 uppercase">参加日程</div>
+                      <button
+                        class="uppercase flex items-center gap-0.5 hover:text-gray-900 mb-1"
+                        @click="toggleSort('selected_event_date')"
+                      >
+                        参加日程
+                        <span v-if="monthlySortField === 'selected_event_date' && monthlySortOrder === 'asc'">▲</span>
+                        <span v-else-if="monthlySortField === 'selected_event_date' && monthlySortOrder === 'desc'">▼</span>
+                        <span v-else class="opacity-30">▲</span>
+                      </button>
                       <input v-model="monthlyFilters.selected_event_date" type="text" placeholder="絞り込み..." class="w-full px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal">
                     </th>
                     <th class="px-3 py-2.5 text-center text-xs font-semibold text-gray-600 bg-gray-50 align-top min-w-[100px]">
                       <div class="mb-1 flex items-center justify-center gap-1">
                         <button
                           class="uppercase flex items-center gap-0.5 hover:text-gray-900"
-                          @click="() => { if (monthlySortField === 'status') { if (monthlySortOrder === 'asc') { monthlySortOrder = 'desc'; } else { monthlySortField = null; monthlySortOrder = 'asc'; } } else { monthlySortField = 'status'; monthlySortOrder = 'asc'; } }"
+                          @click="toggleSort('status')"
                         >
                           ステータス
                           <span v-if="monthlySortField === 'status' && monthlySortOrder === 'asc'">▲</span>
@@ -1312,10 +1396,7 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
                       </div>
                       <select v-model="monthlyFilters.status" class="w-full px-1 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 font-normal bg-white">
                         <option value="">すべて</option>
-                        <option value="A">A:エントリー</option>
-                        <option value="B">B:回答待ち</option>
-                        <option value="C">C:回答待ち</option>
-                        <option value="XA">XA:キャンセル</option>
+                        <option v-for="(label, key) in {A: 'A:エントリー', B: 'B:回答待ち', C: 'C:回答待ち', XA: 'XA:キャンセル'}" :key="key" :value="key">{{ label }}</option>
                       </select>
                     </th>
                   </tr>
