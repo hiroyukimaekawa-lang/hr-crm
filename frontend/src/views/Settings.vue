@@ -30,6 +30,7 @@ interface EventItem {
   unit_price?: number | null;
   target_sales?: number | null;
   current_sales?: number | null;
+  attended_count?: number | null;
 }
 
 interface KpiCustomStep {
@@ -174,6 +175,12 @@ const autoTargetSales = computed(() => {
   const seats = Number(form.value.target_seats || 0);
   const price = Number(form.value.unit_price || 0);
   return seats > 0 && price > 0 ? seats * price : null;
+});
+
+const autoCurrentSales = computed(() => {
+  const seats = Number(selectedEvent.value?.attended_count || 0);
+  const price = Number(form.value.unit_price || 0);
+  return seats * price;
 });
 
 const derived = computed(() => {
@@ -340,11 +347,13 @@ const saveKpi = async () => {
     
     const payload = {
       entry_deadline: form.value.entry_deadline || null,
-      capacity: form.value.capacity ? Number(form.value.capacity) : null,
+      capacity: form.value.target_seats && form.value.seat_to_entry_rate
+        ? Math.round(Number(form.value.target_seats) / (Number(form.value.seat_to_entry_rate) / 100))
+        : null,
       target_seats: form.value.target_seats ? Number(form.value.target_seats) : null,
       unit_price: form.value.unit_price ? Number(form.value.unit_price) : null,
-      target_sales: form.value.target_sales ? Number(form.value.target_sales) : null,
-      current_sales: form.value.current_sales ? Number(form.value.current_sales) : 0,
+      target_sales: autoTargetSales.value || (form.value.target_sales ? Number(form.value.target_sales) : null),
+      current_sales: autoCurrentSales.value,
       kpi_seat_to_entry_rate: toRate(form.value.seat_to_entry_rate),
       kpi_entry_to_interview_rate: toRate(form.value.entry_to_interview_rate),
       kpi_interview_to_inflow_rate: toRate(form.value.interview_to_inflow_rate),
@@ -561,10 +570,10 @@ onMounted(async () => {
             <h3 class="text-base md:text-sm font-bold text-gray-700">売上・目標設定</h3>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <!-- エントリー期日 -->
+              <!-- 1. エントリー期日 -->
               <div>
                 <label class="text-xs font-semibold text-gray-600 block mb-1">
-                  エントリー期日
+                  1. エントリー期日
                 </label>
                 <input
                   v-model="form.entry_deadline"
@@ -573,24 +582,10 @@ onMounted(async () => {
                 />
               </div>
 
-              <!-- エントリー目標人数 -->
+              <!-- 2. 着座目標人数 (target_seats) -->
               <div>
                 <label class="text-xs font-semibold text-gray-600 block mb-1">
-                  エントリー目標人数
-                </label>
-                <input
-                  v-model="form.capacity"
-                  type="number"
-                  min="0"
-                  placeholder="例: 21"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
-                />
-              </div>
-
-              <!-- 着座目標人数（既存） -->
-              <div>
-                <label class="text-xs font-semibold text-gray-600 block mb-1">
-                  着座目標人数
+                  2. 着座目標人数
                 </label>
                 <input
                   v-model="form.target_seats"
@@ -601,10 +596,23 @@ onMounted(async () => {
                 />
               </div>
 
-              <!-- 単価 -->
+              <!-- 3. エントリー目標人数 (capacity) → 自動計算表示 -->
               <div>
                 <label class="text-xs font-semibold text-gray-600 block mb-1">
-                  単価（円）
+                  3. エントリー目標人数
+                </label>
+                <div class="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
+                  {{ form.target_seats && form.seat_to_entry_rate
+                    ? Math.round(Number(form.target_seats) / (Number(form.seat_to_entry_rate) / 100))
+                    : '-' }}
+                  <span class="text-xs text-gray-400 ml-1">※ 着座目標 ÷ 出席率で自動計算</span>
+                </div>
+              </div>
+
+              <!-- 4. 単価（円） -->
+              <div>
+                <label class="text-xs font-semibold text-gray-600 block mb-1">
+                  4. 単価（円）
                 </label>
                 <input
                   v-model="form.unit_price"
@@ -615,54 +623,45 @@ onMounted(async () => {
                 />
               </div>
 
-              <!-- 目標売上（自動計算 or 手動） -->
+              <!-- 5. 目標売上（円）※自動計算 -->
               <div>
                 <label class="text-xs font-semibold text-gray-600 block mb-1">
-                  目標売上（円）
-                  <span v-if="autoTargetSales" class="text-xs text-blue-500 ml-1">
-                    ※ 単価 × 着座目標 = {{ autoTargetSales.toLocaleString() }}円 で自動計算
-                  </span>
+                  5. 目標売上（円）
                 </label>
-                <input
-                  v-model="form.target_sales"
-                  type="number"
-                  min="0"
-                  :placeholder="autoTargetSales ? String(autoTargetSales) : '例: 95000'"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
-                />
+                <div class="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
+                  {{ autoTargetSales ? autoTargetSales.toLocaleString() : '-' }}円
+                  <span class="text-xs text-gray-400 ml-1">※ 単価 × 着座目標で自動計算</span>
+                </div>
               </div>
 
-              <!-- 実績売上 -->
+              <!-- 6. 実績売上（円）※自動計算 -->
               <div>
                 <label class="text-xs font-semibold text-gray-600 block mb-1">
-                  実績売上（円）
+                  6. 実績売上（円）
                 </label>
-                <input
-                  v-model="form.current_sales"
-                  type="number"
-                  min="0"
-                  placeholder="例: 38000"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
-                />
+                <div class="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
+                  {{ autoCurrentSales.toLocaleString() }}円
+                  <span class="text-xs text-gray-400 ml-1">※ 現着座数 × 単価で自動計算</span>
+                </div>
               </div>
             </div>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-base md:text-sm text-gray-600 mb-1">エントリー→イベント出席率（%）</label>
+              <label class="block text-base md:text-sm text-gray-600 mb-1">7. エントリー→イベント出席率（%）</label>
               <input v-model="form.seat_to_entry_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
             <div>
-              <label class="block text-base md:text-sm text-gray-600 mb-1">面談→エントリー率（%）</label>
+              <label class="block text-base md:text-sm text-gray-600 mb-1">8. 面談→エントリー率（%）</label>
               <input v-model="form.entry_to_interview_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
             <div>
-              <label class="block text-base md:text-sm text-gray-600 mb-1">面談予約→面談出席率（%）</label>
+              <label class="block text-base md:text-sm text-gray-600 mb-1">9. 面談予約→面談出席率（%）</label>
               <input v-model="form.interview_to_inflow_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
             <div>
-              <label class="block text-base md:text-sm text-gray-600 mb-1">流入→面談予約率（%）</label>
+              <label class="block text-base md:text-sm text-gray-600 mb-1">10. 流入→面談予約率（%）</label>
               <input v-model="form.inflow_to_reservation_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
           </div>
