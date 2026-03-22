@@ -374,7 +374,17 @@ const openMonthlyAttendanceModal = async () => {
     const month = selectedMonthKey.value;
     
     // Get all events in this month
-    const monthEvents = events.value.filter(e => String(e.event_date || '').slice(0, 7) === month);
+    const monthEvents = events.value.filter(e => {
+      // event_date が対象月に含まれる場合
+      if (e.event_date && String(e.event_date).slice(0, 7) === month) return true;
+      // event_slots のいずれかの日程が対象月に含まれる場合
+      if (Array.isArray(e.event_slots) && e.event_slots.length > 0) {
+        return e.event_slots.some((slot: any) =>
+          slot?.datetime && String(slot.datetime).slice(0, 7) === month
+        );
+      }
+      return false;
+    });
     
     // Fetch participants for each event
     const participantPromises = monthEvents.map(e => {
