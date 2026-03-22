@@ -644,9 +644,12 @@ export const createStudent = async (req: Request, res: Response) => {
         );
         const preContactDate = oneDayBefore(normalizedFirstInterviewDate || null);
         if (created?.id && preContactDate) {
+            const preContactDateOnly = preContactDate
+                ? String(preContactDate).replace('Z', '').replace('+09:00', '').replace('+09', '').slice(0, 10)
+                : null;
             await pool.query(
                 'INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)',
-                [created.id, preContactDate, '事前連絡']
+                [created.id, preContactDateOnly || null, '事前連絡']
             );
         }
         res.json(created);
@@ -711,7 +714,9 @@ export const getStudentDetail = async (req: Request, res: Response) => {
             ORDER BY il.created_at DESC
         `, [id]);
         const tasksRes = await pool.query(
-            'SELECT * FROM student_tasks WHERE student_id = $1 AND COALESCE(completed, FALSE) = FALSE ORDER BY due_date NULLS LAST, created_at DESC',
+            `SELECT id, student_id, content, completed, created_at,
+              to_char(due_date, 'YYYY-MM-DD') as due_date
+            FROM student_tasks WHERE student_id = $1 AND COALESCE(completed, FALSE) = FALSE ORDER BY due_date NULLS LAST, created_at DESC`,
             [id]
         );
         const schedulesRes = await pool.query(
@@ -1367,9 +1372,12 @@ export const addStudentTask = async (req: Request, res: Response) => {
     }
     try {
         await ensureStudentTaskColumns();
+        const dueDateOnly = due_date
+            ? String(due_date).replace('Z', '').replace('+09:00', '').replace('+09', '').slice(0, 10)
+            : null;
         const result = await pool.query(
             'INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3) RETURNING *',
-            [id, due_date || null, content]
+            [id, dueDateOnly || null, content]
         );
         res.status(201).json(result.rows[0]);
     } catch (err: any) {
