@@ -246,38 +246,40 @@ const mergeDateHour = (date: string, hour: string) => {
 };
 
 const registerMatcherApply = async () => {
-  const token = localStorage.getItem('token');
-  const appliedAt = normalizeHourDateTime(matcherForm.value.applied_at);
-  await api.post(`/api/students/${studentId}/funnel/application`, {
-    source: student.value?.source_company || null,
-    applied_at: appliedAt
-  }, { headers: { Authorization: token } });
-  await api.post(`/api/students/${studentId}/matcher-funnel/apply`, {
-    applied_at: appliedAt
-  }, { headers: { Authorization: token } });
-  fetchDetail();
-  } catch (e) { 
+  try {
+    const token = localStorage.getItem('token');
+    const appliedAt = normalizeHourDateTime(matcherForm.value.applied_at);
+    await api.post(`/api/students/${studentId}/funnel/application`, {
+      source: student.value?.source_company || null,
+      applied_at: appliedAt
+    }, { headers: { Authorization: token } });
+    await api.post(`/api/students/${studentId}/matcher-funnel/apply`, {
+      applied_at: appliedAt
+    }, { headers: { Authorization: token } });
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
 };
 
 const registerMatcherReservation = async () => {
-  const token = localStorage.getItem('token');
-  const reservationCreatedAt = normalizeHourDateTime(matcherForm.value.reservation_created_at);
-  const interviewScheduledAt = normalizeHourDateTime(matcherForm.value.interview_scheduled_at);
-  await api.put(`/api/students/${studentId}/funnel/reservation`, {
-    reservation_status: '初回面談',
-    reservation_created_at: reservationCreatedAt,
-    reservation_date: interviewScheduledAt
-  }, { headers: { Authorization: token } });
-  await api.post(`/api/students/${studentId}/matcher-funnel/reservation`, {
-    reservation_created_at: reservationCreatedAt,
-    reservation_status: '初回面談',
-    interview_scheduled_at: interviewScheduledAt
-  }, { headers: { Authorization: token } });
-  fetchDetail();
-  } catch (e) { 
+  try {
+    const token = localStorage.getItem('token');
+    const reservationCreatedAt = normalizeHourDateTime(matcherForm.value.reservation_created_at);
+    const interviewScheduledAt = normalizeHourDateTime(matcherForm.value.interview_scheduled_at);
+    await api.put(`/api/students/${studentId}/funnel/reservation`, {
+      reservation_status: '初回面談',
+      reservation_created_at: reservationCreatedAt,
+      reservation_date: interviewScheduledAt
+    }, { headers: { Authorization: token } });
+    await api.post(`/api/students/${studentId}/matcher-funnel/reservation`, {
+      reservation_created_at: reservationCreatedAt,
+      reservation_status: '初回面談',
+      interview_scheduled_at: interviewScheduledAt
+    }, { headers: { Authorization: token } });
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
@@ -344,34 +346,36 @@ const submitEventProposal = async () => {
 };
 
 const addLog = async () => {
-  if (!newLog.value) return;
-  const token = localStorage.getItem('token');
-  const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)"}');
-  await api.post('/api/interview-logs', {
-    student_id: studentId,
-    staff_id: user.id,
-    log_type: newLogType.value,
-    event_id: newLogType.value === 'エントリー' ? newLogEventId.value : null,
-    content: newLog.value,
-    interview_date: new Date()
-  }, { headers: { Authorization: token } });
-  newLog.value = '';
-  newLogEventId.value = '';
-  newLogType.value = '面談';
-  persistDraft();
-  fetchDetail();
-  } catch (e) { 
+  try {
+    if (!newLog.value) return;
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)"}');
+    await api.post('/api/interview-logs', {
+      student_id: studentId,
+      staff_id: user.id,
+      log_type: newLogType.value,
+      event_id: newLogType.value === 'エントリー' ? newLogEventId.value : null,
+      content: newLog.value,
+      interview_date: new Date()
+    }, { headers: { Authorization: token } });
+    newLog.value = '';
+    newLogEventId.value = '';
+    newLogType.value = '面談';
+    persistDraft();
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
 };
 
 const deleteLog = async (logId: number) => {
-  if (!confirm('このログを削除しますか？')) return;
-  const token = localStorage.getItem('token');
-  await api.delete(`/api/students/interview-logs/${logId}`, { headers: { Authorization: token } });
-  fetchDetail();
-  } catch (e) { 
+  try {
+    if (!confirm('このログを削除しますか？')) return;
+    const token = localStorage.getItem('token');
+    await api.delete(`/api/students/interview-logs/${logId}`, { headers: { Authorization: token } });
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
@@ -405,108 +409,111 @@ const updateLog = async (logId: number) => {
     editingLogId.value = null;
     editingLogContent.value = '';
     await fetchDetail();
-  } catch (e) { 
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
-    alert("エラー発生: " + e.message); 
-  }
-  } catch (err: any) {
-    console.error('Failed to update log', err);
-    alert('ログの更新に失敗しました。');
+    alert("エラー発生: " + (e.response?.data?.error || e.message)); 
   } finally {
     savingLogId.value = null;
   }
 };
 
 const addTask = async () => {
-  if (!newTaskContent.value.trim()) return;
-  const token = localStorage.getItem('token');
-  await api.post(`/api/students/${studentId}/tasks`, {
-    due_date: newTaskDate.value || null,
-    content: newTaskContent.value
-  }, { headers: { Authorization: token } });
-  newTaskDate.value = '';
-  newTaskContent.value = '';
-  persistDraft();
-  fetchDetail();
-  } catch (e) { 
+  try {
+    if (!newTaskContent.value.trim()) return;
+    const token = localStorage.getItem('token');
+    await api.post(`/api/students/${studentId}/tasks`, {
+      due_date: newTaskDate.value || null,
+      content: newTaskContent.value
+    }, { headers: { Authorization: token } });
+    newTaskDate.value = '';
+    newTaskContent.value = '';
+    persistDraft();
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
 };
 
 const addInterviewSchedule = async () => {
-  const token = localStorage.getItem('token');
-  await api.post(`/api/students/${studentId}/interview-schedules`, {
-    scheduled_at: newScheduleDate.value || null,
-    schedule_type: newScheduleType.value,
-    status: newScheduleType.value === 'リスケ' ? 'rescheduled' : 'scheduled'
-  }, { headers: { Authorization: token } });
-  newScheduleDate.value = '';
-  newScheduleType.value = '面談';
-  persistDraft();
-  fetchDetail();
-  } catch (e) { 
+  try {
+    const token = localStorage.getItem('token');
+    await api.post(`/api/students/${studentId}/interview-schedules`, {
+      scheduled_at: newScheduleDate.value || null,
+      schedule_type: newScheduleType.value,
+      status: newScheduleType.value === 'リスケ' ? 'rescheduled' : 'scheduled'
+    }, { headers: { Authorization: token } });
+    newScheduleDate.value = '';
+    newScheduleType.value = '面談';
+    persistDraft();
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
 };
 
 const updateInterviewSchedule = async (scheduleId: number, payload: { scheduled_at?: string | null; actual_at?: string | null; status?: string; schedule_type?: '流入日' | '面談' | 'リスケ' }) => {
-  const token = localStorage.getItem('token');
-  await api.put(`/api/students/interview-schedules/${scheduleId}`, payload, { headers: { Authorization: token } });
-  fetchDetail();
-  } catch (e) { 
+  try {
+    const token = localStorage.getItem('token');
+    await api.put(`/api/students/interview-schedules/${scheduleId}`, payload, { headers: { Authorization: token } });
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
 };
 
 const deleteInterviewSchedule = async (scheduleId: number) => {
-  if (!confirm('この面談予定を削除しますか？')) return;
-  const token = localStorage.getItem('token');
-  await api.delete(`/api/students/interview-schedules/${scheduleId}`, { headers: { Authorization: token } });
-  fetchDetail();
-  } catch (e) { 
+  try {
+    if (!confirm('この面談予定を削除しますか？')) return;
+    const token = localStorage.getItem('token');
+    await api.delete(`/api/students/interview-schedules/${scheduleId}`, { headers: { Authorization: token } });
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
 };
 
 const deleteTask = async (taskId: number) => {
-  if (!confirm('このタスクを削除しますか？')) return;
-  const token = localStorage.getItem('token');
-  await api.delete(`/api/students/tasks/${taskId}`, { headers: { Authorization: token } });
-  fetchDetail();
-  } catch (e) { 
+  try {
+    if (!confirm('このタスクを削除しますか？')) return;
+    const token = localStorage.getItem('token');
+    await api.delete(`/api/students/tasks/${taskId}`, { headers: { Authorization: token } });
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
 };
 
 const completeTask = async (taskId: number) => {
-  const token = localStorage.getItem('token');
-  await api.put(`/api/students/tasks/${taskId}/complete`, {}, { headers: { Authorization: token } });
-  fetchDetail();
-  } catch (e) { 
+  try {
+    const token = localStorage.getItem('token');
+    await api.put(`/api/students/tasks/${taskId}/complete`, {}, { headers: { Authorization: token } });
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
 };
 
 const linkEvent = async () => {
-  if (!selectedEventId.value) return;
-  const token = localStorage.getItem('token');
-  await api.post(`/api/students/${studentId}/events`, {
-    event_id: selectedEventId.value,
-    selected_event_date: selectedEventDate.value || null,
-    status: selectedEventStatus.value
-  }, { headers: { Authorization: token } });
-  selectedEventId.value = '';
-  selectedEventDate.value = '';
-  selectedEventStatus.value = 'A_ENTRY';
-  persistDraft();
-  fetchDetail();
-  } catch (e) { 
+  try {
+    if (!selectedEventId.value) return;
+    const token = localStorage.getItem('token');
+    await api.post(`/api/students/${studentId}/events`, {
+      event_id: selectedEventId.value,
+      selected_event_date: selectedEventDate.value || null,
+      status: selectedEventStatus.value
+    }, { headers: { Authorization: token } });
+    selectedEventId.value = '';
+    selectedEventDate.value = '';
+    selectedEventStatus.value = 'A_ENTRY';
+    persistDraft();
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
@@ -517,14 +524,15 @@ const updateEventParticipationStatus = async (
   studentEventId: number,
   status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'D_PASS' | 'E_FAIL' | 'XA_CANCEL'
 ) => {
-  const token = localStorage.getItem('token');
-  await api.put(
-    `/api/events/${eventId}/participants/${studentEventId}`,
-    { status },
-    { headers: { Authorization: token } }
-  );
-  fetchDetail();
-  } catch (e) { 
+  try {
+    const token = localStorage.getItem('token');
+    await api.put(
+      `/api/events/${eventId}/participants/${studentEventId}`,
+      { status },
+      { headers: { Authorization: token } }
+    );
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
@@ -536,14 +544,15 @@ const updateEventParticipationDate = async (
   currentStatus: string,
   date: string
 ) => {
-  const token = localStorage.getItem('token');
-  await api.put(
-    `/api/events/${eventId}/participants/${studentEventId}`,
-    { status: currentStatus || 'A_ENTRY', selected_event_date: date || null },
-    { headers: { Authorization: token } }
-  );
-  fetchDetail();
-  } catch (e) { 
+  try {
+    const token = localStorage.getItem('token');
+    await api.put(
+      `/api/events/${eventId}/participants/${studentEventId}`,
+      { status: currentStatus || 'A_ENTRY', selected_event_date: date || null },
+      { headers: { Authorization: token } }
+    );
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
@@ -622,14 +631,15 @@ const participationStatusLabel = (status?: string) => {
 };
 
 const updateStatus = async () => {
-  const token = localStorage.getItem('token');
-  await api.put(`/api/students/${studentId}/meta`, {
-    referral_status: referralStatusDraft.value,
-    progress_stage: progressStageDraft.value
-  }, { headers: { Authorization: token } });
-  editingStatus.value = false;
-  fetchDetail();
-  } catch (e) { 
+  try {
+    const token = localStorage.getItem('token');
+    await api.put(`/api/students/${studentId}/meta`, {
+      referral_status: referralStatusDraft.value,
+      progress_stage: progressStageDraft.value
+    }, { headers: { Authorization: token } });
+    editingStatus.value = false;
+    fetchDetail();
+  } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
     alert("エラー発生: " + e.message); 
   }
@@ -652,13 +662,10 @@ const saveBasic = async () => {
     }, { headers: { Authorization: token } });
     basicSaveMessage.value = '基本情報を保存しました。';
     await fetchDetail();
-  } catch (e) { 
-    console.error("DEBUG ERROR:", e); 
-    alert("エラー発生: " + e.message); 
-  }
     editingBasic.value = false;
-  } catch (err: any) {
-    basicSaveError.value = err?.response?.data?.error || '保存に失敗しました。入力内容を確認してください。';
+  } catch (e: any) { 
+    console.error("DEBUG ERROR:", e); 
+    basicSaveError.value = e?.response?.data?.error || '保存に失敗しました。入力内容を確認してください。';
   } finally {
     basicSaving.value = false;
   }
@@ -891,6 +898,7 @@ watch(selectedEventId, () => {
   }
 });
 
+</script>
 
 <template>
   <Layout>
