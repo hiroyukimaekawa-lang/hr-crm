@@ -13,6 +13,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const db_1 = __importDefault(require("../config/db"));
 const studentController_1 = require("../controllers/studentController");
 const auth_1 = require("../middlewares/auth");
 const router = express_1.default.Router();
@@ -21,7 +22,7 @@ router.get('/metrics/interviews', auth_1.authenticate, studentController_1.getIn
 router.get('/metrics/funnel', auth_1.authenticate, studentController_1.getFunnelKpi);
 router.get('/metrics/funnel-sources', auth_1.authenticate, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const result = yield (require('../lib/db').pool).query('SELECT name FROM source_categories ORDER BY created_at ASC');
+        const result = yield db_1.default.query('SELECT name FROM source_categories ORDER BY created_at ASC');
         res.json(result.rows.map((r) => r.name));
     }
     catch (err) {

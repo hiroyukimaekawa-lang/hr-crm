@@ -391,10 +391,10 @@ const getEventDetail = (req, res) => __awaiter(void 0, void 0, void 0, function*
             LEFT JOIN users u ON u.id = s.staff_id
             LEFT JOIN LATERAL (
               SELECT content, due_date
-              FROM tasks
+              FROM student_tasks
               WHERE student_id = se.student_id
-                AND completed = false
-              ORDER BY due_date ASC
+                AND COALESCE(completed, FALSE) = FALSE
+              ORDER BY due_date ASC NULLS LAST
               LIMIT 1
             ) t ON true
             WHERE se.event_id = $1
@@ -544,14 +544,19 @@ const getKgiProgress = (req, res) => __awaiter(void 0, void 0, void 0, function*
             // 1. entry_deadline（設定されている場合）
             // 2. event_slots の最終日程（last_slot_date）
             // 3. どちらもない場合は null
-            const rawDeadline = e.entry_deadline
-                ? String(e.entry_deadline).replace('Z', '').replace('+09:00', '').replace('+09', '').slice(0, 10)
-                : e.last_slot_date
-                    ? String(e.last_slot_date).slice(0, 10)
-                    : null;
-            if (rawDeadline) {
-                deadlineStr = rawDeadline;
-                const deadlineDate = new Date(rawDeadline + 'T00:00:00');
+            const toJSTDateString = (value) => {
+                const d = new Date(value);
+                const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+                return jst.toISOString().slice(0, 10);
+            };
+            const effectiveDeadline = e.deadline || e.last_slot_date;
+            if (effectiveDeadline) {
+                const raw = String(effectiveDeadline);
+                const deadlineDateStr = raw.includes('Z') || raw.includes('+')
+                    ? toJSTDateString(raw)
+                    : raw.slice(0, 10);
+                deadlineStr = deadlineDateStr;
+                const deadlineDate = new Date(deadlineDateStr + 'T00:00:00');
                 const diffMs = deadlineDate.getTime() - todayDate.getTime();
                 daysRemaining = Math.floor(diffMs / 86400000);
             }

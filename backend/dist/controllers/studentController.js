@@ -610,7 +610,10 @@ const createStudent = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         ]);
         const preContactDate = oneDayBefore(normalizedFirstInterviewDate || null);
         if ((created === null || created === void 0 ? void 0 : created.id) && preContactDate) {
-            yield db_1.default.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)', [created.id, preContactDate, '事前連絡']);
+            const preContactDateOnly = preContactDate
+                ? String(preContactDate).replace('Z', '').replace('+09:00', '').replace('+09', '').slice(0, 10)
+                : null;
+            yield db_1.default.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3)', [created.id, preContactDateOnly || null, '事前連絡']);
         }
         res.json(created);
     }
@@ -674,7 +677,9 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
             WHERE il.student_id = $1
             ORDER BY il.created_at DESC
         `, [id]);
-        const tasksRes = yield db_1.default.query('SELECT * FROM student_tasks WHERE student_id = $1 AND COALESCE(completed, FALSE) = FALSE ORDER BY due_date NULLS LAST, created_at DESC', [id]);
+        const tasksRes = yield db_1.default.query(`SELECT id, student_id, content, completed, created_at,
+              to_char(due_date, 'YYYY-MM-DD') as due_date
+            FROM student_tasks WHERE student_id = $1 AND COALESCE(completed, FALSE) = FALSE ORDER BY due_date NULLS LAST, created_at DESC`, [id]);
         const schedulesRes = yield db_1.default.query('SELECT * FROM interview_schedules WHERE student_id = $1 ORDER BY round_no ASC', [id]);
         const matcherRes = yield db_1.default.query(`SELECT *
              FROM matcher_funnel_logs
@@ -1262,7 +1267,10 @@ const addStudentTask = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
     try {
         yield ensureStudentTaskColumns();
-        const result = yield db_1.default.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3) RETURNING *', [id, due_date || null, content]);
+        const dueDateOnly = due_date
+            ? String(due_date).replace('Z', '').replace('+09:00', '').replace('+09', '').slice(0, 10)
+            : null;
+        const result = yield db_1.default.query('INSERT INTO student_tasks (student_id, due_date, content) VALUES ($1, $2, $3) RETURNING *', [id, dueDateOnly || null, content]);
         res.status(201).json(result.rows[0]);
     }
     catch (err) {
