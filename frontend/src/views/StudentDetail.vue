@@ -216,13 +216,26 @@ const toDateTimeLocalHour = (value?: string | null) => {
   const raw = String(value).trim();
   if (!raw) return '';
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw}T10:00`;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return '';
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}T${hh}:00`;
+  // Z付きUTC文字列はJSTに変換（+9時間）、それ以外はローカル時刻として解釈
+  const isUTC = raw.endsWith('Z') || /[+\-]\d{2}:?\d{2}$/.test(raw);
+  let yyyy: number, mm: number, dd: number, hh: number;
+  if (isUTC) {
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '';
+    const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+    yyyy = jst.getUTCFullYear();
+    mm = jst.getUTCMonth() + 1;
+    dd = jst.getUTCDate();
+    hh = jst.getUTCHours();
+  } else {
+    const d = new Date(raw.replace(' ', 'T'));
+    if (Number.isNaN(d.getTime())) return '';
+    yyyy = d.getFullYear();
+    mm = d.getMonth() + 1;
+    dd = d.getDate();
+    hh = d.getHours();
+  }
+  return `${yyyy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}T${String(hh).padStart(2,'0')}:00`;
 };
 
 const normalizeHourDateTime = (value?: string | null) => {
@@ -1079,14 +1092,14 @@ watch(selectedEventId, () => {
                 <Calendar class="w-5 h-5" />
                 <div>
                   <p class="text-base md:text-sm text-gray-500">面談決定日</p>
-                  <p class="text-sm font-medium">{{ student.meeting_decided_date || '-' }}</p>
+                  <p class="text-sm font-medium">{{ formatDate(student.meeting_decided_date) || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Calendar class="w-5 h-5" />
                 <div>
                   <p class="text-base md:text-sm text-gray-500">初回面談日</p>
-                  <p class="text-sm font-medium">{{ student.first_interview_date || '-' }}</p>
+                  <p class="text-sm font-medium">{{ formatDate(student.first_interview_date) || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
