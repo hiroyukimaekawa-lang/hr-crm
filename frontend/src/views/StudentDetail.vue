@@ -256,6 +256,10 @@ const registerMatcherApply = async () => {
     applied_at: appliedAt
   }, { headers: { Authorization: token } });
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const registerMatcherReservation = async () => {
@@ -273,23 +277,27 @@ const registerMatcherReservation = async () => {
     interview_scheduled_at: interviewScheduledAt
   }, { headers: { Authorization: token } });
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const registerMatcherInterview = async () => {
-  const token = localStorage.getItem('token');
-  const interviewActualAt = normalizeHourDateTime(matcherForm.value.interview_actual_at);
-  const interviewScheduledAt = normalizeHourDateTime(matcherForm.value.interview_scheduled_at);
-  await api.post(`/api/students/${studentId}/funnel/interview`, {
-    scheduled_at: interviewScheduledAt,
-    interviewed_at: interviewActualAt,
-    status: matcherForm.value.interview_status || 'completed'
-  }, { headers: { Authorization: token } });
-  await api.post(`/api/students/${studentId}/matcher-funnel/interview`, {
-    interview_actual_at: interviewActualAt,
-    interview_status: matcherForm.value.interview_status || 'completed',
-    interview_scheduled_at: interviewScheduledAt
-  }, { headers: { Authorization: token } });
-  fetchDetail();
+  try {
+    const token = localStorage.getItem('token');
+    const interviewActualAt = normalizeHourDateTime(matcherForm.value.interview_actual_at);
+    const interviewScheduledAt = normalizeHourDateTime(matcherForm.value.interview_scheduled_at);
+    await api.post(`/api/students/${studentId}/matcher-funnel/interview`, {
+      interview_actual_at: interviewActualAt,
+      interview_status: matcherForm.value.interview_status || 'completed',
+      interview_scheduled_at: interviewScheduledAt
+    }, { headers: { Authorization: token } });
+    fetchDetail();
+  } catch (e: any) {
+    console.error('面談実施登録エラー:', e);
+    alert('エラーが発生しました: ' + e.message);
+  }
 };
 
 const fetchAllEvents = async () => {
@@ -352,6 +360,10 @@ const addLog = async () => {
   newLogType.value = '面談';
   persistDraft();
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const deleteLog = async (logId: number) => {
@@ -359,6 +371,10 @@ const deleteLog = async (logId: number) => {
   const token = localStorage.getItem('token');
   await api.delete(`/api/students/interview-logs/${logId}`, { headers: { Authorization: token } });
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const toggleLog = (logId: number) => {
@@ -389,6 +405,10 @@ const updateLog = async (logId: number) => {
     editingLogId.value = null;
     editingLogContent.value = '';
     await fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
   } catch (err: any) {
     console.error('Failed to update log', err);
     alert('ログの更新に失敗しました。');
@@ -408,6 +428,10 @@ const addTask = async () => {
   newTaskContent.value = '';
   persistDraft();
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const addInterviewSchedule = async () => {
@@ -421,12 +445,20 @@ const addInterviewSchedule = async () => {
   newScheduleType.value = '面談';
   persistDraft();
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const updateInterviewSchedule = async (scheduleId: number, payload: { scheduled_at?: string | null; actual_at?: string | null; status?: string; schedule_type?: '流入日' | '面談' | 'リスケ' }) => {
   const token = localStorage.getItem('token');
   await api.put(`/api/students/interview-schedules/${scheduleId}`, payload, { headers: { Authorization: token } });
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const deleteInterviewSchedule = async (scheduleId: number) => {
@@ -434,6 +466,10 @@ const deleteInterviewSchedule = async (scheduleId: number) => {
   const token = localStorage.getItem('token');
   await api.delete(`/api/students/interview-schedules/${scheduleId}`, { headers: { Authorization: token } });
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const deleteTask = async (taskId: number) => {
@@ -441,12 +477,20 @@ const deleteTask = async (taskId: number) => {
   const token = localStorage.getItem('token');
   await api.delete(`/api/students/tasks/${taskId}`, { headers: { Authorization: token } });
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const completeTask = async (taskId: number) => {
   const token = localStorage.getItem('token');
   await api.put(`/api/students/tasks/${taskId}/complete`, {}, { headers: { Authorization: token } });
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const linkEvent = async () => {
@@ -462,6 +506,10 @@ const linkEvent = async () => {
   selectedEventStatus.value = 'A_ENTRY';
   persistDraft();
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const updateEventParticipationStatus = async (
@@ -476,6 +524,10 @@ const updateEventParticipationStatus = async (
     { headers: { Authorization: token } }
   );
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const updateEventParticipationDate = async (
@@ -491,6 +543,10 @@ const updateEventParticipationDate = async (
     { headers: { Authorization: token } }
   );
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const selectedLinkEvent = computed(() => {
@@ -573,6 +629,10 @@ const updateStatus = async () => {
   }, { headers: { Authorization: token } });
   editingStatus.value = false;
   fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
 };
 
 const saveBasic = async () => {
@@ -592,6 +652,10 @@ const saveBasic = async () => {
     }, { headers: { Authorization: token } });
     basicSaveMessage.value = '基本情報を保存しました。';
     await fetchDetail();
+  } catch (e) { 
+    console.error("DEBUG ERROR:", e); 
+    alert("エラー発生: " + e.message); 
+  }
     editingBasic.value = false;
   } catch (err: any) {
     basicSaveError.value = err?.response?.data?.error || '保存に失敗しました。入力内容を確認してください。';
@@ -827,17 +891,6 @@ watch(selectedEventId, () => {
   }
 });
 
-// 2番の初回面談予定日が変更されたら3番に自動コピー
-watch(
-  () => matcherForm.value.interview_scheduled_at,
-  (newVal) => {
-    // 3番が未入力の場合のみ自動セット
-    if (newVal && !matcherForm.value.interview_actual_at) {
-      matcherForm.value.interview_actual_at = newVal;
-    }
-  }
-);
-</script>
 
 <template>
   <Layout>
