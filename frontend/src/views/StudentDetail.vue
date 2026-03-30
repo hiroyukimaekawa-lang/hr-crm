@@ -1088,34 +1088,7 @@ watch(selectedEventId, () => {
                   <p class="text-sm font-medium">{{ student.phone }}</p>
                 </div>
               </div>
-              <div class="flex items-center gap-3 text-gray-600 min-w-0">
-                <Calendar class="w-5 h-5" />
-                <div>
-                  <p class="text-base md:text-sm text-gray-500">面談決定日</p>
-                  <p class="text-sm font-medium">{{ formatDate(student.meeting_decided_date) || '-' }}</p>
-                </div>
-              </div>
-              <div class="flex items-center gap-3 text-gray-600 min-w-0">
-                <Calendar class="w-5 h-5" />
-                <div>
-                  <p class="text-base md:text-sm text-gray-500">初回面談日</p>
-                  <p class="text-sm font-medium">{{ formatDate(student.first_interview_date) || '-' }}</p>
-                </div>
-              </div>
-              <div class="flex items-center gap-3 text-gray-600 min-w-0">
-                <Calendar class="w-5 h-5" />
-                <div>
-                  <p class="text-base md:text-sm text-gray-500">2回目面談日</p>
-                  <p class="text-sm font-medium">{{ student.second_interview_date || '-' }}</p>
-                </div>
-              </div>
-              <div class="flex items-center gap-3 text-gray-600 min-w-0">
-                <Calendar class="w-5 h-5" />
-                <div>
-                  <p class="text-base md:text-sm text-gray-500">次回面談日</p>
-                  <p class="text-sm font-medium">{{ student.next_meeting_date || '-' }}</p>
-                </div>
-              </div>
+
               <div class="flex items-center gap-3 text-gray-600 min-w-0 sm:col-span-2">
                 <MessageSquare class="w-5 h-5" />
                 <div>
@@ -1155,6 +1128,41 @@ watch(selectedEventId, () => {
 
             <div v-if="tags.length" class="mt-4 flex flex-wrap gap-2">
               <span v-for="tag in tags" :key="tag" class="text-base md:text-sm px-2 py-1 bg-slate-100 text-slate-600 rounded-full">{{ tag }}</span>
+            </div>
+          </div>
+
+          <!-- 面談日程カード -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4">面談日程</h2>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <Calendar class="w-5 h-5" />
+                <div>
+                  <p class="text-base md:text-sm text-gray-500">面談決定日</p>
+                  <p class="text-sm font-medium">{{ formatDate(matcherFunnel?.interview_scheduled_at || student.meeting_decided_date) || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <Calendar class="w-5 h-5" />
+                <div>
+                  <p class="text-base md:text-sm text-gray-500">初回面談日</p>
+                  <p class="text-sm font-medium">{{ formatDate(matcherFunnel?.interview_actual_at || student.first_interview_date) || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <Calendar class="w-5 h-5" />
+                <div>
+                  <p class="text-base md:text-sm text-gray-500">2回目面談日</p>
+                  <p class="text-sm font-medium">{{ formatDate(student.second_interview_date) || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <Calendar class="w-5 h-5" />
+                <div>
+                  <p class="text-base md:text-sm text-gray-500">次回面談日</p>
+                  <p class="text-sm font-medium">{{ formatDate(student.next_meeting_date) || '-' }}</p>
+                </div>
+              </div>
             </div>
           </div>
 
