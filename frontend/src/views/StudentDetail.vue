@@ -40,7 +40,9 @@ const matcherForm = ref({
   interview_actual_at: '',
   interview_status: 'completed'
 });
-const hourOptions = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+const hourOptions = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+const newScheduleHour = ref('10:00');
+const newTaskHour = ref('10:00');
 const proposalEvents = ref<any[]>([]);
 const proposalLostReasons = ref<any[]>([]);
 const participationReasons = ['興味がある', '日程が合う', '友人と参加', '選考対策になる', 'その他'];
@@ -103,6 +105,43 @@ const basicDraft = ref({
   next_action: ''
 });
 
+// Matcher Funnel v-model bindings
+const matcherAppliedAtDate = computed({
+  get: () => getDatePart(matcherForm.value.applied_at),
+  set: (val: string) => matcherForm.value.applied_at = mergeDateHour(val || '', getHourPart(matcherForm.value.applied_at))
+});
+const matcherAppliedAtHour = computed({
+  get: () => getHourPart(matcherForm.value.applied_at) + ':00',
+  set: (val: string) => matcherForm.value.applied_at = mergeDateHour(getDatePart(matcherForm.value.applied_at) || '', (val || '10:00').split(':')[0])
+});
+
+const matcherReservationCreatedAtDate = computed({
+  get: () => getDatePart(matcherForm.value.reservation_created_at),
+  set: (val: string) => matcherForm.value.reservation_created_at = mergeDateHour(val || '', getHourPart(matcherForm.value.reservation_created_at))
+});
+const matcherReservationCreatedAtHour = computed({
+  get: () => getHourPart(matcherForm.value.reservation_created_at) + ':00',
+  set: (val: string) => matcherForm.value.reservation_created_at = mergeDateHour(getDatePart(matcherForm.value.reservation_created_at) || '', (val || '10:00').split(':')[0])
+});
+
+const matcherInterviewScheduledAtDate = computed({
+  get: () => getDatePart(matcherForm.value.interview_scheduled_at),
+  set: (val: string) => matcherForm.value.interview_scheduled_at = mergeDateHour(val || '', getHourPart(matcherForm.value.interview_scheduled_at))
+});
+const matcherInterviewScheduledAtHour = computed({
+  get: () => getHourPart(matcherForm.value.interview_scheduled_at) + ':00',
+  set: (val: string) => matcherForm.value.interview_scheduled_at = mergeDateHour(getDatePart(matcherForm.value.interview_scheduled_at) || '', (val || '10:00').split(':')[0])
+});
+
+const matcherInterviewActualAtDate = computed({
+  get: () => getDatePart(matcherForm.value.interview_actual_at),
+  set: (val: string) => matcherForm.value.interview_actual_at = mergeDateHour(val || '', getHourPart(matcherForm.value.interview_actual_at))
+});
+const matcherInterviewActualAtHour = computed({
+  get: () => getHourPart(matcherForm.value.interview_actual_at) + ':00',
+  set: (val: string) => matcherForm.value.interview_actual_at = mergeDateHour(getDatePart(matcherForm.value.interview_actual_at) || '', (val || '10:00').split(':')[0])
+});
+
 const draftStorageKey = computed(() => `student-detail-draft:${String(studentId)}`);
 
 const restoreDraft = () => {
@@ -110,10 +149,12 @@ const restoreDraft = () => {
     const raw = sessionStorage.getItem(draftStorageKey.value);
     if (!raw) return;
     const d = JSON.parse(raw);
-    if (d.newTaskDate !== undefined) newTaskDate.value = d.newTaskDate || '';
-    if (d.newTaskContent !== undefined) newTaskContent.value = d.newTaskContent || '';
     if (d.newScheduleDate !== undefined) newScheduleDate.value = d.newScheduleDate || '';
+    if (d.newScheduleHour !== undefined) newScheduleHour.value = d.newScheduleHour || '10:00';
     if (d.newScheduleType !== undefined) newScheduleType.value = d.newScheduleType || '面談';
+    if (d.newTaskDate !== undefined) newTaskDate.value = d.newTaskDate || '';
+    if (d.newTaskHour !== undefined) newTaskHour.value = d.newTaskHour || '10:00';
+    if (d.newTaskContent !== undefined) newTaskContent.value = d.newTaskContent || '';
     if (d.newLog !== undefined) newLog.value = d.newLog || '';
     if (d.newLogType !== undefined) newLogType.value = d.newLogType || '面談';
     if (d.newLogEventId !== undefined) newLogEventId.value = d.newLogEventId || '';
@@ -139,8 +180,10 @@ const persistDraft = () => {
   try {
     sessionStorage.setItem(draftStorageKey.value, JSON.stringify({
       newTaskDate: newTaskDate.value,
+      newTaskHour: newTaskHour.value,
       newTaskContent: newTaskContent.value,
       newScheduleDate: newScheduleDate.value,
+      newScheduleHour: newScheduleHour.value,
       newScheduleType: newScheduleType.value,
       newLog: newLog.value,
       newLogType: newLogType.value,
@@ -435,7 +478,7 @@ const addTask = async () => {
     if (!newTaskContent.value.trim()) return;
     const token = localStorage.getItem('token');
     await api.post(`/api/students/${studentId}/tasks`, {
-      due_date: newTaskDate.value || null,
+      due_date: mergeDateHour(newTaskDate.value || '', (newTaskHour.value || '10:00').split(':')[0]) || null,
       content: newTaskContent.value
     }, { headers: { Authorization: token } });
     newTaskDate.value = '';
@@ -452,7 +495,7 @@ const addInterviewSchedule = async () => {
   try {
     const token = localStorage.getItem('token');
     await api.post(`/api/students/${studentId}/interview-schedules`, {
-      scheduled_at: newScheduleDate.value || null,
+      scheduled_at: mergeDateHour(newScheduleDate.value || '', (newScheduleHour.value || '10:00').split(':')[0]) || null,
       schedule_type: newScheduleType.value,
       status: newScheduleType.value === 'リスケ' ? 'rescheduled' : 'scheduled'
     }, { headers: { Authorization: token } });
@@ -1188,7 +1231,12 @@ watch(selectedEventId, () => {
             </div>
             <div class="space-y-2">
               <label class="block text-base md:text-sm text-gray-500">タスク履行日</label>
-              <input v-model="newTaskDate" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+              <div class="flex gap-2">
+                <input v-model="newTaskDate" type="date" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+                <select v-model="newTaskHour" class="w-32 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
+                  <option v-for="h in hourOptions" :key="`task-hour-${h}`" :value="h">{{ h }}</option>
+                </select>
+              </div>
               <textarea v-model="newTaskContent" placeholder="やることを入力..." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm h-24"></textarea>
               <button class="w-full bg-blue-600 text-white px-4 py-2 min-h-[44px] rounded-lg text-base md:text-sm hover:bg-blue-700" @click="addTask">
                 タスクを追加
@@ -1206,13 +1254,20 @@ watch(selectedEventId, () => {
                     <Trash2 class="w-4 h-4" />
                   </button>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
                   <input
                     type="date"
-                    :value="sc.scheduled_at ? new Date(sc.scheduled_at).toISOString().slice(0,10) : ''"
-                    @change="updateInterviewSchedule(sc.id, { scheduled_at: ($event.target as HTMLInputElement).value || null })"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
+                    :value="getDatePart(sc.scheduled_at)"
+                    @change="updateInterviewSchedule(sc.id, { scheduled_at: mergeDateHour(($event.target as HTMLInputElement).value || '', getHourPart(sc.scheduled_at)) })"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm sm:col-span-2"
                   />
+                  <select
+                    :value="getHourPart(sc.scheduled_at) + ':00'"
+                    @change="updateInterviewSchedule(sc.id, { scheduled_at: mergeDateHour(getDatePart(sc.scheduled_at), (($event.target as HTMLSelectElement).value).split(':')[0]) })"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
+                  >
+                    <option v-for="h in hourOptions" :key="`edit-sc-hour-${sc.id}-${h}`" :value="h">{{ h }}</option>
+                  </select>
                   <select
                     :value="sc.schedule_type || '面談'"
                     @change="updateInterviewSchedule(sc.id, { schedule_type: ($event.target as HTMLSelectElement).value as '流入日' | '面談' | 'リスケ' })"
@@ -1229,6 +1284,9 @@ watch(selectedEventId, () => {
             </div>
             <div class="pt-3 border-t border-gray-100 flex flex-col sm:flex-row gap-2">
               <input v-model="newScheduleDate" type="date" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+              <select v-model="newScheduleHour" class="w-32 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
+                <option v-for="h in hourOptions" :key="`new-sc-hour-${h}`" :value="h">{{ h }}</option>
+              </select>
               <select v-model="newScheduleType" class="px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
                 <option value="流入日">流入日</option>
                 <option value="面談">面談</option>
@@ -1500,17 +1558,15 @@ watch(selectedEventId, () => {
               <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">申込日</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
-                  :value="getDatePart(matcherForm.applied_at)"
+                  v-model="matcherAppliedAtDate"
                   type="date"
                   class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
-                  @input="matcherForm.applied_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.applied_at))"
                 />
                 <select
-                  :value="getHourPart(matcherForm.applied_at)"
+                  v-model="matcherAppliedAtHour"
                   class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
-                  @change="matcherForm.applied_at = mergeDateHour(getDatePart(matcherForm.applied_at), ($event.target as HTMLSelectElement).value)"
                 >
-                  <option v-for="h in hourOptions" :key="`matcher-apply-hour-${h}`" :value="h">{{ h }}:00</option>
+                  <option v-for="h in hourOptions" :key="`matcher-apply-hour-${h}`" :value="h">{{ h }}</option>
                 </select>
               </div>
               <button class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors" @click="registerMatcherApply">申込登録</button>
@@ -1523,33 +1579,29 @@ watch(selectedEventId, () => {
               <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">予約作成日（TimeRex）</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
-                  :value="getDatePart(matcherForm.reservation_created_at)"
+                  v-model="matcherReservationCreatedAtDate"
                   type="date"
                   class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
-                  @input="matcherForm.reservation_created_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.reservation_created_at))"
                 />
                 <select
-                  :value="getHourPart(matcherForm.reservation_created_at)"
+                  v-model="matcherReservationCreatedAtHour"
                   class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
-                  @change="matcherForm.reservation_created_at = mergeDateHour(getDatePart(matcherForm.reservation_created_at), ($event.target as HTMLSelectElement).value)"
                 >
-                  <option v-for="h in hourOptions" :key="`matcher-reserve-hour-${h}`" :value="h">{{ h }}:00</option>
+                  <option v-for="h in hourOptions" :key="`matcher-reserve-hour-${h}`" :value="h">{{ h }}</option>
                 </select>
               </div>
               <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">初回面談予定日</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
-                  :value="getDatePart(matcherForm.interview_scheduled_at)"
+                  v-model="matcherInterviewScheduledAtDate"
                   type="date"
                   class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
-                  @input="matcherForm.interview_scheduled_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.interview_scheduled_at))"
                 />
                 <select
-                  :value="getHourPart(matcherForm.interview_scheduled_at)"
+                  v-model="matcherInterviewScheduledAtHour"
                   class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
-                  @change="matcherForm.interview_scheduled_at = mergeDateHour(getDatePart(matcherForm.interview_scheduled_at), ($event.target as HTMLSelectElement).value)"
                 >
-                  <option v-for="h in hourOptions" :key="`matcher-scheduled-hour-${h}`" :value="h">{{ h }}:00</option>
+                  <option v-for="h in hourOptions" :key="`matcher-scheduled-hour-${h}`" :value="h">{{ h }}</option>
                 </select>
               </div>
               <div class="mb-4">
@@ -1565,17 +1617,15 @@ watch(selectedEventId, () => {
               <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">初回面談実施日</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
-                  :value="getDatePart(matcherForm.interview_actual_at)"
+                  v-model="matcherInterviewActualAtDate"
                   type="date"
                   class="col-span-8 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
-                  @input="matcherForm.interview_actual_at = mergeDateHour(($event.target as HTMLInputElement).value, getHourPart(matcherForm.interview_actual_at))"
                 />
                 <select
-                  :value="getHourPart(matcherForm.interview_actual_at)"
+                  v-model="matcherInterviewActualAtHour"
                   class="col-span-4 w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
-                  @change="matcherForm.interview_actual_at = mergeDateHour(getDatePart(matcherForm.interview_actual_at), ($event.target as HTMLSelectElement).value)"
                 >
-                  <option v-for="h in hourOptions" :key="`matcher-actual-hour-${h}`" :value="h">{{ h }}:00</option>
+                  <option v-for="h in hourOptions" :key="`matcher-actual-hour-${h}`" :value="h">{{ h }}</option>
                 </select>
               </div>
               <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">面談結果</label>
@@ -1662,34 +1712,85 @@ watch(selectedEventId, () => {
           <p v-if="basicSaveMessage" class="mb-3 text-base md:text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
             {{ basicSaveMessage }}
           </p>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input v-model="basicDraft.name" type="text" placeholder="氏名" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.university" type="text" placeholder="大学" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.prefecture" type="text" placeholder="所在地（都道府県）" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <select v-model="basicDraft.academic_track" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
-              <option value="">文理（未設定）</option>
-              <option value="文系">文系</option>
-              <option value="理系">理系</option>
-            </select>
-            <input v-model="basicDraft.faculty" type="text" placeholder="学部" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.graduation_year" type="number" placeholder="卒業年" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.email" type="email" placeholder="メールアドレス" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.phone" type="text" placeholder="電話番号" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.source_company" type="text" placeholder="流入経路" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <select v-model="basicDraft.interview_reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
-              <option value="">面談理由（未設定）</option>
-              <option value="就活相談">就活相談</option>
-              <option value="企業分析">企業分析</option>
-              <option value="企業相談">企業相談</option>
-              <option value="面接対策">面接対策</option>
-            </select>
-            <input v-model="basicDraft.meeting_decided_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.first_interview_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.second_interview_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.desired_industry" type="text" placeholder="志望業界" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.desired_role" type="text" placeholder="志望職種" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.next_meeting_date" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
-            <input v-model="basicDraft.next_action" type="text" placeholder="ネクストアクション" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm md:col-span-2" />
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">氏名</label>
+              <input v-model="basicDraft.name" type="text" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">大学</label>
+              <input v-model="basicDraft.university" type="text" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">所在地（都道府県）</label>
+              <input v-model="basicDraft.prefecture" type="text" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">文理</label>
+              <select v-model="basicDraft.academic_track" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs">
+                <option value="">文理（未設定）</option>
+                <option value="文系">文系</option>
+                <option value="理系">理系</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">学部・学科</label>
+              <input v-model="basicDraft.faculty" type="text" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">卒業年</label>
+              <input v-model="basicDraft.graduation_year" type="number" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">メールアドレス</label>
+              <input v-model="basicDraft.email" type="email" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">電話番号</label>
+              <input v-model="basicDraft.phone" type="text" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">流入経路</label>
+              <input v-model="basicDraft.source_company" type="text" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">面談理由</label>
+              <select v-model="basicDraft.interview_reason" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs">
+                <option value="">面談理由（未設定）</option>
+                <option value="就活相談">就活相談</option>
+                <option value="企業分析">企業分析</option>
+                <option value="企業相談">企業相談</option>
+                <option value="面接対策">面接対策</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">面談決定日</label>
+              <input v-model="basicDraft.meeting_decided_date" type="date" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">初回面談日</label>
+              <input v-model="basicDraft.first_interview_date" type="date" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">2回目面談日</label>
+              <input v-model="basicDraft.second_interview_date" type="date" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">志望業界</label>
+              <input v-model="basicDraft.desired_industry" type="text" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">志望職種</label>
+              <input v-model="basicDraft.desired_role" type="text" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500">次回面談日</label>
+              <input v-model="basicDraft.next_meeting_date" type="date" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5 md:col-span-2">
+              <label class="text-xs font-medium text-gray-500">ネクストアクション</label>
+              <input v-model="basicDraft.next_action" type="text" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
           </div>
           <div class="mt-6 flex justify-end gap-3">
             <button class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50" @click="cancelEditBasic">

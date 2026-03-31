@@ -9,6 +9,8 @@ import RegisterInvite from '../views/RegisterInvite.vue';
 import LeadTime from '../views/LeadTime.vue';
 import EventKpi from '../views/EventKpi.vue';
 import Settings from '../views/Settings.vue';
+import PastEvents from '../views/PastEvents.vue';
+import MonthlySales from '../views/MonthlySales.vue';
 
 const routes = [
   { path: '/', redirect: '/students' },
@@ -21,7 +23,9 @@ const routes = [
   { path: '/events/:id', component: EventDetail },
   { path: '/lead-time', name: '初回ファネル登録', component: LeadTime },
   { path: '/event-kpi', component: EventKpi },
-  { path: '/settings', component: Settings }
+  { path: '/settings', component: Settings },
+  { path: '/past-events', component: PastEvents },
+  { path: '/monthly-sales', component: MonthlySales }
 ];
 
 const router = createRouter({

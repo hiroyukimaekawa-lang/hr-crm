@@ -287,8 +287,26 @@ const upcomingEvents = computed(() => {
   return events.value.filter(e => e.event_date && new Date(e.event_date) > now).length;
 });
 
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
 const eventYomiRows = computed(() =>
   [...events.value]
+    .filter((e) => {
+      // event_slotsがある場合は最終日程が今日以降のものだけ表示
+      if (Array.isArray(e.event_slots) && e.event_slots.length > 0) {
+        const lastSlot = e.event_slots
+          .map((s: any) => new Date(s.datetime || 0))
+          .filter((d: Date) => !isNaN(d.getTime()))
+          .sort((a: Date, b: Date) => b.getTime() - a.getTime())[0];
+        return lastSlot ? lastSlot >= today : true;
+      }
+      // event_dateがある場合は今日以降のものだけ表示
+      if (e.event_date) {
+        return new Date(e.event_date) >= today;
+      }
+      return true;
+    })
     .sort((a, b) => new Date(a.event_date || 0).getTime() - new Date(b.event_date || 0).getTime())
     .map((e) => ({
       id: e.id,

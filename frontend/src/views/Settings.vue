@@ -647,25 +647,6 @@ onMounted(async () => {
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-base md:text-sm text-gray-600 mb-1">7. エントリー→イベント出席率（%）</label>
-              <input v-model="form.seat_to_entry_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-            </div>
-            <div>
-              <label class="block text-base md:text-sm text-gray-600 mb-1">8. 面談→エントリー率（%）</label>
-              <input v-model="form.entry_to_interview_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-            </div>
-            <div>
-              <label class="block text-base md:text-sm text-gray-600 mb-1">9. 面談予約→面談出席率（%）</label>
-              <input v-model="form.interview_to_inflow_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-            </div>
-            <div>
-              <label class="block text-base md:text-sm text-gray-600 mb-1">10. 流入→面談予約率（%）</label>
-              <input v-model="form.inflow_to_reservation_rate" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-            </div>
-          </div>
-
           <div class="mt-6 border-t border-gray-100 pt-4">
             <p class="text-base md:text-sm font-semibold text-gray-800 mb-3">テンプレートから設定</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -686,20 +667,168 @@ onMounted(async () => {
             </div>
           </div>
 
-          <div class="mt-4">
-            <div class="flex items-center justify-between mb-2">
-              <p class="text-base md:text-sm font-semibold text-gray-800">追加項目（イベント別）</p>
-              <button class="px-3 py-1.5 text-base md:text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="addCustomStep">項目追加</button>
+          <div class="mt-8 space-y-2">
+            <p class="text-base md:text-sm font-semibold text-gray-800 mb-4">追加項目（ビジュアルフロー）</p>
+
+            <!-- ① 固定ステップ: 着座 -->
+            <div class="bg-blue-600 text-white rounded-xl p-4 shadow-sm font-bold flex items-center justify-between">
+              <span>着座</span>
+              <span class="text-xs font-normal opacity-80">起点ステップ</span>
             </div>
-            <div class="space-y-2">
-              <div v-for="(step, idx) in customSteps" :key="`custom-${idx}`" class="grid grid-cols-1 md:grid-cols-[1fr_160px_140px_70px] gap-2 items-center">
-                <input v-model="step.label" type="text" placeholder="項目名（例: 選考）" class="px-3 py-2 border border-gray-300 rounded-lg" />
-                <select v-model.number="step.position" class="px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
-                  <option v-for="opt in POSITION_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                </select>
-                <input v-model.number="step.rate" type="number" min="1" max="100" placeholder="前段階比(%)" class="px-3 py-2 border border-gray-300 rounded-lg" />
-                <button class="px-3 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50" @click="removeCustomStep(idx)">削除</button>
+
+            <!-- position=1: 着座 ↔ エントリーの間 -->
+            <div class="ml-6 border-l-2 border-gray-300 pl-4 py-3 space-y-3">
+              <!-- 割合入力 -->
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs text-gray-500 font-medium">エントリー→イベント出席率</span>
+                <input
+                  v-model="form.seat_to_entry_rate"
+                  type="number" min="1" max="100"
+                  class="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:ring-1 focus:ring-blue-300 outline-none"
+                />
+                <span class="text-xs text-gray-500">%</span>
               </div>
+              <div class="flex items-center gap-2 text-xs text-gray-400">
+                <span class="text-lg">↓</span>
+                <span>着座 ↔ エントリーの間</span>
+              </div>
+              <template v-for="(step, idx) in customSteps" :key="idx">
+                <div v-if="step.position === 1" class="bg-orange-50 border border-orange-200 rounded-xl p-4 shadow-sm">
+                  <div class="grid grid-cols-[1fr_100px_32px] gap-3 items-center">
+                    <input v-model="step.label" type="text" placeholder="項目名" class="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-orange-300 outline-none" />
+                    <div class="flex items-center gap-1">
+                      <input v-model.number="step.rate" type="number" min="1" max="100" class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:ring-1 focus:ring-orange-300 outline-none" />
+                      <span class="text-xs text-gray-400">%</span>
+                    </div>
+                    <button @click="removeCustomStep(idx)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <button @click="customSteps.push({ label: '', rate: 50, position: 1 })" class="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-full transition-colors">
+                <span>+ ステップ追加</span>
+              </button>
+            </div>
+
+            <!-- ② 固定ステップ: エントリー -->
+            <div class="bg-gray-100 text-gray-800 rounded-xl p-4 shadow-sm font-bold">
+              エントリー
+            </div>
+
+            <!-- position=2: エントリー ↔ 面談の間 -->
+            <div class="ml-6 border-l-2 border-gray-300 pl-4 py-3 space-y-3">
+              <!-- 割合入力 -->
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs text-gray-500 font-medium">面談→エントリー率</span>
+                <input
+                  v-model="form.entry_to_interview_rate"
+                  type="number" min="1" max="100"
+                  class="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:ring-1 focus:ring-blue-300 outline-none"
+                />
+                <span class="text-xs text-gray-500">%</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs text-gray-400">
+                <span class="text-lg">↓</span>
+                <span>エントリー ↔ 面談の間</span>
+              </div>
+              <template v-for="(step, idx) in customSteps" :key="idx">
+                <div v-if="step.position === 2" class="bg-orange-50 border border-orange-200 rounded-xl p-4 shadow-sm">
+                  <div class="grid grid-cols-[1fr_100px_32px] gap-3 items-center">
+                    <input v-model="step.label" type="text" placeholder="項目名" class="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-orange-300 outline-none" />
+                    <div class="flex items-center gap-1">
+                      <input v-model.number="step.rate" type="number" min="1" max="100" class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:ring-1 focus:ring-orange-300 outline-none" />
+                      <span class="text-xs text-gray-400">%</span>
+                    </div>
+                    <button @click="removeCustomStep(idx)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <button @click="customSteps.push({ label: '', rate: 50, position: 2 })" class="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-full transition-colors">
+                <span>+ ステップ追加</span>
+              </button>
+            </div>
+
+            <!-- ③ 固定ステップ: 面談 -->
+            <div class="bg-yellow-100 text-yellow-800 rounded-xl p-4 shadow-sm font-bold">
+              面談
+            </div>
+
+            <!-- position=3: 面談 ↔ 流入数の間 -->
+            <div class="ml-6 border-l-2 border-gray-300 pl-4 py-3 space-y-3">
+              <!-- 割合入力 -->
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs text-gray-500 font-medium">面談予約→面談出席率</span>
+                <input
+                  v-model="form.interview_to_inflow_rate"
+                  type="number" min="1" max="100"
+                  class="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:ring-1 focus:ring-blue-300 outline-none"
+                />
+                <span class="text-xs text-gray-500">%</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs text-gray-400">
+                <span class="text-lg">↓</span>
+                <span>面談 ↔ 設定数の間</span>
+              </div>
+              <template v-for="(step, idx) in customSteps" :key="idx">
+                <div v-if="step.position === 3" class="bg-orange-50 border border-orange-200 rounded-xl p-4 shadow-sm">
+                  <div class="grid grid-cols-[1fr_100px_32px] gap-3 items-center">
+                    <input v-model="step.label" type="text" placeholder="項目名" class="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-orange-300 outline-none" />
+                    <div class="flex items-center gap-1">
+                      <input v-model.number="step.rate" type="number" min="1" max="100" class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:ring-1 focus:ring-orange-300 outline-none" />
+                      <span class="text-xs text-gray-400">%</span>
+                    </div>
+                    <button @click="removeCustomStep(idx)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <button @click="customSteps.push({ label: '', rate: 50, position: 3 })" class="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-full transition-colors">
+                <span>+ ステップ追加</span>
+              </button>
+            </div>
+
+            <!-- ④ 固定ステップ: 設定数・流入数 -->
+            <div class="bg-purple-100 text-purple-800 rounded-xl p-4 shadow-sm font-bold">
+              設定数・流入数
+            </div>
+
+            <!-- position=4: 流入数の後 -->
+            <div class="ml-6 border-l-2 border-gray-300 pl-4 py-3 space-y-3">
+              <!-- 割合入力 -->
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-xs text-gray-500 font-medium">流入→面談予約率</span>
+                <input
+                  v-model="form.inflow_to_reservation_rate"
+                  type="number" min="1" max="100"
+                  class="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:ring-1 focus:ring-blue-300 outline-none"
+                />
+                <span class="text-xs text-gray-500">%</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs text-gray-400">
+                <span class="text-lg">↓</span>
+                <span>最終ステップ以降</span>
+              </div>
+              <template v-for="(step, idx) in customSteps" :key="idx">
+                <div v-if="step.position === 4" class="bg-orange-50 border border-orange-200 rounded-xl p-4 shadow-sm">
+                  <div class="grid grid-cols-[1fr_100px_32px] gap-3 items-center">
+                    <input v-model="step.label" type="text" placeholder="項目名" class="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-orange-300 outline-none" />
+                    <div class="flex items-center gap-1">
+                      <input v-model.number="step.rate" type="number" min="1" max="100" class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:ring-1 focus:ring-orange-300 outline-none" />
+                      <span class="text-xs text-gray-400">%</span>
+                    </div>
+                    <button @click="removeCustomStep(idx)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <button @click="customSteps.push({ label: '', rate: 50, position: 4 })" class="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-full transition-colors">
+                <span>+ ステップ追加</span>
+              </button>
             </div>
           </div>
 

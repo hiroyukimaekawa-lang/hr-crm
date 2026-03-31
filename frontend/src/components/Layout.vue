@@ -15,7 +15,8 @@ import {
   X,
   ChartColumn,
   TrendingUp,
-  Settings
+  Settings,
+  History
 } from 'lucide-vue-next';
 import {
   clearNotifications,
@@ -51,7 +52,9 @@ const menuItems = computed(() => [
   { id: 'events', label: 'イベント一覧', icon: Calendar, path: '/events' },
   { id: 'lead-time', label: '学生流入数', icon: ChartColumn, path: '/lead-time' },
   { id: 'event-kpi', label: 'KPI', icon: TrendingUp, path: '/event-kpi' },
-  { id: 'settings', label: '設定', icon: Settings, path: '/settings' }
+  { id: 'settings', label: '設定', icon: Settings, path: '/settings' },
+  { id: 'past-events', label: '過去イベント', icon: History, path: '/past-events' },
+  { id: 'monthly-sales', label: '月間売上', icon: TrendingUp, path: '/monthly-sales' }
 ]);
 
 const logout = () => {
