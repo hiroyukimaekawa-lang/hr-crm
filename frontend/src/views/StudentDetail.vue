@@ -112,7 +112,7 @@ const matcherAppliedAtDate = computed({
 });
 const matcherAppliedAtHour = computed({
   get: () => getHourPart(matcherForm.value.applied_at) + ':00',
-  set: (val: string) => matcherForm.value.applied_at = mergeDateHour(getDatePart(matcherForm.value.applied_at) || '', (val || '10:00').split(':')[0])
+  set: (val: string) => matcherForm.value.applied_at = mergeDateHour(getDatePart(matcherForm.value.applied_at) || '', (val || '10:00').split(':')[0] || '10')
 });
 
 const matcherReservationCreatedAtDate = computed({
@@ -121,7 +121,7 @@ const matcherReservationCreatedAtDate = computed({
 });
 const matcherReservationCreatedAtHour = computed({
   get: () => getHourPart(matcherForm.value.reservation_created_at) + ':00',
-  set: (val: string) => matcherForm.value.reservation_created_at = mergeDateHour(getDatePart(matcherForm.value.reservation_created_at) || '', (val || '10:00').split(':')[0])
+  set: (val: string) => matcherForm.value.reservation_created_at = mergeDateHour(getDatePart(matcherForm.value.reservation_created_at) || '', (val || '10:00').split(':')[0] || '10')
 });
 
 const matcherInterviewScheduledAtDate = computed({
@@ -130,7 +130,7 @@ const matcherInterviewScheduledAtDate = computed({
 });
 const matcherInterviewScheduledAtHour = computed({
   get: () => getHourPart(matcherForm.value.interview_scheduled_at) + ':00',
-  set: (val: string) => matcherForm.value.interview_scheduled_at = mergeDateHour(getDatePart(matcherForm.value.interview_scheduled_at) || '', (val || '10:00').split(':')[0])
+  set: (val: string) => matcherForm.value.interview_scheduled_at = mergeDateHour(getDatePart(matcherForm.value.interview_scheduled_at) || '', (val || '10:00').split(':')[0] || '10')
 });
 
 const matcherInterviewActualAtDate = computed({
@@ -139,7 +139,7 @@ const matcherInterviewActualAtDate = computed({
 });
 const matcherInterviewActualAtHour = computed({
   get: () => getHourPart(matcherForm.value.interview_actual_at) + ':00',
-  set: (val: string) => matcherForm.value.interview_actual_at = mergeDateHour(getDatePart(matcherForm.value.interview_actual_at) || '', (val || '10:00').split(':')[0])
+  set: (val: string) => matcherForm.value.interview_actual_at = mergeDateHour(getDatePart(matcherForm.value.interview_actual_at) || '', (val || '10:00').split(':')[0] || '10')
 });
 
 const draftStorageKey = computed(() => `student-detail-draft:${String(studentId)}`);
@@ -478,7 +478,7 @@ const addTask = async () => {
     if (!newTaskContent.value.trim()) return;
     const token = localStorage.getItem('token');
     await api.post(`/api/students/${studentId}/tasks`, {
-      due_date: mergeDateHour(newTaskDate.value || '', (newTaskHour.value || '10:00').split(':')[0]) || null,
+      due_date: mergeDateHour(newTaskDate.value || '', (newTaskHour.value || '10:00').split(':')[0] || '10') || null,
       content: newTaskContent.value
     }, { headers: { Authorization: token } });
     newTaskDate.value = '';
@@ -495,7 +495,7 @@ const addInterviewSchedule = async () => {
   try {
     const token = localStorage.getItem('token');
     await api.post(`/api/students/${studentId}/interview-schedules`, {
-      scheduled_at: mergeDateHour(newScheduleDate.value || '', (newScheduleHour.value || '10:00').split(':')[0]) || null,
+      scheduled_at: mergeDateHour(newScheduleDate.value || '', (newScheduleHour.value || '10:00').split(':')[0] || '10') || null,
       schedule_type: newScheduleType.value,
       status: newScheduleType.value === 'リスケ' ? 'rescheduled' : 'scheduled'
     }, { headers: { Authorization: token } });
@@ -630,6 +630,28 @@ const selectedLinkEventDates = computed(() => {
   if (e.event_date) return [String(e.event_date)];
   return [] as string[];
 });
+
+// イベント参加回数（全参加）
+const totalEventCount = computed(() =>
+  (studentEvents.value ?? []).length
+);
+
+// 着座済み回数（status='attended'）
+const attendedEventCount = computed(() =>
+  (studentEvents.value ?? []).filter((e: any) => e.participation_status === 'attended').length
+);
+
+// LTV: 着座済みイベントのunit_priceの合計
+const ltv = computed(() =>
+  (studentEvents.value ?? [])
+    .filter((e: any) => e.participation_status === 'attended')
+    .reduce((sum: number, e: any) => sum + Number(e.unit_price || 0), 0)
+);
+
+// LTV表示用フォーマット
+const ltvFormatted = computed(() =>
+  ltv.value.toLocaleString('ja-JP')
+);
 
 const eventDateOptions = (event: any) => {
   const dates = Array.isArray(event?.event_dates)
@@ -1263,7 +1285,7 @@ watch(selectedEventId, () => {
                   />
                   <select
                     :value="getHourPart(sc.scheduled_at) + ':00'"
-                    @change="updateInterviewSchedule(sc.id, { scheduled_at: mergeDateHour(getDatePart(sc.scheduled_at), (($event.target as HTMLSelectElement).value).split(':')[0]) })"
+                    @change="updateInterviewSchedule(sc.id, { scheduled_at: mergeDateHour(getDatePart(sc.scheduled_at), (($event.target as HTMLSelectElement).value).split(':')[0] || '10') })"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm"
                   >
                     <option v-for="h in hourOptions" :key="`edit-sc-hour-${sc.id}-${h}`" :value="h">{{ h }}</option>
@@ -1637,6 +1659,63 @@ watch(selectedEventId, () => {
               </select>
               <button class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors" @click="registerMatcherInterview">面談実施登録</button>
             </div>
+          </div>
+
+          <!-- LTV・参加回数サマリー -->
+          <div class="mt-6 pt-5 border-t border-gray-100">
+            <p class="text-sm font-bold text-gray-700 mb-3">📊 LTV・参加実績</p>
+            <div class="grid grid-cols-3 gap-3">
+              <!-- イベント参加回数 -->
+              <div class="bg-gray-50 rounded-xl p-3 text-center">
+                <p class="text-xs text-gray-500 mb-1">イベント参加回数</p>
+                <p class="text-lg font-extrabold text-gray-900">{{ totalEventCount }}<span class="text-xs font-normal ml-1">回</span></p>
+              </div>
+              <!-- 着座回数 -->
+              <div class="bg-emerald-50 rounded-xl p-3 text-center">
+                <p class="text-xs text-gray-500 mb-1">着座回数</p>
+                <p class="text-lg font-extrabold text-emerald-700">{{ attendedEventCount }}<span class="text-xs font-normal ml-1">回</span></p>
+              </div>
+              <!-- LTV -->
+              <div class="bg-blue-50 rounded-xl p-3 text-center">
+                <p class="text-xs text-gray-500 mb-1">1名あたりのLTV</p>
+                <p class="text-lg font-extrabold text-blue-700">¥{{ ltvFormatted }}</p>
+              </div>
+            </div>
+
+            <!-- 参加イベント一覧（折りたたみ） -->
+            <details class="mt-3">
+              <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none">
+                参加イベント一覧を見る（{{ totalEventCount }}件）
+              </summary>
+              <div class="mt-2 space-y-1">
+                <div
+                  v-for="ev in (studentEvents ?? [])"
+                  :key="ev.student_event_id || ev.event_id || ev.title"
+                  class="flex items-center justify-between px-3 py-2 bg-white border border-gray-100 rounded-lg text-xs"
+                >
+                  <div class="flex items-center gap-2">
+                    <span
+                      :class="ev.participation_status === 'attended'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-gray-100 text-gray-500'"
+                      class="px-2 py-0.5 rounded-full text-xs font-medium"
+                    >
+                      {{ ev.participation_status === 'attended' ? '着座' : ev.participation_status ?? '-' }}
+                    </span>
+                    <span class="text-gray-700 font-medium">{{ ev.title }}</span>
+                  </div>
+                  <div class="flex items-center gap-3 text-gray-400">
+                    <span>{{ ev.event_date ? ev.event_date.substring(0, 10) : '-' }}</span>
+                    <span v-if="ev.participation_status === 'attended'" class="text-blue-600 font-semibold">
+                      ¥{{ Number(ev.unit_price || 0).toLocaleString('ja-JP') }}
+                    </span>
+                  </div>
+                </div>
+                <div v-if="!(studentEvents ?? []).length" class="text-xs text-gray-400 text-center py-2">
+                  参加イベントなし
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       </div>

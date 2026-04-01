@@ -320,7 +320,7 @@ onMounted(fetchEvents);
                         <span class="text-xs text-gray-400 font-medium">読み込み中...</span>
                       </div>
 
-                      <div v-else-if="!participantsData[event.id] || participantsData[event.id].length === 0" class="py-12 text-center bg-white border border-gray-100 rounded-2xl">
+                      <div v-else-if="!participantsData[event.id]?.length" class="py-12 text-center bg-white border border-gray-100 rounded-2xl">
                         <UsersIcon class="w-8 h-8 text-gray-200 mx-auto mb-2" />
                         <p class="text-sm text-gray-400 font-medium tracking-tight">参加者がいません</p>
                       </div>

@@ -46,6 +46,9 @@ const monthlyHistory = ref<Array<{
   reservation_to_interview_rate: number;
 }>>([]);
 
+const allEvents = ref<any[]>([]);
+const isEventsLoading = ref(false);
+
 /* ───────── API取得 ───────── */
 const fetchFunnelData = async () => {
   isLoading.value = true;
@@ -115,6 +118,16 @@ const avgDailyApps = computed(() => {
   return (total / data.length).toFixed(1);
 });
 
+const totalLtv = computed(() => {
+  return allEvents.value.reduce((sum, e) => sum + (Number(e.attended_count || 0) * Number(e.unit_price || 0)), 0);
+});
+
+const ltvPerPerson = computed(() => {
+  const interviewed = funnelKpi.value?.counts?.interviewed_students ?? 0;
+  if (interviewed === 0) return 0;
+  return Math.round(totalLtv.value / interviewed);
+});
+
 /* ───────── Helpers ───────── */
 const getRateColor = (rate: number) => {
   if (rate >= 80) return 'bg-green-50 border-green-400 text-green-700';
@@ -138,8 +151,24 @@ onMounted(async () => {
   checkMobile();
   window.addEventListener('resize', checkMobile);
   await fetchSources();
-  await fetchFunnelData();
+  await Promise.all([
+    fetchFunnelData(),
+    fetchEventsData()
+  ]);
 });
+
+const fetchEventsData = async () => {
+  isEventsLoading.value = true;
+  try {
+    const token = localStorage.getItem('token');
+    const res = await api.get('/api/events', { headers: { Authorization: token } });
+    allEvents.value = res.data;
+  } catch (err) {
+    console.error('Error fetching events:', err);
+  } finally {
+    isEventsLoading.value = false;
+  }
+};
 </script>
 
 <template>
@@ -291,6 +320,12 @@ onMounted(async () => {
           <p class="text-sm font-medium mb-1 opacity-80">申し込み → 初回予約 平均日数</p>
           <p class="text-3xl font-bold">{{ funnelKpi.apply_to_reservation_lead_time_days_avg ?? '-' }} <span class="text-lg font-normal">日</span></p>
           <p class="text-xs mt-2 opacity-60">※申込日から予約登録日までの間隔</p>
+        </div>
+
+        <div :class="['rounded-xl shadow-md p-6 border-2 border-gray-200 bg-white transition-colors']">
+          <p class="text-sm font-medium mb-1 text-gray-500">1名あたりのLTV</p>
+          <p class="text-3xl font-bold text-gray-900">¥{{ ltvPerPerson.toLocaleString() }}</p>
+          <p class="text-xs mt-2 text-gray-400">※総着座売上 / 初回面談実施人数 ({{ funnelKpi.counts.interviewed_students }}名)</p>
         </div>
 
         <div :class="['rounded-xl shadow-md p-6 border-2 transition-colors', getLeadTimeColor(funnelKpi.reservation_to_interview_lead_time_days_avg)]">
