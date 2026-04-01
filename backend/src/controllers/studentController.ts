@@ -1695,7 +1695,7 @@ export const updateApplicationReservation = async (req: Request, res: Response) 
     try {
         await ensureSalesFunnelTables();
         const normalizedReservationDate = normalizeToHour(reservation_date);
-        const normalizedReservationCreatedAt = normalizeToHour(reservation_created_at);
+        const normalizedReservationCreatedAt = normalizeToHour(reservation_created_at) || normalizeToHour(new Date().toISOString());
         const normalizedFirstMessageSentAt = normalizeToHour(first_message_sent_at);
         const appRes = await pool.query(
             'SELECT * FROM applications WHERE student_id = $1 ORDER BY applied_at DESC NULLS LAST, id DESC LIMIT 1',

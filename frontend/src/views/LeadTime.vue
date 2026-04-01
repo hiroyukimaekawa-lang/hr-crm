@@ -11,6 +11,7 @@ const isLoading = ref(false);
 /* ───────── 企業フィルタ ───────── */
 const sourceCategories = ref<string[]>([]);
 const selectedSource = ref<string>(''); // 空文字 = 全体
+const selectedMonth = ref<string>(new Date().toISOString().slice(0, 7)); // デフォルト: 今月 (YYYY-MM)
 
 const fetchSources = async () => {
   const token = localStorage.getItem('token');
@@ -55,11 +56,12 @@ const fetchFunnelData = async () => {
   try {
     const token = localStorage.getItem('token');
     const sourceParam = selectedSource.value ? { source_company: selectedSource.value } : {};
+    const monthParam = selectedMonth.value ? { month: selectedMonth.value } : {};
 
     const [kpiRes, historyRes] = await Promise.all([
       api.get('/api/students/metrics/funnel', {
         headers: { Authorization: token },
-        params: sourceParam
+        params: { ...sourceParam, ...monthParam }
       }),
       api.get('/api/students/metrics/funnel', {
         headers: { Authorization: token },
@@ -197,6 +199,16 @@ const fetchEventsData = async () => {
             </option>
           </select>
         </div>
+        <div class="flex items-center gap-3">
+          <label class="text-sm font-bold text-gray-600 whitespace-nowrap">対象月</label>
+          <input
+            type="month"
+            v-model="selectedMonth"
+            @change="fetchFunnelData"
+            :disabled="isLoading"
+            class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 min-w-[150px] disabled:bg-gray-50 disabled:cursor-not-allowed transition-all"
+          />
+        </div>
         <div v-if="isLoading" class="flex items-center gap-2 text-blue-600">
           <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
@@ -204,9 +216,53 @@ const fetchEventsData = async () => {
           </svg>
           <span class="text-sm font-medium">更新中...</span>
         </div>
-        <span v-else-if="selectedSource" class="text-xs text-blue-500 font-medium px-2 py-1 bg-blue-50 rounded-md">
-          {{ selectedSource }} のみ表示中
-        </span>
+        <div v-else class="flex items-center gap-2">
+          <span v-if="selectedSource" class="text-xs text-blue-500 font-medium px-2 py-1 bg-blue-50 rounded-md">
+            {{ selectedSource }}
+          </span>
+          <span v-if="selectedMonth" class="text-xs text-purple-500 font-medium px-2 py-1 bg-purple-50 rounded-md">
+            {{ selectedMonth }} 分を表示
+          </span>
+        </div>
+      </div>
+
+      <!-- 月別推移（流入元企業の下に配置） -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <button 
+          @click="isMonthlyTableOpen = !isMonthlyTableOpen"
+          class="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors text-sm"
+        >
+          <span class="font-bold text-gray-800">月別推移を表示</span>
+          <component :is="isMonthlyTableOpen ? ChevronUp : ChevronDown" class="w-5 h-5 text-gray-400" />
+        </button>
+        
+        <div v-show="isMonthlyTableOpen" class="border-t border-gray-100 overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left font-semibold text-gray-600">月</th>
+                <th class="px-4 py-3 text-right font-semibold text-gray-600">申し込み数</th>
+                <th class="px-4 py-3 text-right font-semibold text-gray-600">予約数</th>
+                <th class="px-4 py-3 text-right font-semibold text-gray-600">初回面談実施</th>
+                <th class="px-4 py-3 text-right font-semibold text-gray-600">申込→予約率</th>
+                <th class="px-4 py-3 text-right font-semibold text-gray-600">予約→面談率</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="row in monthlyHistory" :key="row.month" class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-3 font-medium text-gray-900">{{ row.month }}</td>
+                <td class="px-4 py-3 text-right text-gray-700">{{ row.applications_students }}</td>
+                <td class="px-4 py-3 text-right text-gray-700">{{ row.reserved_students }}</td>
+                <td class="px-4 py-3 text-right font-semibold text-green-700">{{ row.interviewed_students }}</td>
+                <td class="px-4 py-3 text-right text-gray-700">{{ Number(row.application_to_reservation_rate).toFixed(1) }}%</td>
+                <td class="px-4 py-3 text-right text-gray-700">{{ Number(row.reservation_to_interview_rate).toFixed(1) }}%</td>
+              </tr>
+              <tr v-if="monthlyHistory.length === 0">
+                <td colspan="6" class="px-6 py-10 text-center text-gray-400">データがありません</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- セクション①：初回面談フロー可視化 -->
@@ -220,7 +276,7 @@ const fetchEventsData = async () => {
           <!-- Step 1 -->
           <div class="flex-1 w-full flex flex-col items-center bg-blue-50/50 rounded-2xl p-5 border border-blue-100/50 transition-all hover:shadow-md">
             <span class="text-3xl mb-2">📩</span>
-            <p class="text-sm font-bold text-blue-900 mb-1">申し込み</p>
+            <p class="text-sm font-bold text-blue-900 mb-1">初回申し込み</p>
             <p class="text-2xl font-black text-blue-600">{{ funnelKpi.counts.applications_students }}<span class="text-xs ml-1 font-bold">名</span></p>
           </div>
 
@@ -266,9 +322,9 @@ const fetchEventsData = async () => {
           <div>
             <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
               <span class="w-1.5 h-6 bg-indigo-600 rounded-full"></span>
-              デイリー申込推移
+              デイリー初回申込推移
             </h2>
-            <p class="text-sm text-gray-500 mt-1">直近{{ isMobile ? 14 : 30 }}日間の申し込み件数</p>
+            <p class="text-sm text-gray-500 mt-1">直近{{ isMobile ? 14 : 30 }}日間の学生申し込み件数</p>
           </div>
           <div class="flex flex-wrap gap-4">
             <div class="px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
@@ -335,44 +391,6 @@ const fetchEventsData = async () => {
         </div>
       </div>
 
-      <!-- セクション⑤：月別推移テーブル（折りたたみ） -->
-      <div class="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
-        <button 
-          @click="isMonthlyTableOpen = !isMonthlyTableOpen"
-          class="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
-        >
-          <span class="font-bold text-gray-800">月別推移を表示</span>
-          <component :is="isMonthlyTableOpen ? ChevronUp : ChevronDown" class="w-5 h-5 text-gray-400" />
-        </button>
-        
-        <div v-show="isMonthlyTableOpen" class="border-t border-gray-100 overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-6 py-3 text-left font-semibold text-gray-600">月</th>
-                <th class="px-4 py-3 text-right font-semibold text-gray-600">申込数</th>
-                <th class="px-4 py-3 text-right font-semibold text-gray-600">予約数</th>
-                <th class="px-4 py-3 text-right font-semibold text-gray-600">初回面談実施</th>
-                <th class="px-4 py-3 text-right font-semibold text-gray-600">申込→予約率</th>
-                <th class="px-4 py-3 text-right font-semibold text-gray-600">予約→面談率</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr v-for="row in monthlyHistory" :key="row.month" class="hover:bg-gray-50 transition-colors">
-                <td class="px-6 py-3 font-medium text-gray-900">{{ row.month }}</td>
-                <td class="px-4 py-3 text-right text-gray-700">{{ row.applications_students }}</td>
-                <td class="px-4 py-3 text-right text-gray-700">{{ row.reserved_students }}</td>
-                <td class="px-4 py-3 text-right font-semibold text-green-700">{{ row.interviewed_students }}</td>
-                <td class="px-4 py-3 text-right text-gray-700">{{ Number(row.application_to_reservation_rate).toFixed(1) }}%</td>
-                <td class="px-4 py-3 text-right text-gray-700">{{ Number(row.reservation_to_interview_rate).toFixed(1) }}%</td>
-              </tr>
-              <tr v-if="monthlyHistory.length === 0">
-                <td colspan="6" class="px-6 py-10 text-center text-gray-400">データがありません</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   </Layout>
 </template>

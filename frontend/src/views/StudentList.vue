@@ -688,9 +688,14 @@ const goNextPage = () => {
 
 const formatDate = (value?: string | null) => {
   if (!value) return '-';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('ja-JP');
+  // new Date()を経由するとタイムゾーンで日付がずれるため、文字列から直接パース
+  const s = String(value).slice(0, 10);
+  const parts = s.split('-');
+  if (parts.length >= 3) {
+    const [yyyy, mm, dd] = parts;
+    return `${Number(yyyy)}/${Number(mm)}/${Number(dd)}`;
+  }
+  return String(value);
 };
 
 const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -1268,7 +1273,27 @@ watch(filteredStudents, () => {
         </div>
       </div>
 
-      <div v-else class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-x-auto">
+      <div v-if="totalFilteredCount > 0" class="mb-3 flex items-center justify-between text-base md:text-sm text-gray-600">
+        <p>{{ totalFilteredCount }}件中 {{ (currentPage - 1) * pageSize + 1 }}〜{{ Math.min(currentPage * pageSize, totalFilteredCount) }}件を表示</p>
+        <div class="flex items-center gap-2">
+          <button
+            class="px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            :disabled="currentPage <= 1"
+            @click="goPrevPage"
+          >
+            前へ
+          </button>
+          <span>{{ currentPage }} / {{ totalPages }}</span>
+          <button
+            class="px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            :disabled="currentPage >= totalPages"
+            @click="goNextPage"
+          >
+            次へ
+          </button>
+        </div>
+      </div>
+      <div v-if="totalFilteredCount > 0" class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-x-auto">
         <table class="w-full min-w-[1000px]">
           <thead class="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-500">
             <tr>
