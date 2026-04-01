@@ -1731,9 +1731,9 @@ export const updateApplicationReservation = async (req: Request, res: Response) 
             await pool.query(
                 `UPDATE students
                  SET meeting_decided_date = COALESCE($1, meeting_decided_date),
-                     next_meeting_date = COALESCE(next_meeting_date, $1)
-                 WHERE id = $2`,
-                [normalizedReservationCreatedAt || normalizedReservationDate, id]
+                     next_meeting_date = COALESCE($2, next_meeting_date)
+                 WHERE id = $3`,
+                [normalizedReservationCreatedAt, normalizedReservationDate, id]
             );
             res.json(inserted.rows[0]);
             return;
@@ -1758,9 +1758,9 @@ export const updateApplicationReservation = async (req: Request, res: Response) 
         await pool.query(
             `UPDATE students
              SET meeting_decided_date = COALESCE($1, meeting_decided_date),
-                 next_meeting_date = COALESCE(next_meeting_date, $1)
-             WHERE id = $2`,
-            [normalizedReservationCreatedAt || normalizedReservationDate, id]
+                 next_meeting_date = COALESCE($2, next_meeting_date)
+             WHERE id = $3`,
+            [normalizedReservationCreatedAt, normalizedReservationDate, id]
         );
         res.json(result.rows[0]);
     } catch (err: any) {

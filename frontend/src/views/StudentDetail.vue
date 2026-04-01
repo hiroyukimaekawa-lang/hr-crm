@@ -1204,14 +1204,14 @@ watch(selectedEventId, () => {
                 <Calendar class="w-5 h-5" />
                 <div>
                   <p class="text-base md:text-sm text-gray-500">面談決定日</p>
-                  <p class="text-sm font-medium">{{ formatDate(matcherFunnel?.interview_scheduled_at || student.meeting_decided_date) || '-' }}</p>
+                  <p class="text-sm font-medium">{{ formatDate(matcherFunnel?.reservation_created_at || student.meeting_decided_date) || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Calendar class="w-5 h-5" />
                 <div>
                   <p class="text-base md:text-sm text-gray-500">初回面談日</p>
-                  <p class="text-sm font-medium">{{ formatDate(matcherFunnel?.interview_actual_at || student.first_interview_date) || '-' }}</p>
+                  <p class="text-sm font-medium">{{ formatDate(matcherFunnel?.interview_actual_at || matcherFunnel?.interview_scheduled_at || student.first_interview_date) || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
@@ -1575,8 +1575,13 @@ watch(selectedEventId, () => {
           </div>
 
           <div class="flex flex-col lg:flex-row lg:items-stretch gap-4">
-            <div class="flex-1 rounded-2xl border border-blue-200 bg-blue-50/40 p-5 shadow-sm">
-              <p class="text-xl font-extrabold text-gray-900 mb-3">1) 申込登録</p>
+            <div :class="['flex-1 rounded-2xl border p-5 shadow-sm transition-all', matcherFunnel?.applied_at ? 'border-blue-500 bg-blue-50/50' : 'border-blue-200 bg-blue-50/30']">
+              <div class="flex items-center justify-between mb-3">
+                <p class="text-xl font-extrabold text-gray-900">1) 申込登録</p>
+                <span v-if="matcherFunnel?.applied_at" class="inline-flex items-center gap-1 text-xs font-bold text-blue-600 bg-white px-2 py-1 rounded-full border border-blue-200">
+                  ✅ 登録済み
+                </span>
+              </div>
               <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">申込日</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
@@ -1591,13 +1596,24 @@ watch(selectedEventId, () => {
                   <option v-for="h in hourOptions" :key="`matcher-apply-hour-${h}`" :value="h">{{ h }}</option>
                 </select>
               </div>
-              <button class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors" @click="registerMatcherApply">申込登録</button>
+              <button
+                class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white transition-colors"
+                :class="matcherFunnel?.applied_at ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'"
+                @click="registerMatcherApply"
+              >
+                {{ matcherFunnel?.applied_at ? '申込情報を更新' : '申込登録' }}
+              </button>
             </div>
 
             <div class="hidden lg:flex items-center text-3xl font-black text-slate-300 px-1">→</div>
 
-            <div class="flex-1 rounded-2xl border border-amber-200 bg-amber-50/50 p-5 shadow-sm">
-              <p class="text-xl font-extrabold text-gray-900 mb-3">2) 予約登録（初回面談）</p>
+            <div :class="['flex-1 rounded-2xl border p-5 shadow-sm transition-all', matcherFunnel?.reservation_created_at ? 'border-amber-500 bg-amber-50/50' : 'border-amber-200 bg-amber-50/30']">
+              <div class="flex items-center justify-between mb-3">
+                <p class="text-xl font-extrabold text-gray-900">2) 予約登録</p>
+                <span v-if="matcherFunnel?.reservation_created_at" class="inline-flex items-center gap-1 text-xs font-bold text-amber-600 bg-white px-2 py-1 rounded-full border border-amber-200">
+                  ✅ 登録済み
+                </span>
+              </div>
               <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">予約作成日（TimeRex）</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
@@ -1629,13 +1645,24 @@ watch(selectedEventId, () => {
               <div class="mb-4">
                 <span class="inline-flex items-center px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-base md:text-sm font-semibold border border-amber-200">予約ステータス: 初回面談</span>
               </div>
-              <button class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 transition-colors" @click="registerMatcherReservation">予約登録</button>
+              <button
+                class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white transition-colors"
+                :class="matcherFunnel?.reservation_created_at ? 'bg-amber-600 hover:bg-amber-700' : 'bg-amber-500 hover:bg-amber-600'"
+                @click="registerMatcherReservation"
+              >
+                {{ matcherFunnel?.reservation_created_at ? '予約情報を更新' : '予約登録' }}
+              </button>
             </div>
 
             <div class="hidden lg:flex items-center text-3xl font-black text-slate-300 px-1">→</div>
 
-            <div class="flex-1 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
-              <p class="text-xl font-extrabold text-gray-900 mb-3">3) 初回面談実施登録</p>
+            <div :class="['flex-1 rounded-2xl border p-5 shadow-sm transition-all', matcherFunnel?.interview_actual_at ? 'border-emerald-500 bg-emerald-50/50' : 'border-emerald-200 bg-emerald-50/30']">
+              <div class="flex items-center justify-between mb-3">
+                <p class="text-xl font-extrabold text-gray-900">3) 面談実施登録</p>
+                <span v-if="matcherFunnel?.interview_actual_at" class="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-white px-2 py-1 rounded-full border border-emerald-200">
+                  ✅ 登録済み
+                </span>
+              </div>
               <label class="block text-base md:text-sm font-medium text-gray-700 mb-2">初回面談実施日</label>
               <div class="grid grid-cols-12 gap-2 mb-4">
                 <input
@@ -1657,7 +1684,13 @@ watch(selectedEventId, () => {
                 <option value="rescheduled">リスケ</option>
                 <option value="cancel">キャンセル</option>
               </select>
-              <button class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors" @click="registerMatcherInterview">面談実施登録</button>
+              <button
+                class="w-full h-11 px-4 rounded-xl text-base md:text-sm font-bold text-white transition-colors"
+                :class="matcherFunnel?.interview_actual_at ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-emerald-600 hover:bg-emerald-700'"
+                @click="registerMatcherInterview"
+              >
+                {{ matcherFunnel?.interview_actual_at ? '実施情報を更新' : '面談実施登録' }}
+              </button>
             </div>
           </div>
 
