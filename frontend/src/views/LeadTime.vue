@@ -35,7 +35,13 @@ const funnelKpi = ref({
     applications_students: 0,
     reserved_students: 0,
     interviewed_students: 0,
-  }
+  },
+  graduation_year_breakdown: [] as Array<{
+    graduation_year: number;
+    applications: number;
+    reservations: number;
+    interviews: number;
+  }>
 });
 
 const monthlyHistory = ref<Array<{
@@ -128,6 +134,17 @@ const ltvPerPerson = computed(() => {
   const interviewed = funnelKpi.value?.counts?.interviewed_students ?? 0;
   if (interviewed === 0) return 0;
   return Math.round(totalLtv.value / interviewed);
+});
+
+/* ───────── 卒業年度内訳 ───────── */
+const grad27Counts = computed(() => {
+  const item = funnelKpi.value.graduation_year_breakdown?.find(b => b.graduation_year === 2027);
+  return item || { applications: 0, reservations: 0, interviews: 0 };
+});
+
+const grad28Counts = computed(() => {
+  const item = funnelKpi.value.graduation_year_breakdown?.find(b => b.graduation_year === 2028);
+  return item || { applications: 0, reservations: 0, interviews: 0 };
 });
 
 /* ───────── Helpers ───────── */
@@ -278,6 +295,10 @@ const fetchEventsData = async () => {
             <span class="text-3xl mb-2">📩</span>
             <p class="text-sm font-bold text-blue-900 mb-1">初回申し込み</p>
             <p class="text-2xl font-black text-blue-600">{{ funnelKpi.counts.applications_students }}<span class="text-xs ml-1 font-bold">名</span></p>
+            <div v-if="funnelKpi.graduation_year_breakdown?.length > 0" class="mt-2 flex gap-2 text-[10px] font-bold">
+              <span class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">27卒: {{ grad27Counts.applications }}</span>
+              <span class="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">28卒: {{ grad28Counts.applications }}</span>
+            </div>
           </div>
 
           <!-- Arrow 1 (sm:横, xs:縦) -->
@@ -295,6 +316,10 @@ const fetchEventsData = async () => {
             <span class="text-3xl mb-2">📅</span>
             <p class="text-sm font-bold text-purple-900 mb-1">面談予約</p>
             <p class="text-2xl font-black text-purple-600">{{ funnelKpi.counts.reserved_students }}<span class="text-xs ml-1 font-bold">名</span></p>
+            <div v-if="funnelKpi.graduation_year_breakdown?.length > 0" class="mt-2 flex gap-2 text-[10px] font-bold">
+              <span class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">27卒: {{ grad27Counts.reservations }}</span>
+              <span class="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">28卒: {{ grad28Counts.reservations }}</span>
+            </div>
           </div>
 
           <!-- Arrow 2 (sm:横, xs:縦) -->
@@ -312,6 +337,10 @@ const fetchEventsData = async () => {
             <span class="text-3xl mb-2">🤝</span>
             <p class="text-sm font-bold text-green-900 mb-1">初回面談実施</p>
             <p class="text-2xl font-black text-green-600">{{ funnelKpi.counts.interviewed_students }}<span class="text-xs ml-1 font-bold">名</span></p>
+            <div v-if="funnelKpi.graduation_year_breakdown?.length > 0" class="mt-2 flex gap-2 text-[10px] font-bold">
+              <span class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">27卒: {{ grad27Counts.interviews }}</span>
+              <span class="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">28卒: {{ grad28Counts.interviews }}</span>
+            </div>
           </div>
         </div>
       </div>
