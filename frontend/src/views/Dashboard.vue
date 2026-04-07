@@ -1098,7 +1098,6 @@ watch(selectedGraduationYear, fetchFunnelKpi);
               {{ calendarBaseMonth.getMonth() + 1 }}月の参加: {{ monthlyAttendanceCount }}名
               <ArrowRight class="w-4 h-4" />
             </button>
-          </div>
           <span class="text-sm font-bold text-slate-400 bg-slate-50 px-3 py-1 rounded-full w-fit">開催予定: {{ upcomingEvents }}件</span>
         </div>
 
@@ -1245,9 +1244,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
               <p class="text-[11px] text-emerald-700">面談: {{ interviewCountByDate[cell.date!] || 0 }}</p>
             </template>
           </div>
-        </div>
       </div>
-
     </div>
 
     <div v-if="selectedYomiEvent" class="fixed inset-0 z-[90]">
@@ -1363,7 +1360,6 @@ watch(selectedGraduationYear, fetchFunnelKpi);
                 </div>
               </div>
             </div>
-          </div>
         </div>
       </div>
     </div>
