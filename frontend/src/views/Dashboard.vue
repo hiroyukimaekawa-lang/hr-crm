@@ -1453,6 +1453,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
         </div>
       </div>
     </div>
+    </div>
   </div>
 
     <!-- Monthly Attendance Modal -->
