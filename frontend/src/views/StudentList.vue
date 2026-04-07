@@ -1205,7 +1205,12 @@ watch(filteredStudents, () => {
                 </h3>
                 <div class="flex items-center gap-2">
                   <span class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{{ s.university || '-' }}</span>
-                  <span class="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-widest">{{ s.graduation_year || '-' }}卒</span>
+                  <span v-if="s.graduation_year" :class="['text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest', 
+                    s.graduation_year === 2027 ? 'bg-blue-50 text-blue-600' : 
+                    s.graduation_year === 2028 ? 'bg-rose-50 text-rose-600' : 'bg-gray-100 text-gray-500']">
+                    {{ s.graduation_year }}卒
+                  </span>
+                  <span v-else class="text-[10px] font-black text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full uppercase tracking-widest">-</span>
                 </div>
               </div>
               <button
@@ -1329,7 +1334,14 @@ watch(filteredStudents, () => {
               </td>
               <td class="px-3 py-4 text-xs text-slate-500 whitespace-nowrap hidden 2xl:table-cell">{{ s.prefecture || '-' }}</td>
               <td class="px-3 py-4 text-xs text-slate-500 whitespace-nowrap hidden xl:table-cell">{{ s.academic_track || '-' }}</td>
-              <td class="px-3 py-4 text-xs text-slate-500 whitespace-nowrap hidden lg:table-cell font-bold">{{ s.graduation_year || '-' }}</td>
+              <td class="px-3 py-4 text-xs whitespace-nowrap hidden lg:table-cell font-bold">
+                <span v-if="s.graduation_year" :class="['px-2 py-0.5 rounded-full text-[10px] tracking-wider', 
+                  s.graduation_year === 2027 ? 'bg-blue-50 text-blue-700 border border-blue-100' : 
+                  s.graduation_year === 2028 ? 'bg-rose-50 text-rose-700 border border-rose-100' : 'bg-gray-50 text-gray-600 border border-gray-200']">
+                  {{ s.graduation_year }}
+                </span>
+                <span v-else class="text-slate-500">-</span>
+              </td>
               <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
                 <div v-if="user.role === 'admin'" class="max-w-[180px]">
                   <select

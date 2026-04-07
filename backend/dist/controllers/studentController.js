@@ -1954,7 +1954,7 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         const yearsRes = yield db_1.default.query('SELECT DISTINCT graduation_year FROM students WHERE graduation_year IS NOT NULL ORDER BY graduation_year');
         const graduationYears = yearsRes.rows.map(r => r.graduation_year);
         // ─── 全体集計（月フィルタ対応） ───
-        const [dailyRes, dailySettingsRes, summaryRes, lostRes] = yield Promise.all([
+        const [dailyRes, dailySettingsRes, summaryRes, gradBreakdownRes, lostRes] = yield Promise.all([
             db_1.default.query(`
                 SELECT DATE(a.applied_at) AS day, COUNT(*)::int AS count
                 FROM applications a JOIN students s ON s.id = a.student_id
@@ -2043,6 +2043,25 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                      interview_rescheduled_s, proposal_s, join_s, apply_to_reserve_lt, reserve_to_interview_lt
             `),
             db_1.default.query(`
+                SELECT
+                    s.graduation_year,
+                    COUNT(DISTINCT a.student_id) FILTER (WHERE a.applied_at IS NOT NULL ${appMonthCond}) AS applications,
+                    COUNT(DISTINCT a.student_id) FILTER (WHERE a.reservation_created_at IS NOT NULL ${resMonthCond}) AS reservations,
+                    COUNT(DISTINCT fi.student_id) FILTER (WHERE (COALESCE(fi.status,'') IN ('completed','面談実施','interviewed') OR fi.interviewed_at IS NOT NULL)
+                        ${intMonthCond.replace('i.scheduled_at', 'fi.scheduled_at')}) AS interviews
+                FROM students s
+                LEFT JOIN applications a ON a.student_id = s.id
+                LEFT JOIN (
+                    SELECT DISTINCT ON (i.student_id)
+                        i.student_id, i.scheduled_at, i.interviewed_at, i.status
+                    FROM interviews i
+                    ORDER BY i.student_id, COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) ASC, i.id ASC
+                ) fi ON fi.student_id = s.id
+                WHERE s.graduation_year IN (2027, 2028)
+                ${sSourceFilter}
+                GROUP BY s.graduation_year
+            `),
+            db_1.default.query(`
                 SELECT COALESCE(lr.reason_name,'未設定') AS reason_name, COUNT(*)::int AS count
                 FROM event_proposals ep
                 JOIN students s ON s.id = ep.student_id
@@ -2053,6 +2072,7 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             `)
         ]);
         const s = summaryRes.rows[0] || {};
+        const gradBreakdown = gradBreakdownRes.rows;
         const applicationsStudents = Number(s.applications_students || 0);
         const reservedStudents = Number(s.reserved_students || 0);
         const interviewScheduledStudents = Number(s.interview_scheduled_students || 0);
@@ -2078,6 +2098,7 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             reschedule_rate: rate(rescheduledStudents, interviewScheduledStudents),
             lost_reason_ranking: lostRes.rows,
             graduation_years: graduationYears,
+            graduation_year_breakdown: gradBreakdown,
             counts: {
                 applications_students: applicationsStudents,
                 reserved_students: reservedStudents,

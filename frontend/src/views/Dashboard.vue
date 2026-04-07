@@ -40,6 +40,7 @@ interface EventParticipant {
   name: string;
   university?: string;
   staff_name?: string;
+  graduation_year?: number;
   next_task_content?: string | null;
   next_task_date?: string | null;
 }
@@ -163,6 +164,12 @@ const funnelKpi = ref<{
   apply_to_reservation_lead_time_days_avg: number | null;
   reservation_to_interview_lead_time_days_avg: number | null;
   counts: any;
+  graduation_year_breakdown: Array<{
+    graduation_year: number;
+    applications: number;
+    reservations: number;
+    interviews: number;
+  }>;
 }>({
   daily_applications: [],
   applicationToReservationRate: 0,
@@ -171,7 +178,8 @@ const funnelKpi = ref<{
   proposalToJoinRate: 0,
   apply_to_reservation_lead_time_days_avg: null,
   reservation_to_interview_lead_time_days_avg: null,
-  counts: {}
+  counts: {},
+  graduation_year_breakdown: []
 });
 
 // 卒業年度フィルタ用
@@ -188,10 +196,10 @@ const funnelTheme = computed(() => {
     pill: 'text-blue-900 bg-blue-50 border-blue-100'
   };
   if (selectedGraduationYear.value === 2028) return {
-    bg: 'bg-purple-50/50',
-    border: 'border-purple-100/50',
-    text: 'text-purple-600',
-    pill: 'text-purple-900 bg-purple-50 border-purple-100'
+    bg: 'bg-rose-50/50',
+    border: 'border-rose-100/50',
+    text: 'text-rose-600',
+    pill: 'text-rose-900 bg-rose-50 border-rose-100'
   };
   return {
     bg: 'bg-emerald-50/50',
@@ -215,6 +223,16 @@ const activeKgiProgress = computed(() =>
     row.days_remaining >= 0
   )
 );
+
+const grad27Counts = computed(() => {
+  const item = funnelKpi.value.graduation_year_breakdown.find(b => b.graduation_year === 2027);
+  return item || { applications: 0, reservations: 0, interviews: 0 };
+});
+
+const grad28Counts = computed(() => {
+  const item = funnelKpi.value.graduation_year_breakdown.find(b => b.graduation_year === 2028);
+  return item || { applications: 0, reservations: 0, interviews: 0 };
+});
 
 const fetchKgiProgress = async () => {
   const token = localStorage.getItem('token');
@@ -258,7 +276,8 @@ const fetchFunnelKpi = async () => {
     proposalToJoinRate: Number(res.data?.proposal_to_join_rate || 0),
     apply_to_reservation_lead_time_days_avg: res.data?.apply_to_reservation_lead_time_days_avg ?? null,
     reservation_to_interview_lead_time_days_avg: res.data?.reservation_to_interview_lead_time_days_avg ?? null,
-    counts: res.data?.counts || {}
+    counts: res.data?.counts || {},
+    graduation_year_breakdown: res.data?.graduation_year_breakdown || []
   };
   if (Array.isArray(res.data?.graduation_years)) {
     availableGraduationYears.value = res.data.graduation_years;
@@ -1094,12 +1113,38 @@ watch(selectedGraduationYear, fetchFunnelKpi);
               @click="selectedGraduationYear = year"
               class="px-5 py-1.5 rounded-lg text-sm font-black transition-all"
               :class="selectedGraduationYear === year 
-                ? (year === 2027 ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : (year === 2028 ? 'bg-purple-600 text-white shadow-md shadow-purple-100' : 'bg-emerald-600 text-white shadow-md shadow-emerald-100'))
+                ? (year === 2027 ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : (year === 2028 ? 'bg-rose-600 text-white shadow-md shadow-rose-100' : 'bg-emerald-600 text-white shadow-md shadow-emerald-100'))
                 : 'text-gray-400 hover:text-gray-600 hover:bg-white/50'"
             >
               {{ year }}年卒
             </button>
           </template>
+        </div>
+
+        <!-- 27卒 vs 28卒 流入割合 Indicator -->
+        <div v-if="selectedGraduationYear === null && funnelKpi.counts.applications_students > 0" class="mb-8 flex items-center gap-4">
+          <div class="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden flex shadow-inner">
+            <div 
+              class="h-full bg-blue-500 transition-all duration-500" 
+              :style="{ width: `${(grad27Counts.applications / funnelKpi.counts.applications_students) * 100}%` }"
+              title="27卒"
+            ></div>
+            <div 
+              class="h-full bg-rose-400 transition-all duration-500" 
+              :style="{ width: `${(grad28Counts.applications / funnelKpi.counts.applications_students) * 100}%` }"
+              title="28卒"
+            ></div>
+          </div>
+          <div class="flex gap-4 text-xs font-black">
+            <span class="flex items-center gap-1.5 text-blue-600">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+              27卒: {{ ((grad27Counts.applications / funnelKpi.counts.applications_students) * 100).toFixed(1) }}%
+            </span>
+            <span class="flex items-center gap-1.5 text-rose-600">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+              28卒: {{ ((grad28Counts.applications / funnelKpi.counts.applications_students) * 100).toFixed(1) }}%
+            </span>
+          </div>
         </div>
 
         <!-- 可視化ステップ -->
@@ -1109,6 +1154,10 @@ watch(selectedGraduationYear, fetchFunnelKpi);
             <span class="text-4xl mb-3">📩</span>
             <p :class="['text-sm font-bold mb-1 uppercase tracking-wider', funnelTheme.pill.split(' ')[0]]">初回申し込み</p>
             <p :class="['text-3xl font-black', funnelTheme.text]">{{ funnelKpi.counts.applications_students || 0 }}<span class="text-sm ml-1 font-bold">名</span></p>
+            <div v-if="selectedGraduationYear === null" class="mt-2 flex gap-2 text-[10px] font-bold">
+              <span class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">27卒: {{ grad27Counts.applications }}</span>
+              <span class="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">28卒: {{ grad28Counts.applications }}</span>
+            </div>
           </div>
 
           <!-- Arrow & Rate 1 -->
@@ -1126,6 +1175,10 @@ watch(selectedGraduationYear, fetchFunnelKpi);
             <span class="text-4xl mb-3">📅</span>
             <p :class="['text-sm font-bold mb-1 uppercase tracking-wider', funnelTheme.pill.split(' ')[0]]">面談予約</p>
             <p :class="['text-3xl font-black', funnelTheme.text]">{{ funnelKpi.counts.reserved_students || 0 }}<span class="text-sm ml-1 font-bold">名</span></p>
+            <div v-if="selectedGraduationYear === null" class="mt-2 flex gap-2 text-[10px] font-bold">
+              <span class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">27卒: {{ grad27Counts.reservations }}</span>
+              <span class="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">28卒: {{ grad28Counts.reservations }}</span>
+            </div>
           </div>
 
           <!-- Arrow & Rate 2 -->
@@ -1143,6 +1196,10 @@ watch(selectedGraduationYear, fetchFunnelKpi);
             <span class="text-4xl mb-3">🤝</span>
             <p :class="['text-sm font-bold mb-1 uppercase tracking-wider', funnelTheme.pill.split(' ')[0]]">初回面談実施</p>
             <p :class="['text-3xl font-black', funnelTheme.text]">{{ funnelKpi.counts.interviewed_students || 0 }}<span class="text-sm ml-1 font-bold">名</span></p>
+            <div v-if="selectedGraduationYear === null" class="mt-2 flex gap-2 text-[10px] font-bold">
+              <span class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">27卒: {{ grad27Counts.interviews }}</span>
+              <span class="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">28卒: {{ grad28Counts.interviews }}</span>
+            </div>
           </div>
         </div>
 
@@ -1381,10 +1438,16 @@ watch(selectedGraduationYear, fetchFunnelKpi);
                     class="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-lg cursor-grab active:cursor-grabbing select-none w-full hover:bg-gray-50 transition-colors"
                     :class="{ 'opacity-40': draggingParticipant?.student_event_id === p.student_event_id }"
                   >
-                    <!-- 名前 -->
-                    <span class="text-sm font-bold text-gray-900 w-24 shrink-0 truncate">
-                      {{ p.name }}
-                    </span>
+                    <div class="flex flex-col w-24 shrink-0">
+                      <span class="text-sm font-bold text-gray-900 truncate">
+                        {{ p.name }}
+                      </span>
+                      <span v-if="p.graduation_year" :class="['text-[9px] font-black px-1 rounded inline-block w-fit mt-0.5', 
+                        p.graduation_year === 2027 ? 'bg-blue-100 text-blue-700' : 
+                        p.graduation_year === 2028 ? 'bg-rose-100 text-rose-700' : 'bg-gray-100 text-gray-500']">
+                        {{ p.graduation_year % 100 }}卒
+                      </span>
+                    </div>
                     <!-- 大学 -->
                     <span class="text-xs text-gray-700 w-28 shrink-0 truncate">
                       {{ p.university || '-' }}
