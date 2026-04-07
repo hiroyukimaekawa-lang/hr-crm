@@ -1453,6 +1453,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
         </div>
       </div>
     </div>
+  </div>
 
     <!-- Monthly Attendance Modal -->
     <div v-if="showMonthlyAttendanceModal" class="fixed inset-0 z-[90]">
