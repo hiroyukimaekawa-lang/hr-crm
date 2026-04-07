@@ -1868,8 +1868,12 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
         // クエリパラメータ
         const monthParam = String(req.query.month || '').trim(); // YYYY-MM
         const sourceCompany = String(req.query.source_company || '').trim();
+        const graduationYear = req.query.graduation_year;
         const groupByMonth = String(req.query.group_by_month || '') === '1';
         const groupBySource = String(req.query.group_by_source || '') === '1';
+
+        // 卒業年度フィルタ
+        const yearFilter = graduationYear ? `AND s.graduation_year = ${Number(graduationYear)}` : '';
 
         // フィルタ条件文字列
         const mf = monthParam ? `'${monthParam.replace(/'/g, '')}'` : null;
@@ -1881,7 +1885,7 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
 
         const sourceFilter = sourceCompany ? `AND a.source_company = '${sourceCompany.replace(/'/g, "''")}'` : '';
         // interviews / event_proposals には直接 source_company がないので students と JOIN する必要がある箇所で使う
-        const sourceFilterWithStudentJoin = sourceCompany ? `JOIN students s ON s.id = t.student_id WHERE s.source_company = '${sourceCompany.replace(/'/g, "''")}'` : '';
+        const sourceFilterWithStudentJoin = sourceCompany ? `JOIN students s ON s.id = t.student_id WHERE s.source_company = '${sourceCompany.replace(/'/g, "''")}' ${yearFilter.replace('s.', 's.')}` : (yearFilter ? `WHERE 1=1 ${yearFilter}` : '');
         // 既存のクエリが JOIN students s を持っている場合は `AND s.source_company = ...` を使う
         const sSourceFilter = sourceCompany ? `AND s.source_company = '${sourceCompany.replace(/'/g, "''")}'` : '';
 
@@ -1889,23 +1893,23 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
         if (groupByMonth) {
             const monthlyRes = await pool.query(`
                 WITH months AS (
-                    SELECT TO_CHAR(a.applied_at, 'YYYY-MM') AS month FROM applications a JOIN students s ON s.id = a.student_id WHERE a.applied_at IS NOT NULL ${sSourceFilter}
+                    SELECT TO_CHAR(a.applied_at, 'YYYY-MM') AS month FROM applications a JOIN students s ON s.id = a.student_id WHERE a.applied_at IS NOT NULL ${sSourceFilter} ${yearFilter}
                     UNION
-                    SELECT TO_CHAR(a.reservation_created_at, 'YYYY-MM') FROM applications a JOIN students s ON s.id = a.student_id WHERE a.reservation_created_at IS NOT NULL ${sSourceFilter}
+                    SELECT TO_CHAR(a.reservation_created_at, 'YYYY-MM') FROM applications a JOIN students s ON s.id = a.student_id WHERE a.reservation_created_at IS NOT NULL ${sSourceFilter} ${yearFilter}
                     UNION
-                    SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL ${sSourceFilter}
+                    SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL ${sSourceFilter} ${yearFilter}
                 ),
                 app_bm AS (
                     SELECT TO_CHAR(a.applied_at, 'YYYY-MM') AS month, COUNT(DISTINCT a.student_id)::int AS cnt
-                    FROM applications a JOIN students s ON s.id = a.student_id WHERE a.applied_at IS NOT NULL ${sSourceFilter} GROUP BY 1
+                    FROM applications a JOIN students s ON s.id = a.student_id WHERE a.applied_at IS NOT NULL ${sSourceFilter} ${yearFilter} GROUP BY 1
                 ),
                 reserve_bm AS (
                     SELECT TO_CHAR(a.reservation_created_at, 'YYYY-MM') AS month, COUNT(DISTINCT a.student_id)::int AS cnt
-                    FROM applications a JOIN students s ON s.id = a.student_id WHERE a.reservation_created_at IS NOT NULL ${sSourceFilter} GROUP BY 1
+                    FROM applications a JOIN students s ON s.id = a.student_id WHERE a.reservation_created_at IS NOT NULL ${sSourceFilter} ${yearFilter} GROUP BY 1
                 ),
                 interview_bm AS (
                     SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL ${sSourceFilter} GROUP BY 1
+                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL ${sSourceFilter} ${yearFilter} GROUP BY 1
                 ),
                 first_interview_per_student AS (
                     SELECT DISTINCT ON (i.student_id)
@@ -1915,7 +1919,7 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                         i.status
                     FROM interviews i
                     JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL ${sSourceFilter}
+                    WHERE i.student_id IS NOT NULL ${sSourceFilter} ${yearFilter}
                     ORDER BY i.student_id, COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) ASC, i.id ASC
                 ),
                 completed_bm AS (
@@ -1926,11 +1930,11 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                 ),
                 noshow_bm AS (
                     SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL AND COALESCE(i.status,'') = 'no_show' ${sSourceFilter} GROUP BY 1
+                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL AND COALESCE(i.status,'') = 'no_show' ${sSourceFilter} ${yearFilter} GROUP BY 1
                 ),
                 reschedule_bm AS (
                     SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL AND COALESCE(i.status,'') = 'rescheduled' ${sSourceFilter} GROUP BY 1
+                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL AND COALESCE(i.status,'') = 'rescheduled' ${sSourceFilter} ${yearFilter} GROUP BY 1
                 )
                 SELECT
                     m.month,
@@ -1967,64 +1971,66 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT a.student_id)::int AS cnt
                     FROM applications a JOIN students s ON s.id = a.student_id
-                    WHERE a.student_id IS NOT NULL ${appMonthCond} GROUP BY 1
+                    WHERE a.student_id IS NOT NULL ${appMonthCond} ${yearFilter} GROUP BY 1
                 ),
                 reserve_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT a.student_id)::int AS cnt
                     FROM applications a JOIN students s ON s.id = a.student_id
-                    WHERE a.student_id IS NOT NULL AND a.reservation_created_at IS NOT NULL ${resMonthCond} GROUP BY 1
+                    WHERE a.student_id IS NOT NULL AND a.reservation_created_at IS NOT NULL ${resMonthCond} ${yearFilter} GROUP BY 1
                 ),
                 interview_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT i.student_id)::int AS cnt
                     FROM interviews i JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL AND i.scheduled_at IS NOT NULL ${intMonthCond} GROUP BY 1
+                    WHERE i.student_id IS NOT NULL AND i.scheduled_at IS NOT NULL ${intMonthCond} ${yearFilter} GROUP BY 1
                 ),
                 first_interview_per_student AS (
-                    SELECT DISTINCT ON (student_id)
-                        student_id,
-                        scheduled_at,
-                        interviewed_at,
-                        status
-                    FROM interviews
-                    WHERE student_id IS NOT NULL
-                    ORDER BY student_id, COALESCE(scheduled_at, interviewed_at, created_at) ASC, id ASC
+                    SELECT DISTINCT ON (i.student_id)
+                        i.student_id,
+                        i.scheduled_at,
+                        i.interviewed_at,
+                        i.status
+                    FROM interviews i
+                    JOIN students s ON s.id = i.student_id
+                    WHERE i.student_id IS NOT NULL ${yearFilter}
+                    ORDER BY i.student_id, COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) ASC, i.id ASC
                 ),
                 interview_completed_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT fi.student_id)::int AS cnt
                     FROM first_interview_per_student fi JOIN students s ON s.id = fi.student_id
                     WHERE (COALESCE(fi.status,'') IN ('completed','面談実施','interviewed') OR fi.interviewed_at IS NOT NULL)
-                      ${intMonthCond} GROUP BY 1
+                      ${intMonthCond.replace('i.scheduled_at', 'fi.scheduled_at')}
+                    GROUP BY 1
                 ),
                 interview_no_show_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT i.student_id)::int AS cnt
                     FROM interviews i JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL AND COALESCE(i.status,'') = 'no_show' ${intMonthCond} GROUP BY 1
+                    WHERE i.student_id IS NOT NULL AND COALESCE(i.status,'') = 'no_show' ${intMonthCond} ${yearFilter} GROUP BY 1
                 ),
                 interview_rescheduled_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT i.student_id)::int AS cnt
                     FROM interviews i JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL AND COALESCE(i.status,'') = 'rescheduled' ${intMonthCond} GROUP BY 1
+                    WHERE i.student_id IS NOT NULL AND COALESCE(i.status,'') = 'rescheduled' ${intMonthCond} ${yearFilter} GROUP BY 1
                 ),
                 proposal_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company,
                            COUNT(DISTINCT ep.student_id)::int AS cnt
-                    FROM event_proposals ep JOIN students s ON s.id = ep.student_id GROUP BY 1
+                    FROM event_proposals ep JOIN students s ON s.id = ep.student_id WHERE 1=1 ${yearFilter} GROUP BY 1
                 ),
                 join_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company,
                            COUNT(DISTINCT ep.student_id)::int AS cnt
                     FROM event_proposals ep JOIN students s ON s.id = ep.student_id
-                    WHERE COALESCE(ep.status,'') IN ('joined','参加','参加確定','accepted') GROUP BY 1
+                    WHERE (COALESCE(ep.status,'') IN ('joined','参加','参加確定','accepted')) ${yearFilter} GROUP BY 1
                 ),
                 daily_app AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company, COUNT(*)::int AS cnt
                     FROM applications a JOIN students s ON s.id = a.student_id
-                    WHERE DATE(a.applied_at) = CURRENT_DATE GROUP BY 1
+                    WHERE DATE(a.applied_at) = CURRENT_DATE ${yearFilter} GROUP BY 1
                 ),
                 daily_avg AS (
                     SELECT source_company, ROUND(AVG(cnt)::numeric, 2) AS avg_daily_applications
@@ -2032,23 +2038,25 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                         SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company,
                                DATE(a.applied_at) AS day, COUNT(*)::int AS cnt
                         FROM applications a JOIN students s ON s.id = a.student_id
-                        WHERE a.applied_at >= (CURRENT_DATE - INTERVAL '30 days') GROUP BY 1,2
+                        WHERE a.applied_at >= (CURRENT_DATE - INTERVAL '30 days') ${yearFilter} GROUP BY 1,2
                     ) t GROUP BY source_company
                 ),
                 daily_setting AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company, COUNT(*)::int AS cnt
                     FROM applications a JOIN students s ON s.id = a.student_id
-                    WHERE DATE(a.reservation_created_at) = CURRENT_DATE GROUP BY 1
+                    WHERE DATE(a.reservation_created_at) = CURRENT_DATE ${yearFilter} GROUP BY 1
                 ),
                 app_to_reserve_lt AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company),''),'未設定') AS source_company,
                         ROUND(AVG(EXTRACT(EPOCH FROM (a.reservation_created_at - a.applied_at))/86400.0)::numeric, 2) AS days
                     FROM applications a JOIN students s ON s.id = a.student_id
-                    WHERE a.applied_at IS NOT NULL AND a.reservation_created_at IS NOT NULL GROUP BY 1
+                    WHERE a.applied_at IS NOT NULL AND a.reservation_created_at IS NOT NULL ${yearFilter} GROUP BY 1
                 ),
                 latest_interview AS (
                     SELECT DISTINCT ON (i.student_id) i.student_id, i.scheduled_at
-                    FROM interviews i WHERE i.student_id IS NOT NULL
+                    FROM interviews i
+                    JOIN students s ON s.id = i.student_id
+                    WHERE i.student_id IS NOT NULL ${yearFilter}
                     ORDER BY i.student_id, COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) DESC, i.id DESC
                 ),
                 reserve_to_interview_lt AS (
@@ -2056,7 +2064,7 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                         ROUND(AVG(EXTRACT(EPOCH FROM (li.scheduled_at - a.reservation_created_at))/86400.0)::numeric, 2) AS days
                     FROM applications a JOIN students s ON s.id = a.student_id
                     JOIN latest_interview li ON li.student_id = a.student_id
-                    WHERE a.reservation_created_at IS NOT NULL AND li.scheduled_at IS NOT NULL GROUP BY 1
+                    WHERE a.reservation_created_at IS NOT NULL AND li.scheduled_at IS NOT NULL ${yearFilter} GROUP BY 1
                 )
                 SELECT
                     src.source_company,
@@ -2100,32 +2108,38 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
             return;
         }
 
+        // 卒業年度一覧を取得
+        const yearsRes = await pool.query(
+            'SELECT DISTINCT graduation_year FROM students WHERE graduation_year IS NOT NULL ORDER BY graduation_year'
+        );
+        const graduationYears = yearsRes.rows.map(r => r.graduation_year);
+
         // ─── 全体集計（月フィルタ対応） ───
         const [dailyRes, dailySettingsRes, summaryRes, lostRes] = await Promise.all([
             pool.query(`
                 SELECT DATE(a.applied_at) AS day, COUNT(*)::int AS count
                 FROM applications a JOIN students s ON s.id = a.student_id
-                WHERE a.applied_at IS NOT NULL ${dailyAppCond} ${sSourceFilter}
+                WHERE a.applied_at IS NOT NULL ${dailyAppCond} ${sSourceFilter} ${yearFilter}
                 GROUP BY DATE(a.applied_at) ORDER BY day DESC LIMIT 62
             `),
             pool.query(`
                 SELECT DATE(a.reservation_created_at) AS day, COUNT(*)::int AS count
                 FROM applications a JOIN students s ON s.id = a.student_id
-                WHERE a.reservation_created_at IS NOT NULL ${dailySetCond} ${sSourceFilter}
+                WHERE a.reservation_created_at IS NOT NULL ${dailySetCond} ${sSourceFilter} ${yearFilter}
                 GROUP BY DATE(a.reservation_created_at) ORDER BY day DESC LIMIT 62
             `),
             pool.query(`
                 WITH app_s AS (
                     SELECT COUNT(DISTINCT a.student_id)::int AS cnt FROM applications a JOIN students s ON s.id = a.student_id
-                    WHERE a.student_id IS NOT NULL ${appMonthCond} ${sSourceFilter}
+                    WHERE a.student_id IS NOT NULL ${appMonthCond} ${sSourceFilter} ${yearFilter}
                 ),
                 reserve_s AS (
                     SELECT COUNT(DISTINCT a.student_id)::int AS cnt FROM applications a JOIN students s ON s.id = a.student_id
-                    WHERE a.student_id IS NOT NULL AND a.reservation_created_at IS NOT NULL ${resMonthCond} ${sSourceFilter}
+                    WHERE a.student_id IS NOT NULL AND a.reservation_created_at IS NOT NULL ${resMonthCond} ${sSourceFilter} ${yearFilter}
                 ),
                 interview_s AS (
                     SELECT COUNT(DISTINCT i.student_id)::int AS cnt FROM interviews i JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL AND i.scheduled_at IS NOT NULL ${intMonthCond} ${sSourceFilter}
+                    WHERE i.student_id IS NOT NULL AND i.scheduled_at IS NOT NULL ${intMonthCond} ${sSourceFilter} ${yearFilter}
                 ),
                 first_interview_per_student AS (
                     SELECT DISTINCT ON (i.student_id)
@@ -2135,7 +2149,7 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                         i.status
                     FROM interviews i
                     JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL ${sSourceFilter}
+                    WHERE i.student_id IS NOT NULL ${sSourceFilter} ${yearFilter}
                     ORDER BY i.student_id,
                              COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) ASC,
                              i.id ASC
@@ -2143,36 +2157,37 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                 interview_completed_s AS (
                     SELECT COUNT(DISTINCT student_id)::int AS cnt
                     FROM first_interview_per_student
-                    WHERE COALESCE(status,'') IN ('completed','面談実施','interviewed')
-                       OR interviewed_at IS NOT NULL
+                    WHERE (COALESCE(status,'') IN ('completed','面談実施','interviewed')
+                       OR interviewed_at IS NOT NULL)
+                      ${intMonthCond.replace('i.scheduled_at', 'scheduled_at')}
                 ),
                 interview_no_show_s AS (
                     SELECT COUNT(DISTINCT i.student_id)::int AS cnt FROM interviews i JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL AND COALESCE(i.status,'') = 'no_show' ${intMonthCond} ${sSourceFilter}
+                    WHERE i.student_id IS NOT NULL AND COALESCE(i.status,'') = 'no_show' ${intMonthCond} ${sSourceFilter} ${yearFilter}
                 ),
                 interview_rescheduled_s AS (
                     SELECT COUNT(DISTINCT i.student_id)::int AS cnt FROM interviews i JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL AND COALESCE(i.status,'') = 'rescheduled' ${intMonthCond} ${sSourceFilter}
+                    WHERE i.student_id IS NOT NULL AND COALESCE(i.status,'') = 'rescheduled' ${intMonthCond} ${sSourceFilter} ${yearFilter}
                 ),
                 apply_to_reserve_lt AS (
                     SELECT ROUND(AVG(EXTRACT(EPOCH FROM (a.reservation_created_at - a.applied_at))/86400.0)::numeric, 2) AS days
-                    FROM applications a JOIN students s ON s.id = a.student_id WHERE a.applied_at IS NOT NULL AND a.reservation_created_at IS NOT NULL ${sSourceFilter}
+                    FROM applications a JOIN students s ON s.id = a.student_id WHERE a.applied_at IS NOT NULL AND a.reservation_created_at IS NOT NULL ${sSourceFilter} ${yearFilter}
                 ),
                 latest_interview AS (
                     SELECT DISTINCT ON (i.student_id) i.student_id, i.scheduled_at
-                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.student_id IS NOT NULL ${sSourceFilter}
+                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.student_id IS NOT NULL ${sSourceFilter} ${yearFilter}
                     ORDER BY i.student_id, COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) DESC, i.id DESC
                 ),
                 reserve_to_interview_lt AS (
                     SELECT ROUND(AVG(EXTRACT(EPOCH FROM (li.scheduled_at - a.reservation_created_at))/86400.0)::numeric, 2) AS days
                     FROM applications a JOIN latest_interview li ON li.student_id = a.student_id
                     JOIN students s ON s.id = a.student_id
-                    WHERE a.reservation_created_at IS NOT NULL AND li.scheduled_at IS NOT NULL ${sSourceFilter}
+                    WHERE a.reservation_created_at IS NOT NULL AND li.scheduled_at IS NOT NULL ${sSourceFilter} ${yearFilter}
                 ),
-                proposal_s AS (SELECT COUNT(DISTINCT ep.student_id)::int AS cnt FROM event_proposals ep JOIN students s ON s.id = ep.student_id WHERE true ${sSourceFilter}),
+                proposal_s AS (SELECT COUNT(DISTINCT ep.student_id)::int AS cnt FROM event_proposals ep JOIN students s ON s.id = ep.student_id WHERE true ${sSourceFilter} ${yearFilter}),
                 join_s AS (
                     SELECT COUNT(DISTINCT ep.student_id)::int AS cnt FROM event_proposals ep JOIN students s ON s.id = ep.student_id
-                    WHERE COALESCE(ep.status,'') IN ('joined','参加','参加確定','accepted') ${sSourceFilter}
+                    WHERE COALESCE(ep.status,'') IN ('joined','参加','参加確定','accepted') ${sSourceFilter} ${yearFilter}
                 )
                 SELECT
                     app_s.cnt AS applications_students,
@@ -2193,7 +2208,7 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                 FROM event_proposals ep
                 JOIN students s ON s.id = ep.student_id
                 LEFT JOIN lost_reasons lr ON lr.id = ep.lost_reason_id
-                WHERE ep.lost_reason_id IS NOT NULL AND COALESCE(ep.status,'') IN ('lost','失注') ${sSourceFilter}
+                WHERE ep.lost_reason_id IS NOT NULL AND COALESCE(ep.status,'') IN ('lost','失注') ${sSourceFilter} ${yearFilter}
                 GROUP BY COALESCE(lr.reason_name,'未設定')
                 ORDER BY count DESC, reason_name ASC LIMIT 10
             `)
@@ -2223,6 +2238,7 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
             no_show_rate: rate(noShowStudents, interviewScheduledStudents),
             reschedule_rate: rate(rescheduledStudents, interviewScheduledStudents),
             lost_reason_ranking: lostRes.rows,
+            graduation_years: graduationYears,
             counts: {
                 applications_students: applicationsStudents,
                 reserved_students: reservedStudents,

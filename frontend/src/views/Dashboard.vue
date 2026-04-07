@@ -154,14 +154,29 @@ const interviewExecutionByStaff = ref<Array<{
   first_interview_execution_rate: number | null;
 }>>([]);
 const sourceCompanyFilter = ref('ALL');
-const funnelKpi = ref({
-  daily_applications: [] as Array<{ day: string; count: number }>,
+const funnelKpi = ref<{
+  daily_applications: any[];
+  applicationToReservationRate: number;
+  reservationToInterviewRate: number;
+  interviewToProposalRate: number;
+  proposalToJoinRate: number;
+  apply_to_reservation_lead_time_days_avg: number | null;
+  reservation_to_interview_lead_time_days_avg: number | null;
+  counts: any;
+}>({
+  daily_applications: [],
   applicationToReservationRate: 0,
   reservationToInterviewRate: 0,
   interviewToProposalRate: 0,
   proposalToJoinRate: 0,
-  lostReasonRanking: [] as Array<{ reason_name: string; count: number }>
+  apply_to_reservation_lead_time_days_avg: null,
+  reservation_to_interview_lead_time_days_avg: null,
+  counts: {}
 });
+
+// 卒業年度フィルタ用
+const selectedGraduationYear = ref<number | null>(null);
+const availableGraduationYears = ref<number[]>([]);
 
 const kgiProgress = ref<KgiProgress[]>([]);
 
@@ -199,15 +214,27 @@ const fetchData = async () => {
 
 const fetchFunnelKpi = async () => {
   const token = localStorage.getItem('token');
-  const res = await api.get('/api/students/metrics/funnel', { headers: { Authorization: token } });
+  const params: any = {};
+  if (selectedGraduationYear.value) {
+    params.graduation_year = selectedGraduationYear.value;
+  }
+  const res = await api.get('/api/students/metrics/funnel', { 
+    headers: { Authorization: token },
+    params
+  });
   funnelKpi.value = {
     daily_applications: Array.isArray(res.data?.daily_applications) ? res.data.daily_applications : [],
     applicationToReservationRate: Number(res.data?.application_to_reservation_rate || 0),
     reservationToInterviewRate: Number(res.data?.reservation_to_interview_rate || 0),
     interviewToProposalRate: Number(res.data?.interview_to_proposal_rate || 0),
     proposalToJoinRate: Number(res.data?.proposal_to_join_rate || 0),
-    lostReasonRanking: Array.isArray(res.data?.lost_reason_ranking) ? res.data.lost_reason_ranking : []
+    apply_to_reservation_lead_time_days_avg: res.data?.apply_to_reservation_lead_time_days_avg ?? null,
+    reservation_to_interview_lead_time_days_avg: res.data?.reservation_to_interview_lead_time_days_avg ?? null,
+    counts: res.data?.counts || {}
   };
+  if (Array.isArray(res.data?.graduation_years)) {
+    availableGraduationYears.value = res.data.graduation_years;
+  }
 };
 
 const fetchInterviewMetrics = async () => {
@@ -938,6 +965,7 @@ onMounted(() => {
   });
 });
 watch(sourceCompanyFilter, fetchInterviewMetrics);
+watch(selectedGraduationYear, fetchFunnelKpi);
 </script>
 
 <template>
@@ -1010,13 +1038,49 @@ watch(sourceCompanyFilter, fetchInterviewMetrics);
         </div>
       </div>
 
+      <!-- 初回ファネル登録セクション -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
-        <div class="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6 relative">
-          <div class="flex flex-col md:flex-row md:items-center gap-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div>
             <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <span class="w-1.5 h-6 bg-emerald-600 rounded-full"></span>
-              イベント別ヨミ表 (A/B/C)
+              <span class="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+              初回ファネル登録
             </h2>
+            <p class="text-sm text-gray-500 mt-1 uppercase tracking-wider opacity-60">Initial application to first interview progress</p>
+          </div>
+        </div>
+
+        <!-- 卒業年度フィルタ -->
+        <div v-if="availableGraduationYears.length > 0" class="flex items-center gap-2 mb-6 bg-gray-50/50 p-2 rounded-xl border border-gray-100 w-fit">
+          <button
+            @click="selectedGraduationYear = null"
+            class="px-5 py-1.5 rounded-lg text-sm font-black transition-all"
+            :class="selectedGraduationYear === null 
+              ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200' 
+              : 'text-gray-400 hover:text-gray-600 hover:bg-white/50'"
+          >
+            全体
+          </button>
+          <template v-for="year in availableGraduationYears" :key="year">
+            <button
+              @click="selectedGraduationYear = year"
+              class="px-5 py-1.5 rounded-lg text-sm font-black transition-all"
+              :class="selectedGraduationYear === year 
+                ? (year === 2027 ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : (year === 2028 ? 'bg-purple-600 text-white shadow-md shadow-purple-100' : 'bg-emerald-600 text-white shadow-md shadow-emerald-100'))
+                : 'text-gray-400 hover:text-gray-600 hover:bg-white/50'"
+            >
+              {{ year }}年卒
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
+          <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <span class="w-1.5 h-6 bg-emerald-600 rounded-full"></span>
+            イベント別ヨミ表 (A/B/C)
+          </h2>
             <div v-if="selectedYomiEvent" class="flex flex-wrap gap-4 text-xs font-bold text-slate-500 mb-2 md:mb-0">
               <span class="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg border border-emerald-100">
                 <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
