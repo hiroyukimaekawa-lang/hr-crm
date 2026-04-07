@@ -27,7 +27,7 @@ const fetchSources = async () => {
 
 /* ───────── KPI データ ───────── */
 const funnelKpi = ref({
-  daily_applications: [] as Array<{ day: string; count: number }>,
+  daily_applications: [] as Array<{ day: string; count: number; count_27: number; count_28: number }>,
   application_to_reservation_rate: 0,
   apply_to_reservation_lead_time_days_avg: null as number | null,
   reservation_to_interview_lead_time_days_avg: null as number | null,
@@ -123,6 +123,20 @@ const avgDailyApps = computed(() => {
   const data = dailyApps30Days.value;
   if (data.length === 0) return 0;
   const total = data.reduce((sum, d) => sum + d.count, 0);
+  return (total / data.length).toFixed(1);
+});
+
+const avgDailyApps27 = computed(() => {
+  const data = dailyApps30Days.value;
+  if (data.length === 0) return '0';
+  const total = data.reduce((sum, d) => sum + (d.count_27 || 0), 0);
+  return (total / data.length).toFixed(1);
+});
+
+const avgDailyApps28 = computed(() => {
+  const data = dailyApps30Days.value;
+  if (data.length === 0) return '0';
+  const total = data.reduce((sum, d) => sum + (d.count_28 || 0), 0);
   return (total / data.length).toFixed(1);
 });
 
@@ -367,16 +381,57 @@ const fetchEventsData = async () => {
           </div>
         </div>
 
+        <!-- 凡例 & サマリカード -->
+        <div class="flex flex-wrap items-center gap-4 mb-6">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+            <span class="w-3 h-3 rounded-sm bg-blue-500 inline-block"></span>27卒
+          </div>
+          <div class="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+            <span class="w-3 h-3 rounded-sm bg-rose-400 inline-block"></span>28卒
+          </div>
+          <div class="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+            <span class="w-3 h-3 rounded-sm bg-slate-300 inline-block"></span>その他
+          </div>
+          <div class="ml-auto flex flex-wrap gap-3">
+            <div class="px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-100">
+              <p class="text-[9px] uppercase tracking-wider text-blue-400 font-bold">27卒 1日平均</p>
+              <p class="text-base font-black text-blue-700">{{ avgDailyApps27 }}<span class="text-[9px] ml-0.5">名</span></p>
+            </div>
+            <div class="px-3 py-1.5 bg-rose-50 rounded-lg border border-rose-100">
+              <p class="text-[9px] uppercase tracking-wider text-rose-400 font-bold">28卒 1日平均</p>
+              <p class="text-base font-black text-rose-700">{{ avgDailyApps28 }}<span class="text-[9px] ml-0.5">名</span></p>
+            </div>
+          </div>
+        </div>
+
         <div class="h-48 md:h-64 flex items-end gap-1 px-2 border-b border-gray-100 relative">
           <div 
             v-for="(d, idx) in (isMobile ? dailyApps30Days.slice(-14) : dailyApps30Days)" 
             :key="d.day"
-            class="flex-1 bg-blue-500 hover:bg-blue-600 rounded-t-sm transition-all relative group"
+            class="flex-1 flex flex-col-reverse relative group"
             :style="{ height: `${(d.count / maxDailyApps) * 100}%` }"
           >
+            <!-- その他 (27卒・28卒以外) -->
+            <div
+              class="w-full bg-slate-300 rounded-t-none"
+              :style="{ height: `${d.count > 0 ? ((d.count - (d.count_27||0) - (d.count_28||0)) / d.count) * 100 : 0}%` }"
+            ></div>
+            <!-- 28卒 -->
+            <div
+              class="w-full bg-rose-400"
+              :style="{ height: `${d.count > 0 ? ((d.count_28||0) / d.count) * 100 : 0}%` }"
+            ></div>
+            <!-- 27卒 -->
+            <div
+              class="w-full bg-blue-500 rounded-t-sm"
+              :style="{ height: `${d.count > 0 ? ((d.count_27||0) / d.count) * 100 : 0}%` }"
+            ></div>
             <!-- ツールチップ -->
-            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-800 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10 font-bold">
-              {{ d.day.split('-').slice(1).join('/') }}: {{ d.count }}名
+            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col items-center gap-0.5 bg-gray-900 text-white text-[10px] px-2.5 py-1.5 rounded-lg whitespace-nowrap z-10 font-bold shadow-lg">
+              <span class="text-gray-300">{{ d.day.split('-').slice(1).join('/') }}</span>
+              <span class="text-white">全体: {{ d.count }}名</span>
+              <span class="text-blue-300">27卒: {{ d.count_27 || 0 }}名</span>
+              <span class="text-rose-300">28卒: {{ d.count_28 || 0 }}名</span>
             </div>
             <!-- X軸ラベル -->
             <div v-if="(isMobile ? idx % 4 === 0 : idx % 5 === 0) || idx === (isMobile ? 13 : 29)" class="absolute top-full mt-2 left-1/2 -translate-x-1/2 text-[10px] text-gray-400 font-bold whitespace-nowrap">

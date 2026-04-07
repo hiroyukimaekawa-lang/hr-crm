@@ -1956,7 +1956,11 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         // ─── 全体集計（月フィルタ対応） ───
         const [dailyRes, dailySettingsRes, summaryRes, gradBreakdownRes, lostRes] = yield Promise.all([
             db_1.default.query(`
-                SELECT DATE(a.applied_at) AS day, COUNT(*)::int AS count
+                SELECT
+                    DATE(a.applied_at) AS day,
+                    COUNT(*)::int AS count,
+                    COUNT(*) FILTER (WHERE s.graduation_year = 2027)::int AS count_27,
+                    COUNT(*) FILTER (WHERE s.graduation_year = 2028)::int AS count_28
                 FROM applications a JOIN students s ON s.id = a.student_id
                 WHERE a.applied_at IS NOT NULL ${dailyAppCond} ${sSourceFilter} ${yearFilter}
                 GROUP BY DATE(a.applied_at) ORDER BY day DESC LIMIT 62
