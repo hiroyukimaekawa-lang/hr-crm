@@ -394,12 +394,12 @@ const fetchEventsData = async () => {
           </div>
           <div class="ml-auto flex flex-wrap gap-3">
             <div class="px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-100">
-              <p class="text-[9px] uppercase tracking-wider text-blue-400 font-bold">27卒 1日平均</p>
-              <p class="text-base font-black text-blue-700">{{ avgDailyApps27 }}<span class="text-[9px] ml-0.5">名</span></p>
+              <p class="text-[9px] uppercase tracking-wider text-blue-400 font-bold">27卒 申込数</p>
+              <p class="text-base font-black text-blue-700">{{ grad27Counts.applications }}<span class="text-[9px] ml-0.5">名</span></p>
             </div>
             <div class="px-3 py-1.5 bg-rose-50 rounded-lg border border-rose-100">
-              <p class="text-[9px] uppercase tracking-wider text-rose-400 font-bold">28卒 1日平均</p>
-              <p class="text-base font-black text-rose-700">{{ avgDailyApps28 }}<span class="text-[9px] ml-0.5">名</span></p>
+              <p class="text-[9px] uppercase tracking-wider text-rose-400 font-bold">28卒 申込数</p>
+              <p class="text-base font-black text-rose-700">{{ grad28Counts.applications }}<span class="text-[9px] ml-0.5">名</span></p>
             </div>
           </div>
         </div>
