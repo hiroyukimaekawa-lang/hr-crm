@@ -64,7 +64,7 @@ const fetchFunnelData = async () => {
     const sourceParam = selectedSource.value ? { source_company: selectedSource.value } : {};
     const monthParam = selectedMonth.value ? { month: selectedMonth.value } : {};
 
-    const [kpiRes, historyRes] = await Promise.all([
+    const [kpiRes, historyRes, overviewRes] = await Promise.all([
       api.get('/api/students/metrics/funnel', {
         headers: { Authorization: token },
         params: { ...sourceParam, ...monthParam }
@@ -72,11 +72,31 @@ const fetchFunnelData = async () => {
       api.get('/api/students/metrics/funnel', {
         headers: { Authorization: token },
         params: { group_by_month: '1', ...sourceParam }
+      }),
+      api.get('/api/kpi/overview', {
+        headers: { Authorization: token },
+        params: { ...sourceParam, ...monthParam }
       })
     ]);
 
     funnelKpi.value = kpiRes.data;
     monthlyHistory.value = historyRes.data;
+    
+    // Override funnel counts and rates with the canonical KPI values
+    const overview = overviewRes.data;
+    if (overview.funnel) {
+      funnelKpi.value.counts.applications_students = overview.funnel.applications || 0;
+      funnelKpi.value.counts.reserved_students = overview.funnel.reservations || 0;
+      funnelKpi.value.counts.interview_scheduled_students = overview.funnel.interview_scheduled || 0;
+      funnelKpi.value.counts.interviewed_students = overview.funnel.interview_completed || 0;
+      
+      const app = overview.funnel.applications;
+      const resv = overview.funnel.reservations;
+      const intv = overview.funnel.interview_completed;
+      
+      funnelKpi.value.application_to_reservation_rate = app > 0 ? Number(((resv / app) * 100).toFixed(2)) : 0;
+      funnelKpi.value.reservation_to_interview_rate = resv > 0 ? Number(((intv / resv) * 100).toFixed(2)) : 0;
+    }
   } catch (err) {
     console.error('Error fetching funnel data:', err);
   } finally {

@@ -48,13 +48,11 @@ const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admi
 
 const menuItems = computed(() => [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard, path: '/dashboard' },
-  { id: 'students', label: '学生一覧', icon: Users, path: '/students' },
-  { id: 'events', label: 'イベント一覧', icon: Calendar, path: '/events' },
-  { id: 'lead-time', label: '学生流入数', icon: ChartColumn, path: '/lead-time' },
-  { id: 'event-kpi', label: 'KPI', icon: TrendingUp, path: '/event-kpi' },
-  { id: 'settings', label: '設定', icon: Settings, path: '/settings' },
-  { id: 'past-events', label: '過去イベント', icon: History, path: '/past-events' },
-  { id: 'monthly-sales', label: '月間売上', icon: TrendingUp, path: '/monthly-sales' }
+  { id: 'kpi', label: 'KPI', icon: TrendingUp, path: '/kpi' },
+  { id: 'students', label: '学生管理', icon: Users, path: '/students' },
+  { id: 'events', label: 'イベント管理', icon: Calendar, path: '/events' },
+  { id: 'lead-time', label: 'ファネル', icon: ChartColumn, path: '/lead-time' },
+  { id: 'settings', label: '設定', icon: Settings, path: '/settings' }
 ]);
 
 const logout = () => {

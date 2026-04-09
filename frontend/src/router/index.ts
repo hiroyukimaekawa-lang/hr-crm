@@ -12,6 +12,8 @@ import Settings from '../views/Settings.vue';
 import PastEvents from '../views/PastEvents.vue';
 import MonthlySales from '../views/MonthlySales.vue';
 
+import KpiDashboard from '../views/KpiDashboard.vue';
+
 const routes = [
   { path: '/', redirect: '/students' },
   { path: '/login', component: Login },
@@ -22,10 +24,11 @@ const routes = [
   { path: '/events', component: EventList },
   { path: '/events/:id', component: EventDetail },
   { path: '/lead-time', name: '初回ファネル登録', component: LeadTime },
-  { path: '/event-kpi', component: EventKpi },
+  { path: '/kpi', component: KpiDashboard },
+  { path: '/event-kpi', redirect: '/kpi' },
   { path: '/settings', component: Settings },
   { path: '/past-events', component: PastEvents },
-  { path: '/monthly-sales', component: MonthlySales }
+  { path: '/monthly-sales', redirect: '/kpi' }
 ];
 
 const router = createRouter({

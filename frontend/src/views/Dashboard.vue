@@ -261,10 +261,12 @@ const fetchFunnelKpi = async () => {
   if (selectedGraduationYear.value) {
     params.graduation_year = selectedGraduationYear.value;
   }
-  const res = await api.get('/api/students/metrics/funnel', { 
-    headers: { Authorization: token },
-    params
-  });
+  
+  const [res, overviewRes] = await Promise.all([
+    api.get('/api/students/metrics/funnel', { headers: { Authorization: token }, params }),
+    api.get('/api/kpi/overview', { headers: { Authorization: token }, params })
+  ]);
+  
   funnelKpi.value = {
     daily_applications: Array.isArray(res.data?.daily_applications) ? res.data.daily_applications : [],
     applicationToReservationRate: Number(res.data?.application_to_reservation_rate || 0),
@@ -276,6 +278,23 @@ const fetchFunnelKpi = async () => {
     counts: res.data?.counts || {},
     graduation_year_breakdown: res.data?.graduation_year_breakdown || []
   };
+  
+  // Override funnel counts and rates with the canonical KPI values
+  const overview = overviewRes.data;
+  if (overview.funnel) {
+    funnelKpi.value.counts.applications_students = overview.funnel.applications || 0;
+    funnelKpi.value.counts.reserved_students = overview.funnel.reservations || 0;
+    funnelKpi.value.counts.interview_scheduled_students = overview.funnel.interview_scheduled || 0;
+    funnelKpi.value.counts.interviewed_students = overview.funnel.interview_completed || 0;
+    
+    const app = overview.funnel.applications;
+    const resv = overview.funnel.reservations;
+    const intv = overview.funnel.interview_completed;
+    
+    funnelKpi.value.applicationToReservationRate = app > 0 ? Number(((resv / app) * 100).toFixed(2)) : 0;
+    funnelKpi.value.reservationToInterviewRate = resv > 0 ? Number(((intv / resv) * 100).toFixed(2)) : 0;
+  }
+  
   if (Array.isArray(res.data?.graduation_years)) {
     availableGraduationYears.value = res.data.graduation_years;
   }

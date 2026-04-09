@@ -120,6 +120,24 @@ CREATE TABLE IF NOT EXISTS source_categories (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- KPI Goal Settings (目標値のDB管理)
+CREATE TABLE IF NOT EXISTS kpi_goal_settings (
+    id SERIAL PRIMARY KEY,
+    scope_type VARCHAR(20) NOT NULL DEFAULT 'global',
+    scope_id INTEGER,
+    source_company VARCHAR(255),
+    period_type VARCHAR(20) NOT NULL DEFAULT 'monthly',
+    period_start DATE NOT NULL,
+    period_end DATE,
+    metric_key VARCHAR(100) NOT NULL,
+    metric_label VARCHAR(255),
+    target_value NUMERIC(15,2) NOT NULL DEFAULT 0,
+    meta JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_kpi_goal UNIQUE (scope_type, COALESCE(scope_id, 0), COALESCE(source_company, ''), period_type, period_start, metric_key)
+);
+
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_students_staff_id ON students(staff_id);
 CREATE INDEX IF NOT EXISTS idx_students_source_company ON students(source_company);
@@ -135,3 +153,5 @@ CREATE INDEX IF NOT EXISTS idx_event_dates_event_id_date ON event_dates(event_id
 CREATE INDEX IF NOT EXISTS idx_interview_logs_student_created ON interview_logs(student_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_interview_schedules_student_round ON interview_schedules(student_id, round_no);
 CREATE INDEX IF NOT EXISTS idx_interview_schedules_student_type ON interview_schedules(student_id, schedule_type);
+CREATE INDEX IF NOT EXISTS idx_kpi_goals_scope ON kpi_goal_settings(scope_type, period_type, period_start);
+CREATE INDEX IF NOT EXISTS idx_kpi_goals_metric ON kpi_goal_settings(metric_key, period_start);
