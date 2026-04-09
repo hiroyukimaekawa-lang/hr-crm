@@ -24,6 +24,10 @@ import {
   Settings2,
   Save,
   ChevronRight,
+  Edit3,
+  Plus,
+  Trash2,
+  X,
 } from 'lucide-vue-next';
 
 // ─── State ───
@@ -52,6 +56,19 @@ const goalForm = ref({
   cvr_entry_to_interview: 60,
   cvr_interview_to_setting: 50,
   cvr_inflow_to_setting: 40,
+});
+
+// Event editing
+const showEventEditor = ref(false);
+const editingEvent = ref<EventKpiItem | null>(null);
+const eventForm = ref({
+  target_seats: 0,
+  unit_price: 0,
+  entry_deadline: '',
+  kpi_seat_to_entry_rate: 70,
+  kpi_entry_to_interview_rate: 60,
+  kpi_interview_to_inflow_rate: 50,
+  kpi_custom_steps: [] as any[],
 });
 
 // ─── Month options ───
@@ -155,6 +172,62 @@ watch(activeTab, (tab) => {
 });
 
 onMounted(loadAll);
+
+// ─── Actions ───
+
+const openEventEditor = (event: EventKpiItem) => {
+  editingEvent.value = event;
+  eventForm.value = {
+    target_seats: event.target_seats,
+    unit_price: event.unit_price || 5000,
+    entry_deadline: event.deadline ? event.deadline.slice(0, 10) : '',
+    kpi_seat_to_entry_rate: event.kpi_seat_to_entry_rate,
+    kpi_entry_to_interview_rate: event.kpi_entry_to_interview_rate,
+    kpi_interview_to_inflow_rate: event.kpi_interview_to_inflow_rate,
+    kpi_custom_steps: JSON.parse(JSON.stringify(event.kpi_custom_steps || [])),
+  };
+  showEventEditor.value = true;
+};
+
+const addCustomStep = () => {
+  eventForm.value.kpi_custom_steps.push({ label: '', rate: 50, position: 4 });
+};
+
+const removeCustomStep = (idx: number) => {
+  eventForm.value.kpi_custom_steps.splice(idx, 1);
+};
+
+const saveEventSettings = async () => {
+  if (!editingEvent.value) return;
+  saving.value = true;
+  try {
+    await kpiApi.updateEventKpi(editingEvent.value.event_id, eventForm.value);
+    showEventEditor.value = false;
+    await fetchEvents();
+  } catch (err) {
+    console.error('Failed to save event settings', err);
+    alert('設定の保存に失敗しました');
+  } finally {
+    saving.value = false;
+  }
+};
+
+const applyTemplate = (type: 'simple' | 'extended') => {
+  if (type === 'simple') {
+    eventForm.value.kpi_seat_to_entry_rate = 70;
+    eventForm.value.kpi_entry_to_interview_rate = 60;
+    eventForm.value.kpi_interview_to_inflow_rate = 50;
+    eventForm.value.kpi_custom_steps = [];
+  } else {
+    eventForm.value.kpi_seat_to_entry_rate = 70;
+    eventForm.value.kpi_entry_to_interview_rate = 60;
+    eventForm.value.kpi_interview_to_inflow_rate = 50;
+    eventForm.value.kpi_custom_steps = [
+      { label: '面談②', rate: 70, position: 1 },
+      { label: '合格', rate: 80, position: 1 }
+    ];
+  }
+};
 
 // ─── Computed helpers ───
 
@@ -472,6 +545,7 @@ const totalCurrentSales = computed(() =>
               <table class="w-full text-sm">
                 <thead class="bg-gray-50 border-b border-gray-200">
                   <tr>
+                    <th class="px-4 py-3 text-left text-xs font-bold text-gray-500">アクション</th>
                     <th class="px-4 py-3 text-left text-xs font-bold text-gray-500">イベント名</th>
                     <th class="px-4 py-3 text-right text-xs font-bold text-gray-500">締日</th>
                     <th class="px-4 py-3 text-right text-xs font-bold text-gray-500">残日数</th>
@@ -486,6 +560,15 @@ const totalCurrentSales = computed(() =>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                   <tr v-for="e in displayEvents" :key="e.event_id" class="hover:bg-gray-50" :class="{ 'opacity-60 bg-gray-50/50': e.days_remaining < -1 }">
+                    <td class="px-4 py-3">
+                      <button 
+                        @click="openEventEditor(e)"
+                        class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="KPI設定を編集"
+                      >
+                        <Edit3 class="w-4 h-4" />
+                      </button>
+                    </td>
                     <td class="px-4 py-3 font-bold text-gray-900 max-w-[200px] truncate" :title="e.event_title">
                       <div class="flex items-center gap-2">
                         <span v-if="e.days_remaining < -1" class="text-[8px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded uppercase">Finished</span>
@@ -507,6 +590,116 @@ const totalCurrentSales = computed(() =>
                   </tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Event Settings Drawer -->
+        <div v-if="showEventEditor" class="fixed inset-0 z-50 flex justify-end">
+          <div class="fixed inset-0 bg-black/30 backdrop-blur-sm" @click="showEventEditor = false"></div>
+          <div class="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            <div class="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h2 class="text-xl font-black text-gray-900">KPI設定: {{ editingEvent?.event_title }}</h2>
+                <p class="text-xs text-gray-500 mt-1">イベント別の目標値とカスタムフローを設定します。</p>
+              </div>
+              <button @click="showEventEditor = false" class="p-2 hover:bg-gray-100 rounded-full text-gray-400">
+                <X class="w-6 h-6" />
+              </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-6 space-y-6">
+              <!-- Basic Targets -->
+              <section class="space-y-4">
+                <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider">目標値設定</h3>
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">目標着座数</label>
+                    <input v-model.number="eventForm.target_seats" type="number" class="w-full px-3 py-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500/20">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">単価 (円)</label>
+                    <input v-model.number="eventForm.unit_price" type="number" class="w-full px-3 py-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500/20">
+                  </div>
+                  <div class="col-span-2">
+                    <label class="block text-xs font-bold text-gray-600 mb-1">エントリー締切日</label>
+                    <input v-model="eventForm.entry_deadline" type="date" class="w-full px-3 py-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-500/20">
+                  </div>
+                </div>
+              </section>
+
+              <!-- Conversion Rates -->
+              <section class="space-y-4">
+                <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider">変換率（歩留まり）設定</h3>
+                <div class="space-y-3">
+                  <div v-for="[key, label] in [
+                    ['kpi_seat_to_entry_rate', '着座 → エントリー率 (%)'],
+                    ['kpi_entry_to_interview_rate', 'エントリー → 面談率 (%)'],
+                    ['kpi_interview_to_inflow_rate', '面談 → 流入率 (%)'],
+                  ]" :key="key">
+                    <label class="block text-xs font-bold text-gray-600 mb-1">{{ label }}</label>
+                    <div class="flex items-center gap-3">
+                      <input v-model.number="(eventForm as any)[key]" type="range" min="0" max="100" class="flex-1">
+                      <input v-model.number="(eventForm as any)[key]" type="number" class="w-20 px-2 py-1 border rounded text-right font-bold">
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Custom Steps -->
+              <section class="space-y-4">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider">カスタムフロー設定</h3>
+                  <button @click="addCustomStep" class="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline">
+                    <Plus class="w-3 h-3" /> ステップ追加
+                  </button>
+                </div>
+                <div v-if="eventForm.kpi_custom_steps.length === 0" class="text-xs text-gray-400 italic bg-gray-50 p-4 rounded-xl border border-dashed text-center">
+                  追加のステップはありません
+                </div>
+                <div v-for="(step, idx) in eventForm.kpi_custom_steps" :key="idx" class="p-3 border rounded-xl space-y-2 bg-gray-50">
+                  <div class="flex items-center justify-between gap-2">
+                    <input v-model="step.label" placeholder="ステップ名" class="flex-1 px-2 py-1 text-sm border-none bg-transparent font-bold focus:ring-0 outline-none">
+                    <button @click="removeCustomStep(idx)" class="text-red-400 hover:text-red-600">
+                      <Trash2 class="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase">変換率:</span>
+                    <input v-model.number="step.rate" type="number" class="w-16 px-1 text-xs border rounded text-right font-bold">
+                    <span class="text-[10px] font-bold text-gray-400">%</span>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Templates -->
+              <section class="space-y-3">
+                <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider">テンプレート適用</h3>
+                <div class="grid grid-cols-2 gap-2">
+                  <button @click="applyTemplate('simple')" class="p-3 text-xs border rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all text-left">
+                    <p class="font-bold text-gray-900">シンプル版</p>
+                    <p class="text-[10px] text-gray-400">標準フロー</p>
+                  </button>
+                  <button @click="applyTemplate('extended')" class="p-3 text-xs border rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all text-left">
+                    <p class="font-bold text-gray-900">Beyond版</p>
+                    <p class="text-[10px] text-gray-400">合格フロー含む</p>
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            <div class="p-6 border-t border-gray-100 flex gap-3 bg-gray-50">
+              <button @click="showEventEditor = false" class="flex-1 px-4 py-2 border rounded-xl font-bold text-gray-600 hover:bg-white shadow-sm transition-all">
+                キャンセル
+              </button>
+              <button 
+                @click="saveEventSettings" 
+                :disabled="saving"
+                class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 disabled:opacity-50 transition-all"
+              >
+                <Save class="w-4 h-4" />
+                {{ saving ? '保存中...' : '設定を更新' }}
+              </button>
             </div>
           </div>
         </div>

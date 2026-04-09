@@ -158,6 +158,12 @@ export const kpiApi = {
     source_company?: string;
   } = {}) =>
     api.get<FunnelCounts>('/api/kpi/funnel', { ...authHeaders(), params }),
+  
+  /**
+   * Update specific event KPI settings.
+   */
+  updateEventKpi: (id: number, data: any) =>
+    api.put(`/api/events/${id}/kpi`, data, authHeaders()),
 };
 
 // ─── Display Helpers (front-end formatting only, NO computation) ───
