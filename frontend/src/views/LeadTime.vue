@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { api } from '../lib/api';
 import Layout from '../components/Layout.vue';
-import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-vue-next';
+import { ArrowRight, CheckCircle, ChevronDown, ChevronUp } from 'lucide-vue-next';
 
 /* ───────── 月別テーブルの折りたたみ ───────── */
 const isMonthlyTableOpen = ref(false);
@@ -12,6 +12,30 @@ const isLoading = ref(false);
 const sourceCategories = ref<string[]>([]);
 const selectedSource = ref<string>(''); // 空文字 = 全体
 const selectedMonth = ref<string>(new Date().toISOString().slice(0, 7)); // デフォルト: 今月 (YYYY-MM)
+// 卒業年度フィルタ用
+const selectedGraduationYear = ref<number | null>(null);
+const availableGraduationYears = ref<number[]>([]);
+
+const funnelTheme = computed(() => {
+  if (selectedGraduationYear.value === 2027) return {
+    bg: 'bg-blue-50/50',
+    border: 'border-blue-100/50',
+    text: 'text-blue-600',
+    pill: 'text-blue-900 bg-blue-50 border-blue-100'
+  };
+  if (selectedGraduationYear.value === 2028) return {
+    bg: 'bg-rose-50/50',
+    border: 'border-rose-100/50',
+    text: 'text-rose-600',
+    pill: 'text-rose-900 bg-rose-50 border-rose-100'
+  };
+  return {
+    bg: 'bg-emerald-50/50',
+    border: 'border-emerald-100/50',
+    text: 'text-emerald-600',
+    pill: 'text-emerald-900 bg-emerald-50 border-emerald-100'
+  };
+});
 
 const fetchSources = async () => {
   const token = localStorage.getItem('token');
@@ -63,11 +87,13 @@ const fetchFunnelData = async () => {
     const token = localStorage.getItem('token');
     const sourceParam = selectedSource.value ? { source_company: selectedSource.value } : {};
     const monthParam = selectedMonth.value ? { month: selectedMonth.value } : {};
+    const gradParam = selectedGraduationYear.value ? { graduation_year: selectedGraduationYear.value } : {};
+    const params = { ...sourceParam, ...monthParam, ...gradParam };
 
     const [kpiRes, historyRes, overviewRes] = await Promise.all([
       api.get('/api/students/metrics/funnel', {
         headers: { Authorization: token },
-        params: { ...sourceParam, ...monthParam }
+        params
       }),
       api.get('/api/students/metrics/funnel', {
         headers: { Authorization: token },
@@ -75,7 +101,7 @@ const fetchFunnelData = async () => {
       }),
       api.get('/api/kpi/overview', {
         headers: { Authorization: token },
-        params: { ...sourceParam, ...monthParam }
+        params
       })
     ]);
 
@@ -96,6 +122,10 @@ const fetchFunnelData = async () => {
       
       funnelKpi.value.application_to_reservation_rate = app > 0 ? Number(((resv / app) * 100).toFixed(2)) : 0;
       funnelKpi.value.reservation_to_interview_rate = resv > 0 ? Number(((intv / resv) * 100).toFixed(2)) : 0;
+    }
+
+    if (Array.isArray(kpiRes.data?.graduation_years)) {
+      availableGraduationYears.value = kpiRes.data.graduation_years;
     }
   } catch (err) {
     console.error('Error fetching funnel data:', err);
@@ -219,6 +249,8 @@ const fetchEventsData = async () => {
     isEventsLoading.value = false;
   }
 };
+
+watch(selectedGraduationYear, fetchFunnelData);
 </script>
 
 <template>
@@ -313,65 +345,139 @@ const fetchEventsData = async () => {
         </div>
       </div>
 
-      <!-- セクション①：初回面談フロー可視化 -->
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
-        <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-          <span class="w-1.5 h-6 bg-blue-600 rounded-full"></span>
-          初回面談までのステップ
-        </h2>
-        <!-- PC・タブレット: 横並び / スマホ: 縦並び -->
-        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 md:gap-6 relative">
-          <!-- Step 1 -->
-          <div class="flex-1 w-full flex flex-col items-center bg-blue-50/50 rounded-2xl p-5 border border-blue-100/50 transition-all hover:shadow-md">
-            <span class="text-3xl mb-2">📩</span>
-            <p class="text-sm font-bold text-blue-900 mb-1">初回申し込み</p>
-            <p class="text-2xl font-black text-blue-600">{{ funnelKpi.counts.applications_students }}<span class="text-xs ml-1 font-bold">名</span></p>
-            <div v-if="funnelKpi.graduation_year_breakdown?.length > 0" class="mt-2 flex gap-2 text-[10px] font-bold">
+      <!-- セクション①：初回面談フロー可視化（Dashboard版） -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <span class="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+              初回面談までのステップ
+            </h2>
+            <p class="text-sm text-gray-500 mt-1 uppercase tracking-wider opacity-60">Initial application to first interview progress</p>
+          </div>
+        </div>
+
+        <!-- 卒業年度フィルタ -->
+        <div v-if="availableGraduationYears.length > 0" class="flex items-center gap-2 mb-6 bg-gray-50/50 p-2 rounded-xl border border-gray-100 w-fit">
+          <button
+            @click="selectedGraduationYear = null"
+            class="px-5 py-1.5 rounded-lg text-sm font-black transition-all"
+            :class="selectedGraduationYear === null 
+              ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200' 
+              : 'text-gray-400 hover:text-gray-600 hover:bg-white/50'"
+          >
+            全体
+          </button>
+          <template v-for="year in availableGraduationYears" :key="year">
+            <button
+              @click="selectedGraduationYear = year"
+              class="px-5 py-1.5 rounded-lg text-sm font-black transition-all"
+              :class="selectedGraduationYear === year 
+                ? (year === 2027 ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : (year === 2028 ? 'bg-rose-600 text-white shadow-md shadow-rose-100' : 'bg-emerald-600 text-white shadow-md shadow-emerald-100'))
+                : 'text-gray-400 hover:text-gray-600 hover:bg-white/50'"
+            >
+              {{ year }}年卒
+            </button>
+          </template>
+        </div>
+
+        <!-- 27卒 vs 28卒 流入割合 Indicator -->
+        <div v-if="selectedGraduationYear === null && funnelKpi.counts.applications_students > 0" class="mb-8 flex items-center gap-4">
+          <div class="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden flex shadow-inner">
+            <div 
+              class="h-full bg-blue-500 transition-all duration-500" 
+              :style="{ width: `${(grad27Counts.applications / funnelKpi.counts.applications_students) * 100}%` }"
+              title="27卒"
+            ></div>
+            <div 
+              class="h-full bg-rose-400 transition-all duration-500" 
+              :style="{ width: `${(grad28Counts.applications / funnelKpi.counts.applications_students) * 100}%` }"
+              title="28卒"
+            ></div>
+          </div>
+          <div class="flex gap-4 text-xs font-black">
+            <span class="flex items-center gap-1.5 text-blue-600">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+              27卒: {{ funnelKpi.counts.applications_students > 0 ? ((grad27Counts.applications / funnelKpi.counts.applications_students) * 100).toFixed(1) : 0 }}%
+            </span>
+            <span class="flex items-center gap-1.5 text-rose-600">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+              28卒: {{ funnelKpi.counts.applications_students > 0 ? ((grad28Counts.applications / funnelKpi.counts.applications_students) * 100).toFixed(1) : 0 }}%
+            </span>
+          </div>
+        </div>
+
+        <!-- 可視化ステップ -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 md:gap-6 relative mt-8">
+          <!-- Step 1: 初回申し込み -->
+          <div :class="['flex-1 w-full flex flex-col items-center rounded-2xl p-6 border transition-all hover:shadow-lg', funnelTheme.bg, funnelTheme.border]">
+            <span class="text-4xl mb-3">📩</span>
+            <p :class="['text-sm font-bold mb-1 uppercase tracking-wider', funnelTheme.pill.split(' ')[0]]">初回申し込み</p>
+            <p :class="['text-3xl font-black', funnelTheme.text]">{{ funnelKpi.counts.applications_students || 0 }}<span class="text-sm ml-1 font-bold">名</span></p>
+            <div v-if="selectedGraduationYear === null" class="mt-2 flex gap-2 text-[10px] font-bold">
               <span class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">27卒: {{ grad27Counts.applications }}</span>
               <span class="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">28卒: {{ grad28Counts.applications }}</span>
             </div>
           </div>
 
-          <!-- Arrow 1 (sm:横, xs:縦) -->
+          <!-- Arrow & Rate 1 -->
           <div class="flex flex-col items-center justify-center py-2 sm:py-0">
             <div class="sm:hidden text-2xl text-gray-300">↓</div>
             <ArrowRight class="hidden sm:block w-8 h-8 text-gray-300" />
-            <div class="mt-1 bg-white border border-blue-100 px-3 py-1 rounded-full shadow-sm">
+            <div class="mt-2 bg-white border border-gray-100 px-4 py-1.5 rounded-full shadow-sm">
               <p class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter text-center">申込→予約率</p>
-              <p class="text-sm font-black text-blue-600 text-center">{{ funnelKpi.application_to_reservation_rate.toFixed(1) }}%</p>
+              <p :class="['text-base font-black text-center', funnelTheme.text]">{{ (funnelKpi.application_to_reservation_rate || 0).toFixed(1) }}%</p>
             </div>
           </div>
 
-          <!-- Step 2 -->
-          <div class="flex-1 w-full flex flex-col items-center bg-purple-50/50 rounded-2xl p-5 border border-purple-100/50 transition-all hover:shadow-md">
-            <span class="text-3xl mb-2">📅</span>
-            <p class="text-sm font-bold text-purple-900 mb-1">面談予約</p>
-            <p class="text-2xl font-black text-purple-600">{{ funnelKpi.counts.reserved_students }}<span class="text-xs ml-1 font-bold">名</span></p>
-            <div v-if="funnelKpi.graduation_year_breakdown?.length > 0" class="mt-2 flex gap-2 text-[10px] font-bold">
+          <!-- Step 2: 面談予約 -->
+          <div :class="['flex-1 w-full flex flex-col items-center rounded-2xl p-6 border transition-all hover:shadow-lg', funnelTheme.bg, funnelTheme.border]">
+            <span class="text-4xl mb-3">📅</span>
+            <p :class="['text-sm font-bold mb-1 uppercase tracking-wider', funnelTheme.pill.split(' ')[0]]">面談予約</p>
+            <p :class="['text-3xl font-black', funnelTheme.text]">{{ funnelKpi.counts.reserved_students || 0 }}<span class="text-sm ml-1 font-bold">名</span></p>
+            <div v-if="selectedGraduationYear === null" class="mt-2 flex gap-2 text-[10px] font-bold">
               <span class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">27卒: {{ grad27Counts.reservations }}</span>
               <span class="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">28卒: {{ grad28Counts.reservations }}</span>
             </div>
           </div>
 
-          <!-- Arrow 2 (sm:横, xs:縦) -->
+          <!-- Arrow & Rate 2 -->
           <div class="flex flex-col items-center justify-center py-2 sm:py-0">
             <div class="sm:hidden text-2xl text-gray-300">↓</div>
             <ArrowRight class="hidden sm:block w-8 h-8 text-gray-300" />
-            <div class="mt-1 bg-white border border-green-100 px-3 py-1 rounded-full shadow-sm">
+            <div class="mt-2 bg-white border border-gray-100 px-4 py-1.5 rounded-full shadow-sm">
               <p class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter text-center">予約→面談率</p>
-              <p class="text-sm font-black text-green-600 text-center">{{ reservationToInterviewRate }}%</p>
+              <p :class="['text-base font-black text-center', funnelTheme.text]">{{ (funnelKpi.reservation_to_interview_rate || 0).toFixed(1) }}%</p>
             </div>
           </div>
 
-          <!-- Step 3 -->
-          <div class="flex-1 w-full flex flex-col items-center bg-green-50/50 rounded-2xl p-5 border border-green-100/50 transition-all hover:shadow-md">
-            <span class="text-3xl mb-2">🤝</span>
-            <p class="text-sm font-bold text-green-900 mb-1">初回面談実施</p>
-            <p class="text-2xl font-black text-green-600">{{ funnelKpi.counts.interviewed_students }}<span class="text-xs ml-1 font-bold">名</span></p>
-            <div v-if="funnelKpi.graduation_year_breakdown?.length > 0" class="mt-2 flex gap-2 text-[10px] font-bold">
+          <!-- Step 3: 初回面談実施 -->
+          <div :class="['flex-1 w-full flex flex-col items-center rounded-2xl p-6 border transition-all hover:shadow-lg', funnelTheme.bg, funnelTheme.border]">
+            <span class="text-4xl mb-3">🤝</span>
+            <p :class="['text-sm font-bold mb-1 uppercase tracking-wider', funnelTheme.pill.split(' ')[0]]">初回面談実施</p>
+            <p :class="['text-3xl font-black', funnelTheme.text]">{{ funnelKpi.counts.interviewed_students || 0 }}<span class="text-sm ml-1 font-bold">名</span></p>
+            <div v-if="selectedGraduationYear === null" class="mt-2 flex gap-2 text-[10px] font-bold">
               <span class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">27卒: {{ grad27Counts.interviews }}</span>
               <span class="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">28卒: {{ grad28Counts.interviews }}</span>
             </div>
+          </div>
+        </div>
+
+        <!-- リードタイム指標 -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
+          <div :class="['rounded-2xl p-5 border flex items-center justify-between', funnelTheme.bg, funnelTheme.border]">
+            <div>
+              <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">申込 → 予約 リードタイム</p>
+              <p class="text-2xl font-black text-gray-900">{{ funnelKpi.apply_to_reservation_lead_time_days_avg ?? '-' }}<span class="text-sm ml-1 text-gray-500">日</span></p>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm text-xl">⏳</div>
+          </div>
+          <div :class="['rounded-2xl p-5 border flex items-center justify-between', funnelTheme.bg, funnelTheme.border]">
+            <div>
+              <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">予約 → 面談 リードタイム</p>
+              <p class="text-2xl font-black text-gray-900">{{ funnelKpi.reservation_to_interview_lead_time_days_avg ?? '-' }}<span class="text-sm ml-1 text-gray-500">日</span></p>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm text-xl">⏱️</div>
           </div>
         </div>
       </div>

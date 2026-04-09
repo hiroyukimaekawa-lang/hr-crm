@@ -239,7 +239,10 @@ const mergeDateHour = (date: string, hour: string) => {
 const toggleFavorite = async (student: Student) => {
   const newValue = !student.is_favorite;
   try {
-    await api.patch(`/api/students/${student.id}/favorite`, { is_favorite: newValue });
+    const token = localStorage.getItem('token');
+    await api.patch(`/api/students/${student.id}/favorite`, { is_favorite: newValue }, {
+      headers: { Authorization: token }
+    });
     student.is_favorite = newValue;
     pushNotification({
       title: newValue ? 'お気に入り登録しました' : 'お気に入り解除しました',
