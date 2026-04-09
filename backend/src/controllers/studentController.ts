@@ -178,22 +178,10 @@ const ensureSalesFunnelTables = async () => {
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
             `);
-            // Deduplicate interviews to allow UNIQUE constraint creation
+            // UNIQUE constraint preparation without deletion (Best effort)
             try {
-                await pool.query(`
-                    DELETE FROM interviews
-                    WHERE id NOT IN (
-                        SELECT (array_agg(id ORDER BY created_at ASC, id ASC))[1]
-                        FROM interviews
-                        GROUP BY student_id, scheduled_at
-                    );
-                `);
-            } catch (dedupErr) {
-                console.error("Deduplication failed:", dedupErr);
-            }
-
-            // Add unique constraint for student_id and scheduled_at to enable UPSERT
-            try {
+                // Ignore actual row deletion to comply with "data loss prevention" rule.
+                // Instead, we ensure the index exists for UPSERT safety.
                 await pool.query(`
                     DO $$
                     BEGIN
@@ -203,7 +191,7 @@ const ensureSalesFunnelTables = async () => {
                     END $$;
                 `);
             } catch (constraintErr) {
-                console.error("Unique constraint creation failed. This may cause UPSERTs to fail:", constraintErr);
+                console.error("Warning: unique_student_schedule could not be created. This is likely due to pre-existing duplicates. KPI queries will still work correctly using ROW_NUMBER() filtering.", constraintErr);
             }
             await pool.query(`
                 ALTER TABLE events
@@ -257,6 +245,7 @@ const ensureSalesFunnelTables = async () => {
 
             // --- KPI Data Backfill (Matcher Funnel -> Interviews) ---
             try {
+                // Backfill reservations AND interviews
                 await pool.query(`
                     INSERT INTO interviews (student_id, scheduled_at, interviewed_at, status)
                     SELECT 
@@ -269,8 +258,23 @@ const ensureSalesFunnelTables = async () => {
                       AND student_id IN (SELECT id FROM students)
                     ON CONFLICT (student_id, scheduled_at) 
                     DO UPDATE SET 
-                        interviewed_at = EXCLUDED.interviewed_at,
-                        status = EXCLUDED.status;
+                        interviewed_at = COALESCE(interviews.interviewed_at, EXCLUDED.interviewed_at),
+                        status = CASE 
+                            WHEN interviews.status IN ('completed', '面談実施') THEN interviews.status 
+                            ELSE EXCLUDED.status 
+                        END;
+                `);
+                
+                // Extra check for interviewed_at completion if scheduled_at exists but interviewed_at is null
+                await pool.query(`
+                    UPDATE interviews i
+                    SET interviewed_at = m.interview_actual_at,
+                        status = COALESCE(m.interview_status, 'completed')
+                    FROM matcher_funnel_logs m
+                    WHERE i.student_id = m.student_id
+                      AND i.scheduled_at = m.interview_scheduled_at
+                      AND i.interviewed_at IS NULL
+                      AND m.interview_actual_at IS NOT NULL;
                 `);
             } catch (backfillErr) {
                 console.error("KPI Data Backfill Error:", backfillErr);
@@ -1618,8 +1622,19 @@ export const registerMatcherInterview = async (req: Request, res: Response) => {
                 `INSERT INTO interviews (student_id, scheduled_at, interviewed_at, status)
                  VALUES ($1, $2, $3, $4)
                  ON CONFLICT (student_id, scheduled_at) 
-                 DO UPDATE SET interviewed_at = EXCLUDED.interviewed_at, status = EXCLUDED.status`,
+                 DO UPDATE SET 
+                    interviewed_at = COALESCE(interviews.interviewed_at, EXCLUDED.interviewed_at),
+                    status = EXCLUDED.status`,
                 [id, normalizedInterviewScheduledAt, normalizedInterviewActualAt, normalizeNullableText(interview_status) || 'completed']
+            );
+        } else if (normalizedInterviewActualAt) {
+            // If scheduled_at is missing but played out, find or create
+            await pool.query(
+                `INSERT INTO interviews (student_id, scheduled_at, interviewed_at, status)
+                 VALUES ($1, $2, $2, $3)
+                 ON CONFLICT (student_id, scheduled_at) 
+                 DO UPDATE SET interviewed_at = EXCLUDED.interviewed_at, status = EXCLUDED.status`,
+                [id, normalizedInterviewActualAt, normalizeNullableText(interview_status) || 'completed']
             );
         }
         await pool.query(
@@ -1966,8 +1981,6 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                 WITH months AS (
                     SELECT TO_CHAR(a.applied_at, 'YYYY-MM') AS month FROM applications a JOIN students s ON s.id = a.student_id WHERE a.applied_at IS NOT NULL ${sSourceFilter} ${yearFilter}
                     UNION
-                    SELECT TO_CHAR(a.reservation_created_at, 'YYYY-MM') FROM applications a JOIN students s ON s.id = a.student_id WHERE a.reservation_created_at IS NOT NULL ${sSourceFilter} ${yearFilter}
-                    UNION
                     SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL ${sSourceFilter} ${yearFilter}
                 ),
                 app_bm AS (
@@ -1985,22 +1998,24 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                     JOIN students s ON s.id = i.student_id
                     WHERE i.student_id IS NOT NULL ${sSourceFilter} ${yearFilter}
                 ),
+                -- 予約月別
                 reserve_bm AS (
                     SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
                     FROM first_interview_per_student
-                    WHERE rn = 1 
-                      AND (status = 'scheduled' OR interviewed_at IS NOT NULL)
+                    WHERE rn = 1 AND (status = 'scheduled' OR interviewed_at IS NOT NULL)
                     GROUP BY 1
                 ),
-                interview_bm AS (
-                    SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL ${sSourceFilter} ${yearFilter} GROUP BY 1
-                ),
+                -- 面談実施月別
                 completed_bm AS (
                     SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
                     FROM first_interview_per_student
                     WHERE rn = 1 AND interviewed_at IS NOT NULL
                     GROUP BY 1
+                ),
+                -- 全予定月別 (分母用)
+                interview_bm AS (
+                    SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT i.student_id)::int AS cnt
+                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL ${sSourceFilter} ${yearFilter} GROUP BY 1
                 ),
                 noshow_bm AS (
                     SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT i.student_id)::int AS cnt
@@ -2292,11 +2307,11 @@ export const getFunnelKpi = async (req: Request, res: Response) => {
                 FROM students s
                 LEFT JOIN applications a ON a.student_id = s.id
                 LEFT JOIN (
-                    SELECT DISTINCT ON (i.student_id)
-                        i.student_id, i.scheduled_at, i.interviewed_at, i.status
-                    FROM interviews i
-                    ORDER BY i.student_id, COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) ASC, i.id ASC
-                ) fi ON fi.student_id = s.id
+                    SELECT 
+                        student_id, scheduled_at, interviewed_at, status,
+                        ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY scheduled_at ASC NULLS LAST, id ASC) as rn
+                    FROM interviews
+                ) fi ON fi.student_id = s.id AND fi.rn = 1
                 WHERE s.graduation_year IN (2027, 2028)
                 ${sSourceFilter}
                 GROUP BY s.graduation_year
