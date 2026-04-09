@@ -238,20 +238,25 @@ const ensureSalesFunnelTables = async () => {
             `);
 
             // --- KPI Data Backfill (Matcher Funnel -> Interviews) ---
-            await pool.query(`
-                INSERT INTO interviews (student_id, scheduled_at, interviewed_at, status)
-                SELECT 
-                    student_id, 
-                    interview_scheduled_at, 
-                    interview_actual_at, 
-                    COALESCE(interview_status, 'completed')
-                FROM matcher_funnel_logs
-                WHERE interview_scheduled_at IS NOT NULL
-                ON CONFLICT (student_id, scheduled_at) 
-                DO UPDATE SET 
-                    interviewed_at = EXCLUDED.interviewed_at,
-                    status = EXCLUDED.status;
-            `);
+            try {
+                await pool.query(`
+                    INSERT INTO interviews (student_id, scheduled_at, interviewed_at, status)
+                    SELECT 
+                        student_id, 
+                        interview_scheduled_at, 
+                        interview_actual_at, 
+                        COALESCE(interview_status, 'completed')
+                    FROM matcher_funnel_logs
+                    WHERE interview_scheduled_at IS NOT NULL
+                      AND student_id IN (SELECT id FROM students)
+                    ON CONFLICT (student_id, scheduled_at) 
+                    DO UPDATE SET 
+                        interviewed_at = EXCLUDED.interviewed_at,
+                        status = EXCLUDED.status;
+                `);
+            } catch (backfillErr) {
+                console.error("KPI Data Backfill Error:", backfillErr);
+            }
             salesFunnelTablesReady = true;
         })().finally(() => {
             salesFunnelTablesPromise = null;
