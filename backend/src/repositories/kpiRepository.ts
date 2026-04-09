@@ -392,7 +392,11 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
 
     return eventsRes.rows.map((e: any) => {
         const breakdown = breakdownMap[e.id] || {};
-        const currentEntries = (breakdown['A_ENTRY'] || 0) + (breakdown['registered'] || 0);
+        // 合計エントリー数：ステータスが entry, A_ENTRY, attended, reserved のいずれかであるものをカウント
+        const currentEntries = (breakdown['entry'] || 0) + 
+                               (breakdown['A_ENTRY'] || 0) + 
+                               (breakdown['attended'] || 0) + 
+                               (breakdown['reserved'] || 0);
         const currentSeats = breakdown['attended'] || 0;
 
         let daysRemaining = 0;

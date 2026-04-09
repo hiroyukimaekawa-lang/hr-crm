@@ -31,6 +31,7 @@ import {
 const activeTab = ref<'monthly' | 'daily' | 'weekly' | 'event' | 'staff' | 'source'>('monthly');
 const loading = ref(false);
 const saving = ref(false);
+const showExpired = ref(false);
 const selectedMonth = ref(new Date().toISOString().slice(0, 7));
 
 const overview = ref<KpiOverviewResponse | null>(null);
@@ -165,8 +166,19 @@ const activeEvents = computed(() =>
   eventKpi.value.filter(e => e.deadline && e.days_remaining >= -1)
 );
 const expiredEvents = computed(() =>
-  eventKpi.value.filter(e => e.deadline && e.days_remaining < -1)
+  eventKpi.value.filter(e => !e.deadline || e.days_remaining < -1)
 );
+
+const displayEvents = computed(() => {
+  if (showExpired.value) {
+    return [...eventKpi.value].sort((a, b) => {
+      if (a.days_remaining >= -1 && b.days_remaining < -1) return -1;
+      if (a.days_remaining < -1 && b.days_remaining >= -1) return 1;
+      return (b.days_remaining || 0) - (a.days_remaining || 0);
+    });
+  }
+  return activeEvents.value;
+});
 
 // Total event sales
 const totalTargetSales = computed(() =>
@@ -442,6 +454,18 @@ const totalCurrentSales = computed(() =>
             </div>
           </div>
 
+          <!-- Event table header with toggle -->
+          <div class="flex items-center justify-between mb-4 px-2">
+            <h2 class="text-sm font-bold text-gray-800 flex items-center gap-2">
+              <Calendar class="w-4 h-4 text-blue-600" />
+              イベント別進捗
+            </h2>
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" v-model="showExpired" class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+              <span class="text-xs font-bold text-gray-500">過去のイベントを表示</span>
+            </label>
+          </div>
+
           <!-- Event table -->
           <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div class="overflow-x-auto">
@@ -461,8 +485,13 @@ const totalCurrentSales = computed(() =>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                  <tr v-for="e in activeEvents" :key="e.event_id" class="hover:bg-gray-50">
-                    <td class="px-4 py-3 font-bold text-gray-900 max-w-[200px] truncate" :title="e.event_title">{{ e.event_title }}</td>
+                  <tr v-for="e in displayEvents" :key="e.event_id" class="hover:bg-gray-50" :class="{ 'opacity-60 bg-gray-50/50': e.days_remaining < -1 }">
+                    <td class="px-4 py-3 font-bold text-gray-900 max-w-[200px] truncate" :title="e.event_title">
+                      <div class="flex items-center gap-2">
+                        <span v-if="e.days_remaining < -1" class="text-[8px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded uppercase">Finished</span>
+                        {{ e.event_title }}
+                      </div>
+                    </td>
                     <td class="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{{ e.deadline ? new Date(e.deadline).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' }) : '-' }}</td>
                     <td class="px-4 py-3 text-right" :class="e.days_remaining <= 3 ? 'text-red-600 font-bold' : 'text-gray-700'">{{ e.days_remaining }}</td>
                     <td class="px-4 py-3 text-right text-blue-700 font-bold">{{ e.target_seats }}</td>
