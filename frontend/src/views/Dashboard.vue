@@ -210,10 +210,7 @@ const funnelTheme = computed(() => {
 });
 
 const reservationToInterviewRate = computed(() => {
-  const reserved = funnelKpi.value?.counts?.reserved_students ?? 0;
-  const interviewed = funnelKpi.value?.counts?.interviewed_students ?? 0;
-  if (reserved === 0) return 0;
-  return Math.min(Number(((interviewed / reserved) * 100).toFixed(1)), 100);
+  return funnelKpi.value?.reservationToInterviewRate ?? 0;
 });
 
 const activeKgiProgress = computed(() =>
