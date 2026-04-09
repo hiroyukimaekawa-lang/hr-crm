@@ -67,9 +67,15 @@ const eventForm = ref({
   entry_deadline: '',
   kpi_seat_to_entry_rate: 70,
   kpi_entry_to_interview_rate: 60,
-  kpi_interview_to_inflow_rate: 50,
+  kpi_interview_to_reservation_rate: 50,
+  kpi_reservation_to_application_rate: 40,
   kpi_custom_steps: [] as any[],
 });
+
+const expandedEvents = ref<Record<number, boolean>>({});
+const toggleEvent = (eventId: number) => {
+  expandedEvents.value[eventId] = !expandedEvents.value[eventId];
+};
 
 // ─── Month options ───
 
@@ -183,7 +189,8 @@ const openEventEditor = (event: EventKpiItem) => {
     entry_deadline: event.deadline ? event.deadline.slice(0, 10) : '',
     kpi_seat_to_entry_rate: event.kpi_seat_to_entry_rate,
     kpi_entry_to_interview_rate: event.kpi_entry_to_interview_rate,
-    kpi_interview_to_inflow_rate: event.kpi_interview_to_inflow_rate,
+    kpi_interview_to_reservation_rate: (event as any).kpi_interview_to_reservation_rate || 50,
+    kpi_reservation_to_application_rate: (event as any).kpi_reservation_to_application_rate || 40,
     kpi_custom_steps: JSON.parse(JSON.stringify(event.kpi_custom_steps || [])),
   };
   showEventEditor.value = true;
@@ -216,12 +223,14 @@ const applyTemplate = (type: 'simple' | 'extended') => {
   if (type === 'simple') {
     eventForm.value.kpi_seat_to_entry_rate = 70;
     eventForm.value.kpi_entry_to_interview_rate = 60;
-    eventForm.value.kpi_interview_to_inflow_rate = 50;
+    eventForm.value.kpi_interview_to_reservation_rate = 50;
+    eventForm.value.kpi_reservation_to_application_rate = 40;
     eventForm.value.kpi_custom_steps = [];
   } else {
     eventForm.value.kpi_seat_to_entry_rate = 70;
     eventForm.value.kpi_entry_to_interview_rate = 60;
-    eventForm.value.kpi_interview_to_inflow_rate = 50;
+    eventForm.value.kpi_interview_to_reservation_rate = 50;
+    eventForm.value.kpi_reservation_to_application_rate = 40;
     eventForm.value.kpi_custom_steps = [
       { label: '面談②', rate: 70, position: 1 },
       { label: '合格', rate: 80, position: 1 }
@@ -545,46 +554,127 @@ const totalCurrentSales = computed(() =>
               <table class="w-full text-sm">
                 <thead class="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th class="px-4 py-3 text-left text-xs font-bold text-gray-500">アクション</th>
-                    <th class="px-4 py-3 text-left text-xs font-bold text-gray-500">イベント名</th>
-                    <th class="px-4 py-3 text-right text-xs font-bold text-gray-500">締日</th>
-                    <th class="px-4 py-3 text-right text-xs font-bold text-gray-500">残日数</th>
-                    <th class="px-4 py-3 text-right text-xs font-bold text-blue-600">目標着座</th>
-                    <th class="px-4 py-3 text-right text-xs font-bold text-blue-400">現着座</th>
-                    <th class="px-4 py-3 text-right text-xs font-bold text-indigo-600">目標Entry</th>
-                    <th class="px-4 py-3 text-right text-xs font-bold text-indigo-400">現Entry</th>
-                    <th class="px-4 py-3 text-right text-xs font-bold text-gray-500">達成率</th>
-                    <th class="px-4 py-3 text-right text-xs font-bold text-gray-500">日次Entry</th>
-                    <th class="px-4 py-3 text-right text-xs font-bold text-gray-500">日次面談</th>
+                    <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 w-10"></th>
+                    <th class="px-3 py-3 text-left text-xs font-bold text-gray-500">アクション</th>
+                    <th class="px-3 py-3 text-left text-xs font-bold text-gray-500">イベント名</th>
+                    <th class="px-3 py-3 text-right text-xs font-bold text-gray-500">締日</th>
+                    <th class="px-3 py-3 text-center text-xs font-bold text-gray-400 bg-gray-100/30">申込 (週/日)</th>
+                    <th class="px-3 py-3 text-center text-xs font-bold text-gray-400 bg-gray-100/30">予約 (週/日)</th>
+                    <th class="px-3 py-3 text-center text-xs font-bold text-gray-400 bg-gray-100/30">面談 (週/日)</th>
+                    <th class="px-3 py-3 text-center text-xs font-bold text-gray-400 bg-gray-100/30">Entry (週/日)</th>
+                    <th class="px-3 py-3 text-right text-xs font-bold text-gray-500">目標着座</th>
+                    <th class="px-3 py-3 text-right text-xs font-bold text-gray-500 border-l border-gray-100">達成率</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                  <tr v-for="e in displayEvents" :key="e.event_id" class="hover:bg-gray-50" :class="{ 'opacity-60 bg-gray-50/50': e.days_remaining < -1 }">
-                    <td class="px-4 py-3">
-                      <button 
-                        @click="openEventEditor(e)"
-                        class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="KPI設定を編集"
+                  <template v-for="e in displayEvents" :key="e.event_id">
+                    <tr class="hover:bg-gray-50/80 transition-colors" :class="{ 'opacity-60 bg-gray-50/50': e.days_remaining < -1 }">
+                      <td class="px-3 py-3 text-center">
+                        <button 
+                          @click="toggleEvent(e.event_id)"
+                          class="p-1 hover:bg-gray-200 rounded transition-colors"
+                        >
+                          <ChevronRight 
+                            class="w-4 h-4 text-gray-400 transition-transform duration-200"
+                            :class="{ 'rotate-90': expandedEvents[e.event_id] }"
+                          />
+                        </button>
+                      </td>
+                      <td class="px-3 py-3">
+                        <button 
+                          @click="openEventEditor(e)"
+                          class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-200"
+                          title="KPI設定を編集"
+                        >
+                          <Edit3 class="w-4 h-4" />
+                        </button>
+                      </td>
+                      <td class="px-3 py-3 font-bold text-gray-900 max-w-[180px] truncate" :title="e.event_title">
+                        <div class="flex items-center gap-2">
+                          <span v-if="e.days_remaining < -1" class="text-[8px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded uppercase">Finished</span>
+                          {{ e.event_title }}
+                        </div>
+                      </td>
+                      <td class="px-3 py-3 text-right">
+                        <div class="flex flex-col items-end">
+                          <span class="text-xs font-bold text-gray-900">{{ e.deadline ? e.deadline.slice(5) : '-' }}</span>
+                          <span class="text-[10px]" :class="e.days_remaining <= 3 ? 'text-rose-600 font-black' : 'text-gray-400'">
+                            あと{{ e.days_remaining }}日
+                          </span>
+                        </div>
+                      </td>
+                      
+                      <!-- Weekly/Daily Required Actions -->
+                      <td v-for="metricKey in ['applications', 'reservations', 'interviews', 'entries']" :key="metricKey" 
+                        class="px-2 py-3 bg-gray-50/30 border-l border-gray-100/50"
                       >
-                        <Edit3 class="w-4 h-4" />
-                      </button>
-                    </td>
-                    <td class="px-4 py-3 font-bold text-gray-900 max-w-[200px] truncate" :title="e.event_title">
-                      <div class="flex items-center gap-2">
-                        <span v-if="e.days_remaining < -1" class="text-[8px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded uppercase">Finished</span>
-                        {{ e.event_title }}
-                      </div>
-                    </td>
-                    <td class="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{{ e.deadline ? new Date(e.deadline).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' }) : '-' }}</td>
-                    <td class="px-4 py-3 text-right" :class="e.days_remaining <= 3 ? 'text-red-600 font-bold' : 'text-gray-700'">{{ e.days_remaining }}</td>
-                    <td class="px-4 py-3 text-right text-blue-700 font-bold">{{ e.target_seats }}</td>
-                    <td class="px-4 py-3 text-right text-blue-500">{{ e.current_seats }}</td>
-                    <td class="px-4 py-3 text-right text-indigo-700 font-bold">{{ e.target_entries }}</td>
-                    <td class="px-4 py-3 text-right text-indigo-500">{{ e.current_entries }}</td>
-                    <td class="px-4 py-3 text-right font-bold" :class="rateColor(e.achievementRate)">{{ e.achievementRate }}%</td>
-                    <td class="px-4 py-3 text-right text-amber-700 font-bold">{{ e.daily_required_entries }}</td>
-                    <td class="px-4 py-3 text-right text-violet-700 font-bold">{{ e.daily_required_interviews }}</td>
-                  </tr>
+                        <div class="flex flex-col items-center gap-0.5">
+                          <div class="flex items-baseline gap-1">
+                            <span class="text-sm font-black text-blue-700">
+                              {{ (e as any)[`weekly_required_${metricKey}`] }}
+                            </span>
+                            <span class="text-[8px] font-bold text-blue-400 uppercase">W</span>
+                          </div>
+                          <div class="flex items-baseline gap-1 bg-white px-2 py-0.5 rounded border border-gray-100 shadow-sm">
+                            <span class="text-[11px] font-bold text-indigo-600">
+                              {{ (e as any)[`daily_required_${metricKey}`] }}
+                            </span>
+                            <span class="text-[8px] font-bold text-indigo-300 uppercase">D</span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td class="px-3 py-3 text-right">
+                        <div class="flex flex-col items-end">
+                          <span class="text-sm font-black text-gray-900">{{ e.current_seats }} / {{ e.target_seats }}</span>
+                          <span class="text-[10px] text-gray-400">着座実績</span>
+                        </div>
+                      </td>
+
+                      <td class="px-3 py-3 text-right border-l border-gray-100">
+                        <div 
+                          class="inline-flex flex-col items-end px-2 py-1 rounded-lg"
+                          :class="rateBgColor(e.achievementRate)"
+                        >
+                          <span class="text-sm font-black" :class="rateColor(e.achievementRate)">{{ e.achievementRate }}%</span>
+                        </div>
+                      </td>
+                    </tr>
+
+                    <!-- Slot Breakdown Row (案B: 日程別の実績表示) -->
+                    <tr v-if="expandedEvents[e.event_id]">
+                      <td colspan="10" class="px-6 py-4 bg-gray-50/80 border-y border-gray-100">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                          <div v-for="slot in e.slots" :key="slot.date" 
+                            class="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between group hover:border-blue-400 transition-all"
+                          >
+                            <div class="flex items-center gap-3">
+                              <div class="p-2 bg-blue-50 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                <Calendar class="w-4 h-4" />
+                              </div>
+                              <div class="flex flex-col">
+                                <span class="text-xs font-black text-gray-900">{{ slot.date.replace('T', ' ').slice(5, 16) }}</span>
+                                <span class="text-[10px] font-bold text-gray-400">開催日程</span>
+                              </div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                              <div class="text-right">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase">着座</p>
+                                <p class="text-sm font-black text-gray-900">{{ slot.seats }}名</p>
+                              </div>
+                              <div class="text-right">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase">Entry</p>
+                                <p class="text-sm font-black text-indigo-600">{{ slot.entries }}名</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div v-if="e.slots.length === 0" class="col-span-full text-center py-4 text-xs text-gray-400 italic">
+                            このイベントに紐づく個別の日程実績はありません。
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
                   <tr v-if="activeEvents.length === 0">
                     <td colspan="10" class="px-4 py-12 text-center text-gray-400">データがありません</td>
                   </tr>
@@ -635,7 +725,8 @@ const totalCurrentSales = computed(() =>
                   <div v-for="[key, label] in [
                     ['kpi_seat_to_entry_rate', '着座 → エントリー率 (%)'],
                     ['kpi_entry_to_interview_rate', 'エントリー → 面談率 (%)'],
-                    ['kpi_interview_to_inflow_rate', '面談 → 流入率 (%)'],
+                    ['kpi_interview_to_reservation_rate', '面談 → 予約率 (%)'],
+                    ['kpi_reservation_to_application_rate', '予約 → 申込率 (%)'],
                   ]" :key="key">
                     <label class="block text-xs font-bold text-gray-600 mb-1">{{ label }}</label>
                     <div class="flex items-center gap-3">

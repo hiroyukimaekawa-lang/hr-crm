@@ -63,20 +63,42 @@ export interface KpiOverviewResponse {
   perSource?: any[];
 }
 
+export interface EventKpiSlot {
+  date: string;
+  entries: number;
+  seats: number;
+  status_breakdown: Record<string, number>;
+}
+
 export interface EventKpiItem {
   event_id: number;
   event_title: string;
   deadline: string | null;
   days_remaining: number;
+  
+  // Goals
   target_seats: number;
-  current_seats: number;
   target_entries: number;
-  current_entries: number;
   target_interviews: number;
-  target_inflow: number;
+  target_reservations: number;
+  target_applications: number;
+
+  // Current
+  current_seats: number;
+  current_entries: number;
+
+  // Actions
+  daily_required_seats: number;
+  weekly_required_seats: number;
   daily_required_entries: number;
+  weekly_required_entries: number;
   daily_required_interviews: number;
-  daily_required_inflow: number;
+  weekly_required_interviews: number;
+  daily_required_reservations: number;
+  weekly_required_reservations: number;
+  daily_required_applications: number;
+  weekly_required_applications: number;
+
   target_sales: number;
   current_sales: number;
   achievementRate: number;
@@ -85,6 +107,7 @@ export interface EventKpiItem {
   kpi_interview_to_inflow_rate: number;
   kpi_custom_steps: any[];
   status_breakdown: Record<string, number>;
+  slots: EventKpiSlot[];
 }
 
 export interface GoalSetting {

@@ -52,6 +52,8 @@ export interface EventKpiRow {
     unit_price: number;
     kpi_seat_to_entry_rate: number;
     kpi_entry_to_interview_rate: number;
+    kpi_interview_to_reservation_rate: number;
+    kpi_reservation_to_application_rate: number;
     kpi_interview_to_inflow_rate: number;
     kpi_custom_steps: any[];
     status_breakdown: Record<string, number>;
@@ -168,15 +170,21 @@ export const getCanonicalFunnelCounts = async (filters: KpiFilters): Promise<Fun
     per_staff?: any[];
     per_source?: any[];
 }> => {
-    const { whereClause, params } = buildFunnelFilters(filters);
+    const { whereClause, params, paramIndex } = buildFunnelFilters(filters);
+    let currentIdx = paramIndex;
 
-    // Date filter for application_at
-    let appDateCond = '';
-    let intDateCond = '';
-    if (filters.month) {
-        appDateCond = `AND TO_CHAR(cf.application_at AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM') = '${filters.month}'`;
-        intDateCond = `AND TO_CHAR(cf.interview_scheduled_at AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM') = '${filters.month}'`;
-    }
+    // Build sub-filters for specific stages that might have different date columns
+    // 1. Applications: COALESCE(a.applied_at, s.created_at)
+    // 2. Interviews: fi.scheduled_at / interviewed_at
+    
+    // We'll use buildDateFilter helper to generate the SQL fragments
+    const appDateFilter = buildDateFilter(`COALESCE(a.applied_at, m.applied_at, s.created_at)`, filters, params, currentIdx);
+    const appCond = appDateFilter.condition ? `AND ${appDateFilter.condition}` : '';
+    currentIdx = appDateFilter.paramIndex;
+
+    const intDateFilter = buildDateFilter(`fi.scheduled_at`, filters, params, currentIdx);
+    const intCond = intDateFilter.condition ? `AND ${intDateFilter.condition}` : '';
+    currentIdx = intDateFilter.paramIndex;
 
     const groupByCol = filters.groupBy === 'staff' ? 's.staff_id' :
                        filters.groupBy === 'source' ? 's.source_company' : null;
@@ -206,10 +214,10 @@ export const getCanonicalFunnelCounts = async (filters: KpiFilters): Promise<Fun
             ${whereClause}
         )
         SELECT
-            COUNT(DISTINCT CASE WHEN cf.application_at IS NOT NULL ${appDateCond} THEN cf.student_id END)::int AS applications,
-            COUNT(DISTINCT CASE WHEN cf.reservation_at IS NOT NULL THEN cf.student_id END)::int AS reservations,
-            COUNT(DISTINCT CASE WHEN cf.interview_scheduled_at IS NOT NULL ${intDateCond} THEN cf.student_id END)::int AS interview_scheduled,
-            COUNT(DISTINCT CASE WHEN cf.interview_completed_at IS NOT NULL ${intDateCond} THEN cf.student_id END)::int AS interview_completed
+            COUNT(DISTINCT CASE WHEN cf.student_id IS NOT NULL ${appCond} THEN cf.student_id END)::int AS applications,
+            COUNT(DISTINCT CASE WHEN cf.reservation_at IS NOT NULL ${appCond} THEN cf.student_id END)::int AS reservations,
+            COUNT(DISTINCT CASE WHEN cf.interview_scheduled_at IS NOT NULL ${intCond} THEN cf.student_id END)::int AS interview_scheduled,
+            COUNT(DISTINCT CASE WHEN cf.interview_completed_at IS NOT NULL ${intCond} THEN cf.student_id END)::int AS interview_completed
             ${selectExtra}
         FROM canonical_funnel cf
         JOIN students s ON s.id = cf.student_id
@@ -355,6 +363,8 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
             e.unit_price,
             COALESCE(e.kpi_seat_to_entry_rate, 70) AS kpi_seat_to_entry_rate,
             COALESCE(e.kpi_entry_to_interview_rate, 60) AS kpi_entry_to_interview_rate,
+            COALESCE(e.kpi_interview_to_reservation_rate, 50) AS kpi_interview_to_reservation_rate,
+            COALESCE(e.kpi_reservation_to_application_rate, 40) AS kpi_reservation_to_application_rate,
             COALESCE(e.kpi_interview_to_inflow_rate, 50) AS kpi_interview_to_inflow_rate,
             COALESCE(e.kpi_custom_steps, '[]') AS kpi_custom_steps,
             COALESCE(
@@ -378,10 +388,24 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
         GROUP BY event_id, status
     `);
 
+    const slotStatusRes = await pool.query(`
+        SELECT event_id, to_char(selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as slot_date, status, COUNT(*)::int AS cnt
+        FROM student_events
+        WHERE selected_event_date IS NOT NULL
+        GROUP BY event_id, selected_event_date, status
+    `);
+
     const breakdownMap: Record<number, Record<string, number>> = {};
     for (const row of statusRes.rows) {
         if (!breakdownMap[row.event_id]) breakdownMap[row.event_id] = {};
         breakdownMap[row.event_id][row.status] = Number(row.cnt);
+    }
+
+    const slotBreakdownMap: Record<number, Record<string, Record<string, number>>> = {};
+    for (const row of slotStatusRes.rows) {
+        if (!slotBreakdownMap[row.event_id]) slotBreakdownMap[row.event_id] = {};
+        if (!slotBreakdownMap[row.event_id][row.slot_date]) slotBreakdownMap[row.event_id][row.slot_date] = {};
+        slotBreakdownMap[row.event_id][row.slot_date][row.status] = Number(row.cnt);
     }
 
     const toJSTDateString = (value: string): string => {
@@ -392,12 +416,22 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
 
     return eventsRes.rows.map((e: any) => {
         const breakdown = breakdownMap[e.id] || {};
+        const slotBreakdown = slotBreakdownMap[e.id] || {};
+
         // 合計エントリー数：ステータスが entry, A_ENTRY, attended, reserved のいずれかであるものをカウント
         const currentEntries = (breakdown['entry'] || 0) + 
                                (breakdown['A_ENTRY'] || 0) + 
                                (breakdown['attended'] || 0) + 
                                (breakdown['reserved'] || 0);
         const currentSeats = breakdown['attended'] || 0;
+
+        // 開催日ごとのスロット内訳
+        const slots = Object.entries(slotBreakdown).map(([date, b]) => ({
+            date,
+            entries: (b['entry'] || 0) + (b['A_ENTRY'] || 0) + (b['attended'] || 0) + (b['reserved'] || 0),
+            seats: b['attended'] || 0,
+            status_breakdown: b
+        }));
 
         let daysRemaining = 0;
         let deadlineStr: string | null = null;
@@ -431,17 +465,40 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
             unit_price: Number(e.unit_price || 0),
             kpi_seat_to_entry_rate: Number(e.kpi_seat_to_entry_rate),
             kpi_entry_to_interview_rate: Number(e.kpi_entry_to_interview_rate),
+            kpi_interview_to_reservation_rate: Number(e.kpi_interview_to_reservation_rate),
+            kpi_reservation_to_application_rate: Number(e.kpi_reservation_to_application_rate),
             kpi_interview_to_inflow_rate: Number(e.kpi_interview_to_inflow_rate),
             kpi_custom_steps: customSteps,
-            status_breakdown: breakdown
+            status_breakdown: breakdown,
+            slots
         };
     });
 };
 
 // ─────────────────────── Monthly Sales Actuals ───────────────────────
 
-export const getMonthlySalesActuals = async (month: string) => {
-    const result = await pool.query(`
+/**
+ * Get Sales Actuals for a given period (Monthly, Weekly, or Daily).
+ */
+export const getSalesActuals = async (filters: KpiFilters) => {
+    const params: any[] = [];
+    let idx = 1;
+    
+    // We'll filter either by e.event_date or slots matching the period
+    const monthFilter = filters.month ? `LEFT(slot->>'datetime', 7) = $${idx} OR TO_CHAR(e.event_date, 'YYYY-MM') = $${idx}` : '';
+    if (filters.month) params.push(filters.month);
+    
+    let dateFilter = '';
+    if (!filters.month) {
+        const df = buildDateFilter(`COALESCE((slot->>'datetime')::timestamp, e.event_date)`, filters, params, idx);
+        dateFilter = df.condition;
+        idx = df.paramIndex;
+    }
+
+    const periodCond = filters.month ? monthFilter : dateFilter;
+    const whereClause = periodCond ? `WHERE (${periodCond})` : '';
+
+    const sql = `
         SELECT
             e.id AS event_id,
             e.title AS event_title,
@@ -450,17 +507,13 @@ export const getMonthlySalesActuals = async (month: string) => {
             (COALESCE(e.unit_price, 0) * COUNT(se.*) FILTER (WHERE se.status = 'attended'))::bigint AS sales
         FROM events e
         LEFT JOIN student_events se ON se.event_id = e.id
-        WHERE (
-            (e.event_slots IS NOT NULL AND jsonb_array_length(e.event_slots) > 0
-             AND EXISTS (
-               SELECT 1 FROM jsonb_array_elements(e.event_slots) AS slot
-               WHERE LEFT(slot->>'datetime', 7) = $1
-             ))
-            OR TO_CHAR(e.event_date, 'YYYY-MM') = $1
-        )
+        LEFT JOIN jsonb_array_elements(CASE WHEN e.event_slots IS NOT NULL AND jsonb_array_length(e.event_slots) > 0 THEN e.event_slots ELSE '[]'::jsonb END) AS slot ON true
+        ${whereClause}
         GROUP BY e.id, e.title, e.unit_price
         ORDER BY sales DESC
-    `, [month]);
+    `;
+
+    const result = await pool.query(sql, params);
 
     const totalSales = result.rows.reduce((sum: number, r: any) => sum + Number(r.sales || 0), 0);
     const totalAttendance = result.rows.reduce((sum: number, r: any) => sum + Number(r.attended_count || 0), 0);

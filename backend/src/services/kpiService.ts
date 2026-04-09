@@ -13,7 +13,7 @@ import {
     getGoals,
     upsertGoals,
     getEventKpiData,
-    getMonthlySalesActuals,
+    getSalesActuals as getSalesData,
     ensureKpiTable,
 } from '../repositories/kpiRepository';
 
@@ -173,7 +173,7 @@ export const getOverview = async (filters: KpiFilters): Promise<KpiOverviewResul
         const goalMap = buildGoalMap(goals);
 
         // Get sales actuals
-        const salesData = await getMonthlySalesActuals(filters.month);
+        const salesData = await getSalesData(filters);
 
         const salesTarget = goalMap['sales_target'] || 0;
         const seatsTarget = goalMap['required_seats'] || 0;
@@ -202,12 +202,22 @@ export const getOverview = async (filters: KpiFilters): Promise<KpiOverviewResul
     // 4. Weekly overview
     let weekly: WeeklyOverview | undefined;
     if (filters.week) {
+        const goals = await getGoals({
+            scopeType: filters.staffId ? 'staff' : (filters.sourceCompany ? 'source' : 'global'),
+            staffId: filters.staffId,
+            sourceCompany: filters.sourceCompany,
+            periodType: 'weekly',
+            month: filters.week, // Note: Repository uses period_start to match week
+        });
+        const goalMap = buildGoalMap(goals);
+        const salesData = await getSalesData(filters);
+
         weekly = {
             weekLabel: filters.week,
-            sales: metric(0, 0),
-            seats: metric(0, 0),
-            entries: metric(0, funnel.applications),
-            interviews: metric(0, funnel.interview_completed),
+            sales: metric(goalMap['sales_target'] || 0, salesData.totalSales),
+            seats: metric(goalMap['required_seats'] || 0, salesData.totalAttendance),
+            entries: metric(goalMap['required_entries'] || 0, funnel.applications),
+            interviews: metric(goalMap['required_interviews'] || 0, funnel.interview_completed),
         };
     }
 
@@ -266,25 +276,39 @@ export const getOverview = async (filters: KpiFilters): Promise<KpiOverviewResul
 
 // ─────────────────────── Event KPI ───────────────────────
 
-export const getEventKpi = async (): Promise<EventKpiResult[]> => {
+export const getEventKpi = async (): Promise<any[]> => {
     const events = await getEventKpiData();
 
     return events.map(e => {
+        //歩留まり率 (Conversion Rates)
         const seatToEntry = safeRate(e.kpi_seat_to_entry_rate, 70) / 100;
         const entryToInterview = safeRate(e.kpi_entry_to_interview_rate, 60) / 100;
-        const interviewToInflow = safeRate(e.kpi_interview_to_inflow_rate, 50) / 100;
+        const interviewToReservation = safeRate(e.kpi_interview_to_reservation_rate, 50) / 100;
+        const reservationToApplication = safeRate(e.kpi_reservation_to_application_rate, 40) / 100;
 
+        // 目標値の逆算 (Back-calculating targets)
         const targetSeats = e.target_seats;
         const targetEntries = targetSeats > 0 ? Math.ceil(targetSeats / seatToEntry) : 0;
         const targetInterviews = targetEntries > 0 ? Math.ceil(targetEntries / entryToInterview) : 0;
-        const targetInflow = targetInterviews > 0 ? Math.ceil(targetInterviews / interviewToInflow) : 0;
+        const targetReservations = targetInterviews > 0 ? Math.ceil(targetInterviews / interviewToReservation) : 0;
+        const targetApplications = targetReservations > 0 ? Math.ceil(targetReservations / reservationToApplication) : 0;
 
         const days = Math.max(e.days_remaining, 0);
-        const remainingEntries = Math.max(targetEntries - e.current_entries, 0);
 
-        const dailyEntries = days > 0 ? Math.round((remainingEntries / days) * 10) / 10 : 0;
-        const dailyInterviews = days > 0 ? Math.round((remainingEntries / entryToInterview / days) * 10) / 10 : 0;
-        const dailyInflow = days > 0 ? Math.round((targetInflow / days) * 10) / 10 : 0;
+        // 必要アクション数計算ヘルパー (Action required calculation helper)
+        const calcAction = (target: number, current: number) => {
+            const remaining = Math.max(target - current, 0);
+            const daily = days > 0 ? Math.round((remaining / days) * 10) / 10 : 0;
+            const weekly = Math.round(daily * 7 * 10) / 10;
+            return { daily, weekly, remaining };
+        };
+
+        const seatsAction = calcAction(targetSeats, e.current_seats);
+        const entriesAction = calcAction(targetEntries, e.current_entries);
+        // 他のステップの実績（current）がリポジトリで取れていない場合は0とする
+        const interviewsAction = calcAction(targetInterviews, 0); 
+        const reservationsAction = calcAction(targetReservations, 0);
+        const applicationsAction = calcAction(targetApplications, 0);
 
         const targetSales = e.unit_price * targetSeats;
         const currentSales = e.unit_price * e.current_seats;
@@ -295,23 +319,40 @@ export const getEventKpi = async (): Promise<EventKpiResult[]> => {
             event_title: e.event_title,
             deadline: e.deadline,
             days_remaining: e.days_remaining,
+            
+            // Goals
             target_seats: targetSeats,
-            current_seats: e.current_seats,
             target_entries: targetEntries,
-            current_entries: e.current_entries,
             target_interviews: targetInterviews,
-            target_inflow: targetInflow,
-            daily_required_entries: dailyEntries,
-            daily_required_interviews: dailyInterviews,
-            daily_required_inflow: dailyInflow,
+            target_reservations: targetReservations,
+            target_applications: targetApplications,
+
+            // Current
+            current_seats: e.current_seats,
+            current_entries: e.current_entries,
+
+            // Actions (Daily/Weekly Required)
+            daily_required_seats: seatsAction.daily,
+            weekly_required_seats: seatsAction.weekly,
+            daily_required_entries: entriesAction.daily,
+            weekly_required_entries: entriesAction.weekly,
+            daily_required_interviews: interviewsAction.daily,
+            weekly_required_interviews: interviewsAction.weekly,
+            daily_required_reservations: reservationsAction.daily,
+            weekly_required_reservations: reservationsAction.weekly,
+            daily_required_applications: applicationsAction.daily,
+            weekly_required_applications: applicationsAction.weekly,
+
             target_sales: targetSales,
             current_sales: currentSales,
             achievementRate,
+            
             kpi_seat_to_entry_rate: e.kpi_seat_to_entry_rate,
             kpi_entry_to_interview_rate: e.kpi_entry_to_interview_rate,
             kpi_interview_to_inflow_rate: e.kpi_interview_to_inflow_rate,
             kpi_custom_steps: e.kpi_custom_steps,
             status_breakdown: e.status_breakdown,
+            slots: e.slots || []
         };
     });
 };

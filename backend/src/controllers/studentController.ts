@@ -207,7 +207,9 @@ const ensureSalesFunnelTables = async () => {
             }
             await pool.query(`
                 ALTER TABLE events
-                ADD COLUMN IF NOT EXISTS company VARCHAR(255)
+                ADD COLUMN IF NOT EXISTS company VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS kpi_interview_to_reservation_rate INTEGER DEFAULT 50,
+                ADD COLUMN IF NOT EXISTS kpi_reservation_to_application_rate INTEGER DEFAULT 40
             `);
             await pool.query(`
                 CREATE TABLE IF NOT EXISTS event_dates (

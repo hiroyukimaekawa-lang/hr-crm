@@ -194,8 +194,32 @@ const selectedGraduationYear = ref<number | null>(null);
 const availableGraduationYears = ref<number[]>([]);
 
 const kgiProgress = ref<KgiProgress[]>([]);
+const kpiOverviewData = ref<any>(null);
 
-const funnelTheme = computed(() => {
+// Period selection state
+const periodType = ref<'monthly' | 'weekly' | 'daily'>('monthly');
+const selectedWeekKey = ref('');
+const selectedDayKey = ref(new Date().toISOString().slice(0, 10));
+
+const getJSTDate = (date: Date = new Date()) => {
+  return new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+};
+
+const getISOWeek = (date: Date) => {
+  const d = new Date(date.getTime());
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+};
+
+// Initialize default week
+onMounted(() => {
+  const jstNow = getJSTDate();
+  selectedWeekKey.value = getISOWeek(jstNow);
+  selectedDayKey.value = jstNow.toISOString().slice(0, 10);
+});
   if (selectedGraduationYear.value === 2027) return {
     bg: 'bg-blue-50/50',
     border: 'border-blue-100/50',
@@ -269,11 +293,21 @@ const fetchFunnelKpi = async () => {
     params.graduation_year = selectedGraduationYear.value;
   }
   
+  // Apply period filters
+  if (periodType.value === 'monthly') {
+    params.month = selectedMonthKey.value;
+  } else if (periodType.value === 'weekly') {
+    params.week = selectedWeekKey.value;
+  } else if (periodType.value === 'daily') {
+    params.date = selectedDayKey.value;
+  }
+  
   const [res, overviewRes] = await Promise.all([
     api.get('/api/students/metrics/funnel', { headers: { Authorization: token }, params }),
     api.get('/api/kpi/overview', { headers: { Authorization: token }, params })
   ]);
   
+  kpiOverviewData.value = overviewRes.data;
   funnelKpi.value = {
     daily_applications: Array.isArray(res.data?.daily_applications) ? res.data.daily_applications : [],
     applicationToReservationRate: Number(res.data?.application_to_reservation_rate || 0),
@@ -298,6 +332,13 @@ const fetchFunnelKpi = async () => {
     const resv = overview.funnel.reservations;
     const intv = overview.funnel.interview_completed;
     
+    // Also update funnelKpi with period-specific data if available
+    const periodData = overview[periodType.value];
+    if (periodData) {
+      funnelKpi.value.counts.applications_students = periodData.entries?.actual || 0;
+      funnelKpi.value.counts.reserved_students = periodData.inflow?.actual || 0;
+      funnelKpi.value.counts.interviewed_students = periodData.interviews?.actual || 0;
+    }
     funnelKpi.value.applicationToReservationRate = app > 0 ? Number(((resv / app) * 100).toFixed(2)) : 0;
     funnelKpi.value.reservationToInterviewRate = resv > 0 ? Number(((intv / resv) * 100).toFixed(2)) : 0;
   }
@@ -1079,8 +1120,172 @@ watch(selectedGraduationYear, fetchFunnelKpi);
           紹介打診管理
         </button>
       </div>
+      
+      <!-- Period Selector -->
+      <div class="flex flex-wrap items-center gap-4 mb-8">
+        <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+          <button
+            @click="periodType = 'monthly'; fetchFunnelKpi()"
+            class="px-5 py-1.5 rounded-lg text-sm font-bold transition-all"
+            :class="periodType === 'monthly' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+          >
+            月間
+          </button>
+          <button
+            @click="periodType = 'weekly'; fetchFunnelKpi()"
+            class="px-5 py-1.5 rounded-lg text-sm font-bold transition-all"
+            :class="periodType === 'weekly' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+          >
+            週間
+          </button>
+          <button
+            @click="periodType = 'daily'; fetchFunnelKpi()"
+            class="px-5 py-1.5 rounded-lg text-sm font-bold transition-all"
+            :class="periodType === 'daily' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+          >
+            日間
+          </button>
+        </div>
+
+        <!-- Period Logic Control -->
+        <div v-if="periodType === 'weekly'" class="flex items-center gap-2">
+          <input 
+            type="text" 
+            v-model="selectedWeekKey" 
+            class="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 w-32"
+            placeholder="2026-W15"
+          />
+          <button @click="fetchFunnelKpi()" class="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            <CheckCircle class="w-4 h-4" />
+          </button>
+        </div>
+
+        <div v-else-if="periodType === 'daily'" class="flex items-center gap-2">
+          <input 
+            type="date" 
+            v-model="selectedDayKey" 
+            class="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button @click="fetchFunnelKpi()" class="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            <CheckCircle class="w-4 h-4" />
+          </button>
+        </div>
+
+        <div v-else class="flex items-center gap-2">
+          <button @click="prevMonth(); fetchFunnelKpi()" class="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">←</button>
+          <span class="text-sm font-bold text-gray-700 min-w-[100px] text-center">{{ calendarTitle }}</span>
+          <button @click="nextMonth(); fetchFunnelKpi()" class="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">→</button>
+        </div>
+      </div>
 
       <div v-if="dashboardTab === 'MAIN'">
+
+      <!-- KPI Summary Cards -->
+      <div v-if="kpiOverviewData" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <!-- Sales Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 relative overflow-hidden group">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+          <p class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1 relative z-10">売上 (Actual/Goal)</p>
+          <h3 class="text-2xl font-black text-gray-900 relative z-10">
+            ¥{{ (kpiOverviewData[periodType]?.sales?.actual || 0).toLocaleString() }}
+          </h3>
+          <div class="mt-4 flex items-end justify-between relative z-10">
+            <div class="flex flex-col">
+              <span class="text-[10px] font-bold text-gray-400 uppercase">Target</span>
+              <span class="text-sm font-bold text-gray-600">¥{{ (kpiOverviewData[periodType]?.sales?.target || 0).toLocaleString() }}</span>
+            </div>
+            <div class="text-right">
+              <span class="text-xs font-black" :class="(kpiOverviewData[periodType]?.sales?.rate || 0) >= 100 ? 'text-emerald-600' : 'text-blue-600'">
+                {{ (kpiOverviewData[periodType]?.sales?.rate || 0).toFixed(1) }}%
+              </span>
+            </div>
+          </div>
+          <div class="mt-3 h-1.5 w-full bg-gray-100 rounded-full overflow-hidden relative z-10">
+            <div 
+              class="h-full bg-blue-600 rounded-full transition-all duration-1000" 
+              :style="{ width: Math.min(kpiOverviewData[periodType]?.sales?.rate || 0, 100) + '%' }"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Seats Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 relative overflow-hidden group">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+          <p class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1 relative z-10">着座数 (Seats)</p>
+          <h3 class="text-2xl font-black text-gray-900 relative z-10">
+            {{ (kpiOverviewData[periodType]?.seats?.actual || 0) }}名
+          </h3>
+          <div class="mt-4 flex items-end justify-between relative z-10">
+            <div class="flex flex-col">
+              <span class="text-[10px] font-bold text-gray-400 uppercase">Target</span>
+              <span class="text-sm font-bold text-gray-600">{{ (kpiOverviewData[periodType]?.seats?.target || 0) }}名</span>
+            </div>
+            <div class="text-right">
+              <span class="text-xs font-black" :class="(kpiOverviewData[periodType]?.seats?.rate || 0) >= 100 ? 'text-emerald-600' : 'text-purple-600'">
+                {{ (kpiOverviewData[periodType]?.seats?.rate || 0).toFixed(1) }}%
+              </span>
+            </div>
+          </div>
+          <div class="mt-3 h-1.5 w-full bg-gray-100 rounded-full overflow-hidden relative z-10">
+            <div 
+              class="h-full bg-purple-600 rounded-full transition-all duration-1000" 
+              :style="{ width: Math.min(kpiOverviewData[periodType]?.seats?.rate || 0, 100) + '%' }"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Entries Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 relative overflow-hidden group">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+          <p class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1 relative z-10">エントリー (Entries)</p>
+          <h3 class="text-2xl font-black text-gray-900 relative z-10">
+            {{ (kpiOverviewData[periodType]?.entries?.actual || 0) }}件
+          </h3>
+          <div class="mt-4 flex items-end justify-between relative z-10">
+            <div class="flex flex-col">
+              <span class="text-[10px] font-bold text-gray-400 uppercase">Target</span>
+              <span class="text-sm font-bold text-gray-600">{{ (kpiOverviewData[periodType]?.entries?.target || 0) }}件</span>
+            </div>
+            <div class="text-right">
+              <span class="text-xs font-black" :class="(kpiOverviewData[periodType]?.entries?.rate || 0) >= 100 ? 'text-emerald-600' : 'text-indigo-600'">
+                {{ (kpiOverviewData[periodType]?.entries?.rate || 0).toFixed(1) }}%
+              </span>
+            </div>
+          </div>
+          <div class="mt-3 h-1.5 w-full bg-gray-100 rounded-full overflow-hidden relative z-10">
+            <div 
+              class="h-full bg-indigo-600 rounded-full transition-all duration-1000" 
+              :style="{ width: Math.min(kpiOverviewData[periodType]?.entries?.rate || 0, 100) + '%' }"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Interviews Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 relative overflow-hidden group">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+          <p class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1 relative z-10">面談実施 (Interviews)</p>
+          <h3 class="text-2xl font-black text-gray-900 relative z-10">
+            {{ (kpiOverviewData[periodType]?.interviews?.actual || 0) }}件
+          </h3>
+          <div class="mt-4 flex items-end justify-between relative z-10">
+            <div class="flex flex-col">
+              <span class="text-[10px] font-bold text-gray-400 uppercase">Target</span>
+              <span class="text-sm font-bold text-gray-600">{{ (kpiOverviewData[periodType]?.interviews?.target || 0) }}件</span>
+            </div>
+            <div class="text-right">
+              <span class="text-xs font-black" :class="(kpiOverviewData[periodType]?.interviews?.rate || 0) >= 100 ? 'text-emerald-600' : 'text-emerald-600'">
+                {{ (kpiOverviewData[periodType]?.interviews?.rate || 0).toFixed(1) }}%
+              </span>
+            </div>
+          </div>
+          <div class="mt-3 h-1.5 w-full bg-gray-100 rounded-full overflow-hidden relative z-10">
+            <div 
+              class="h-full bg-emerald-600 rounded-full transition-all duration-1000" 
+              :style="{ width: Math.min(kpiOverviewData[periodType]?.interviews?.rate || 0, 100) + '%' }"
+            ></div>
+          </div>
+        </div>
+      </div>
 
       <!-- KGI Daily Progress Widget -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
