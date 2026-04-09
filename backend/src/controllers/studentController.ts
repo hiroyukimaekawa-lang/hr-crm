@@ -178,15 +178,33 @@ const ensureSalesFunnelTables = async () => {
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
             `);
+            // Deduplicate interviews to allow UNIQUE constraint creation
+            try {
+                await pool.query(`
+                    DELETE FROM interviews
+                    WHERE id NOT IN (
+                        SELECT (array_agg(id ORDER BY created_at ASC, id ASC))[1]
+                        FROM interviews
+                        GROUP BY student_id, scheduled_at
+                    );
+                `);
+            } catch (dedupErr) {
+                console.error("Deduplication failed:", dedupErr);
+            }
+
             // Add unique constraint for student_id and scheduled_at to enable UPSERT
-            await pool.query(`
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_student_schedule') THEN
-                        ALTER TABLE interviews ADD CONSTRAINT unique_student_schedule UNIQUE (student_id, scheduled_at);
-                    END IF;
-                END $$;
-            `);
+            try {
+                await pool.query(`
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_student_schedule') THEN
+                            ALTER TABLE interviews ADD CONSTRAINT unique_student_schedule UNIQUE (student_id, scheduled_at);
+                        END IF;
+                    END $$;
+                `);
+            } catch (constraintErr) {
+                console.error("Unique constraint creation failed. This may cause UPSERTs to fail:", constraintErr);
+            }
             await pool.query(`
                 ALTER TABLE events
                 ADD COLUMN IF NOT EXISTS company VARCHAR(255)
