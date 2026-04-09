@@ -220,6 +220,7 @@ onMounted(() => {
   selectedWeekKey.value = getISOWeek(jstNow);
   selectedDayKey.value = jstNow.toISOString().slice(0, 10);
 });
+const funnelTheme = computed(() => {
   if (selectedGraduationYear.value === 2027) return {
     bg: 'bg-blue-50/50',
     border: 'border-blue-100/50',
@@ -1644,7 +1645,6 @@ watch(selectedGraduationYear, fetchFunnelKpi);
         </div>
       </div>
     </div>
-    </div>
 
       <!-- 初回ファネル登録セクション -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
@@ -1999,6 +1999,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
           </div>
         </div>
       </div>
+      </div>
     </div>
 
     <Teleport to="body">
@@ -2038,10 +2039,10 @@ watch(selectedGraduationYear, fetchFunnelKpi);
               :disabled="!rescheduleSelectedDate"
               class="flex-1 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 disabled:opacity-40"
             >リスケ確定</button>
-          </div>
         </div>
       </div>
-    </Teleport>
     </div>
-  </Layout>
+  </Teleport>
+  </div>
+</Layout>
 </template>
