@@ -1454,7 +1454,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
     </div>
 
     <div v-if="selectedYomiEvent" class="fixed inset-0 z-[90]">
-      <div class="absolute inset-0 bg-black/30" @click="closeYomiEventDetail" />
+      <div class="absolute inset-0 bg-black/30" @click="closeYomiEventDetail"></div>
       <div class="absolute right-0 top-0 h-full w-full md:w-[90vw] md:max-w-6xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <div>
@@ -1646,7 +1646,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
 
     <!-- Monthly Attendance Modal -->
     <div v-if="showMonthlyAttendanceModal" class="fixed inset-0 z-[90]">
-      <div class="absolute inset-0 bg-black/30" @click="closeMonthlyAttendanceModal" />
+      <div class="absolute inset-0 bg-black/30" @click="closeMonthlyAttendanceModal"></div>
       <div class="absolute right-0 top-0 h-full w-full md:w-[80vw] md:max-w-5xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto flex flex-col">
         <div class="flex items-center justify-between mb-6 shrink-0">
           <div>
@@ -1835,7 +1835,6 @@ watch(selectedGraduationYear, fetchFunnelKpi);
         </div>
       </div>
     </Teleport>
-      </div>
     </div>
   </Layout>
 </template>
