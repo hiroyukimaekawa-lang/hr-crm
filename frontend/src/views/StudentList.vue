@@ -37,6 +37,9 @@ interface Student {
   tags?: string[] | null;
   staff_id?: number | null;
   staff_name?: string;
+  is_favorite?: boolean;
+  referral_outreach_status?: string;
+  referral_count?: number;
   meeting_decided_date?: string | null;
   first_interview_date?: string | null;
   created_at?: string | null;
