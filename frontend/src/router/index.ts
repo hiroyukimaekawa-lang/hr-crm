@@ -7,10 +7,8 @@ import EventDetail from '../views/EventDetail.vue';
 import Login from '../views/Login.vue';
 import RegisterInvite from '../views/RegisterInvite.vue';
 import LeadTime from '../views/LeadTime.vue';
-import EventKpi from '../views/EventKpi.vue';
 import Settings from '../views/Settings.vue';
 import PastEvents from '../views/PastEvents.vue';
-import MonthlySales from '../views/MonthlySales.vue';
 
 import KpiDashboard from '../views/KpiDashboard.vue';
 
