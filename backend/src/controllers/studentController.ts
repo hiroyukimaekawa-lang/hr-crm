@@ -66,6 +66,18 @@ const ensureStudentExtendedColumns = async () => {
                 ALTER TABLE students
                 ADD COLUMN IF NOT EXISTS second_interview_date DATE
             `);
+            await pool.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE
+            `);
+            await pool.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS referral_outreach_status VARCHAR(50) DEFAULT 'unapproached'
+            `);
+            await pool.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS referred_by_id INTEGER REFERENCES students(id) ON DELETE SET NULL
+            `);
             cachedStudentColumns = null;
             studentExtendedColumnsReady = true;
         })().finally(() => {
@@ -544,7 +556,8 @@ export const getStudents = async (req: Request, res: Response) => {
                 mf.applied_at as matcher_applied_at,
                 mf.reservation_created_at as matcher_reservation_created_at,
                 mf.interview_scheduled_at as matcher_interview_scheduled_at,
-                mf.interview_actual_at as matcher_interview_actual_at
+                mf.interview_actual_at as matcher_interview_actual_at,
+                (SELECT count(*) FROM students s2 WHERE s2.referred_by_id = students.id) as referral_count
             FROM students
             LEFT JOIN users ON students.staff_id = users.id
             LEFT JOIN LATERAL (
@@ -2641,4 +2654,42 @@ export const deleteGraduationYearCategory = async (req: Request, res: Response) 
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
+};
+
+export const updateStudentFavorite = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { is_favorite } = req.body;
+  try {
+    await ensureStudentExtendedColumns();
+    const result = await pool.query(
+      'UPDATE students SET is_favorite = $1 WHERE id = $2 RETURNING *',
+      [is_favorite, id]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Student not found' });
+      return;
+    }
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const updateStudentReferralStatus = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { referral_outreach_status } = req.body;
+  try {
+    await ensureStudentExtendedColumns();
+    const result = await pool.query(
+      'UPDATE students SET referral_outreach_status = $1 WHERE id = $2 RETURNING *',
+      [referral_outreach_status, id]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Student not found' });
+      return;
+    }
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 };

@@ -10,7 +10,8 @@ import {
   UserPlus,
   Download,
   Upload,
-  Trash2
+  Trash2,
+  Star,
 } from 'lucide-vue-next';
 
 interface Student {
@@ -43,6 +44,9 @@ interface Student {
   matcher_reservation_created_at?: string | null;
   matcher_interview_scheduled_at?: string | null;
   matcher_interview_actual_at?: string | null;
+  is_favorite?: boolean;
+  referral_count?: number;
+  referral_outreach_status?: string;
 }
 
 const INVALID_SOURCE_COMPANY_VALUES = new Set(['初回平均(日)', '氏名', '流入経路', 'source_company']);
@@ -133,6 +137,7 @@ const nextMeetingDateFrom = ref('');
 const nextMeetingDateTo = ref('');
 const taskDueDateFrom = ref('');
 const taskDueDateTo = ref('');
+const showFavoritesOnly = ref(false);
 const currentPage = ref(1);
 const pageSize = 50;
 const isDesktop = ref(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
@@ -226,6 +231,21 @@ const mergeDateHour = (date: string, hour: string) => {
   if (!date) return '';
   const hh = (hour || '10').padStart(2, '0');
   return `${date}T${hh}:00`;
+};
+
+const toggleFavorite = async (student: Student) => {
+  const newValue = !student.is_favorite;
+  try {
+    await api.patch(`/api/students/${student.id}/favorite`, { is_favorite: newValue });
+    student.is_favorite = newValue;
+    pushNotification({
+      title: newValue ? 'お気に入り登録しました' : 'お気に入り解除しました',
+      type: 'success'
+    });
+  } catch (err) {
+    console.error(err);
+    pushNotification({ title: 'エラーが発生しました', type: 'error' });
+  }
 };
 
 const fetchStudents = async () => {
@@ -576,6 +596,8 @@ const filteredStudents = computed(() => {
     const matchesGraduationYear =
       af.graduationYearFilter === 'ALL' ||
       String(s.graduation_year || '') === af.graduationYearFilter;
+    const matchesFavorite =
+      !af.showFavoritesOnly || s.is_favorite;
     const nextMeetingDate = normalizeDate(s.next_meeting_date);
     const matchesNextMeetingDate =
       (!af.nextMeetingDateFrom || (nextMeetingDate && nextMeetingDate >= af.nextMeetingDateFrom)) &&
@@ -593,6 +615,7 @@ const filteredStudents = computed(() => {
       && matchesGraduationYear
       && matchesReferral
       && matchesProgress
+      && matchesFavorite
       && matchesNextMeetingDate
       && matchesTaskDueDate;
   });
@@ -650,6 +673,7 @@ const applyFilters = () => {
     referralStatusFilter: referralStatusFilter.value,
     progressStageFilter: progressStageFilter.value,
     graduationYearFilter: graduationYearFilter.value,
+    showFavoritesOnly: showFavoritesOnly.value,
     nextMeetingDateFrom: nextMeetingDateFrom.value,
     nextMeetingDateTo: nextMeetingDateTo.value,
     taskDueDateFrom: taskDueDateFrom.value,
@@ -670,6 +694,7 @@ const clearFilters = () => {
   referralStatusFilter.value = 'ALL';
   progressStageFilter.value = 'ALL';
   graduationYearFilter.value = 'ALL';
+  showFavoritesOnly.value = false;
   nextMeetingDateFrom.value = '';
   nextMeetingDateTo.value = '';
   taskDueDateFrom.value = '';
@@ -1080,6 +1105,11 @@ watch(filteredStudents, () => {
                 <option value="ALL">担当者: すべて</option>
                 <option v-for="u in staffUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
               </select>
+              <label class="flex items-center gap-2 px-3 py-2 border border-blue-100 rounded-lg text-base md:text-sm cursor-pointer bg-blue-50/50 hover:bg-blue-50 transition-colors whitespace-nowrap">
+                <input type="checkbox" v-model="showFavoritesOnly" class="rounded border-gray-300 text-yellow-500 focus:ring-yellow-500" />
+                <Star class="w-4 h-4" :class="showFavoritesOnly ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'" />
+                <span class="font-bold text-slate-700">お気に入り</span>
+              </label>
               <details class="relative">
                 <summary class="list-none px-3 py-2 border border-gray-200 rounded-lg text-base md:text-sm cursor-pointer bg-white">
                   流入経路: {{ selectedSourceCompanies.length ? `${selectedSourceCompanies.length}件` : 'すべて' }}
@@ -1302,6 +1332,7 @@ watch(filteredStudents, () => {
         <table class="w-full min-w-[1000px]">
           <thead class="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-500">
             <tr>
+              <th class="px-2 py-4 text-center w-10">⭐️</th>
               <th class="px-4 py-4 text-left">流入経路</th>
               <th class="px-4 py-4 text-left">氏名</th>
               <th class="px-4 py-4 text-left hidden xl:table-cell">大学</th>
@@ -1310,7 +1341,7 @@ watch(filteredStudents, () => {
               <th class="px-3 py-4 text-left hidden xl:table-cell">文理</th>
               <th class="px-3 py-4 text-left hidden lg:table-cell">卒業年度</th>
               <th class="px-4 py-4 text-left">担当</th>
-              <th class="px-3 py-4 text-left">打診</th>
+              <th class="px-3 py-4 text-left">紹介数</th>
               <th class="px-3 py-4 text-left">次回面談</th>
               <th class="px-3 py-4 text-left hidden xl:table-cell">タスク履行</th>
               <th class="px-6 py-4 text-right">操作</th>
@@ -1318,6 +1349,11 @@ watch(filteredStudents, () => {
           </thead>
           <tbody class="divide-y divide-gray-200 bg-white">
             <tr v-for="s in pagedStudents" :key="s.id" class="hover:bg-slate-50/50 transition-colors border-b border-slate-50 last:border-0 group">
+              <td class="px-2 py-4 text-center">
+                <button @click.stop="toggleFavorite(s)" class="focus:outline-none transition-transform active:scale-125">
+                  <Star :class="s.is_favorite ? 'fill-yellow-400 text-yellow-400' : 'text-slate-200 hover:text-slate-300'" class="w-5 h-5" />
+                </button>
+              </td>
               <td class="px-4 py-4 text-xs text-slate-600 font-medium whitespace-nowrap">{{ normalizeSourceCompany(s.source_company) || '-' }}</td>
               <td class="px-4 py-4 text-xs font-black text-slate-900 whitespace-nowrap">
                 <button @click="router.push(`/students/${s.id}`)" class="hover:text-blue-600 transition-colors">{{ s.name }}</button>

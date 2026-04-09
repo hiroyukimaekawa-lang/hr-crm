@@ -63,6 +63,7 @@ const newTaskDate = ref('');
 const newTaskContent = ref('');
 const newScheduleDate = ref('');
 const newScheduleType = ref<'流入日' | '面談' | 'リスケ'>('面談');
+const allStudents = ref<any[]>([]);
 
 const statusModalOpen = ref(false)
 const statusModalTarget = ref<any>(null)
@@ -224,7 +225,8 @@ const resetBasicDraft = () => {
     first_interview_date: student.value?.first_interview_date || '',
     second_interview_date: student.value?.second_interview_date || '',
     next_meeting_date: student.value?.next_meeting_date || '',
-    next_action: student.value?.next_action || ''
+    next_action: student.value?.next_action || '',
+    referred_by_id: student.value?.referred_by_id || ''
   };
 };
 
@@ -247,6 +249,11 @@ const fetchDetail = async () => {
   referralStatusDraft.value = student.value?.referral_status || '不明';
   progressStageDraft.value = student.value?.progress_stage || '面談調整中';
   resetBasicDraft();
+  
+  if (allStudents.value.length === 0) {
+    const listRes = await api.get('/api/students', { headers: { Authorization: token } });
+    allStudents.value = listRes.data;
+  }
 };
 
 const toLocalDateTimeString = (value: any) => {
@@ -736,7 +743,8 @@ const saveBasic = async () => {
       first_interview_date: basicDraft.value.first_interview_date || null,
       second_interview_date: basicDraft.value.second_interview_date || null,
       next_meeting_date: basicDraft.value.next_meeting_date || null,
-      next_action: basicDraft.value.next_action || null
+      next_action: basicDraft.value.next_action || null,
+      referred_by_id: basicDraft.value.referred_by_id ? Number(basicDraft.value.referred_by_id) : null
     }, { headers: { Authorization: token } });
     basicSaveMessage.value = '基本情報を保存しました。';
     await fetchDetail();
@@ -1137,6 +1145,13 @@ watch(selectedEventId, () => {
                 <div>
                   <p class="text-base md:text-sm text-gray-500">志望職種</p>
                   <p class="text-sm font-medium">{{ student.desired_role || '-' }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 text-gray-600 min-w-0">
+                <GraduationCap class="w-5 h-5 text-green-600" />
+                <div>
+                  <p class="text-base md:text-sm text-gray-500">被紹介人数</p>
+                  <p class="text-sm font-bold text-green-700">{{ student.referral_count || 0 }}人</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
@@ -1899,9 +1914,18 @@ watch(selectedEventId, () => {
               <label class="text-xs font-medium text-gray-500">次回面談日</label>
               <input v-model="basicDraft.next_meeting_date" type="date" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
             </div>
-            <div class="flex flex-col gap-0.5 md:col-span-2">
+            <div class="flex flex-col gap-0.5">
               <label class="text-xs font-medium text-gray-500">ネクストアクション</label>
               <input v-model="basicDraft.next_action" type="text" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div class="flex flex-col gap-0.5">
+              <label class="text-xs font-medium text-gray-500 font-bold text-blue-600">紹介元学生</label>
+              <select v-model="basicDraft.referred_by_id" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs font-bold bg-blue-50">
+                <option value="">なし（直接流入など）</option>
+                <option v-for="s in allStudents.filter(s => s.id !== Number(studentId))" :key="`ref-select-${s.id}`" :value="s.id">
+                  {{ s.name }} ({{ s.university || '-' }})
+                </option>
+              </select>
             </div>
           </div>
           <div class="mt-6 flex justify-end gap-3">

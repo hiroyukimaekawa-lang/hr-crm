@@ -39,7 +39,9 @@ import {
     deleteSourceCategory,
     getGraduationYearCategories,
     createGraduationYearCategory,
-    deleteGraduationYearCategory
+    deleteGraduationYearCategory,
+    updateStudentFavorite,
+    updateStudentReferralStatus
 } from '../controllers/studentController';
 import { authenticate } from '../middlewares/auth';
 
@@ -89,6 +91,8 @@ router.put('/:id', authenticate, updateStudentBasic);
 router.put('/:id/status', authenticate, updateStudentStatus);
 router.put('/:id/staff', authenticate, updateStudentStaff);
 router.put('/:id/meta', authenticate, updateStudentMeta);
+router.patch('/:id/favorite', authenticate, updateStudentFavorite);
+router.patch('/:id/referral-status', authenticate, updateStudentReferralStatus);
 router.post('/:id/tasks', authenticate, addStudentTask);
 router.put('/tasks/:taskId/complete', authenticate, completeStudentTask);
 router.delete('/tasks/:taskId', authenticate, deleteStudentTask);

@@ -8,6 +8,12 @@ interface Student {
   id: number;
   name: string;
   status?: string;
+  is_favorite?: boolean;
+  referral_outreach_status?: string;
+  referral_count?: number;
+  university?: string;
+  graduation_year?: number;
+  staff_name?: string;
   created_at?: string;
 }
 
@@ -65,6 +71,7 @@ interface KgiProgress {
 }
 
 const students = ref<Student[]>([]);
+const dashboardTab = ref('MAIN');
 const events = ref<EventItem[]>([]);
 const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
 const selectedYomiEvent = ref<EventItem | null>(null);
@@ -1014,6 +1021,22 @@ const filteredMonthlyParticipants = computed(() => {
   });
 });
 
+const updateReferralOutreachStatus = async (studentId: number, status: string) => {
+  try {
+    const token = localStorage.getItem('token');
+    await api.patch(`/api/students/${studentId}/referral-status`, { referral_outreach_status: status }, {
+      headers: { Authorization: token }
+    });
+    // Update local state
+    const student = students.value.find(s => s.id === studentId);
+    if (student) {
+      student.referral_outreach_status = status;
+    }
+  } catch (err) {
+    console.error(err);
+  }
+};
+
 const isMobile = ref(false);
 const checkMobile = () => {
   isMobile.value = window.innerWidth < 1024;
@@ -1038,6 +1061,26 @@ watch(selectedGraduationYear, fetchFunnelKpi);
         <h1 class="text-3xl font-black text-gray-900 tracking-tight">ダッシュボード</h1>
         <p class="text-sm font-bold text-gray-500 mt-1 uppercase tracking-wider opacity-60">Latest performance & metrics</p>
       </div>
+
+      <!-- Tab Switcher -->
+      <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-8">
+        <button
+          @click="dashboardTab = 'MAIN'"
+          class="px-6 py-2 rounded-lg text-sm font-black transition-all"
+          :class="dashboardTab === 'MAIN' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+        >
+          メイン分析
+        </button>
+        <button
+          @click="dashboardTab = 'REFERRAL'"
+          class="px-6 py-2 rounded-lg text-sm font-black transition-all"
+          :class="dashboardTab === 'REFERRAL' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+        >
+          紹介打診管理
+        </button>
+      </div>
+
+      <div v-if="dashboardTab === 'MAIN'">
 
       <!-- KGI Daily Progress Widget -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
@@ -1532,6 +1575,72 @@ watch(selectedGraduationYear, fetchFunnelKpi);
         </div>
       </div>
     </div>
+    </div>
+  </div>
+
+  <div v-if="dashboardTab === 'REFERRAL'" class="space-y-8">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <span class="w-1.5 h-6 bg-yellow-400 rounded-full"></span>
+            会員学生への紹介打診
+          </h2>
+          <p class="text-sm text-gray-500 mt-1">信頼関係のある学生（お気に入り登録済み）を中心に紹介を依頼しましょう。</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 border-b border-slate-100">
+            <tr>
+              <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">学生名</th>
+              <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">大学 / 卒年</th>
+              <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">打診ステータス</th>
+              <th class="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider text-green-600">紹介人数</th>
+              <th class="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">操作</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr v-for="s in students.filter(s => s.is_favorite)" :key="`referral-row-${s.id}`" class="hover:bg-slate-50/50 transition-colors">
+              <td class="px-4 py-4 font-black text-slate-900">{{ s.name }}</td>
+              <td class="px-4 py-4 text-slate-500 font-medium">
+                {{ s.university || '-' }} / {{ s.graduation_year ? s.graduation_year + '卒' : '-' }}
+              </td>
+              <td class="px-4 py-4">
+                <select
+                  class="px-3 py-1.5 bg-slate-50 border-none rounded-lg text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
+                  :value="s.referral_outreach_status || 'unapproached'"
+                  @change="updateReferralOutreachStatus(s.id, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="unapproached">未実施</option>
+                  <option value="approached">打診中</option>
+                  <option value="completed">打診完了</option>
+                  <option value="received">紹介発生</option>
+                  <option value="stop">打診停止</option>
+                </select>
+              </td>
+              <td class="px-4 py-4 text-center">
+                <span v-if="s.referral_count && s.referral_count > 0" class="inline-flex items-center px-3 py-1 rounded-full bg-green-100 text-green-700 font-black text-base animate-in zoom-in">
+                  {{ s.referral_count }}人
+                </span>
+                <span v-else class="text-slate-300 font-bold">-</span>
+              </td>
+              <td class="px-4 py-4 text-right">
+                <button @click="$router.push(`/students/${s.id}`)" class="text-blue-600 font-bold text-xs hover:underline">
+                  詳細を確認
+                </button>
+              </td>
+            </tr>
+            <tr v-if="students.filter(s => s.is_favorite).length === 0">
+              <td colspan="5" class="px-4 py-12 text-center text-slate-400">
+                <p class="font-bold mb-2">お気に入り登録されている学生がいません</p>
+                <p class="text-xs">紹介打診を行うには、まず学生一覧でお気に入り（⭐️マーク）を付けてください。</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
