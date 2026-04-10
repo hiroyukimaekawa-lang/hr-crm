@@ -149,8 +149,13 @@ export const kpiApi = {
   /**
    * Get event-level KPI (all events).
    */
-  getEvents: () =>
-    api.get<EventKpiItem[]>('/api/kpi/events', authHeaders()),
+  getEvents: (params: {
+    month?: string;
+    week?: string;
+    date?: string;
+    period_type?: string;
+  } = {}) =>
+    api.get<EventKpiItem[]>('/api/kpi/events', { ...authHeaders(), params }),
 
   /**
    * Get goal settings.

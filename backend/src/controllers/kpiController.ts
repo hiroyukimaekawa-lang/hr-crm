@@ -44,9 +44,15 @@ export const kpiOverview = async (req: Request, res: Response) => {
 
 // ─────────────────────── GET /api/kpi/events ───────────────────────
 
-export const kpiEvents = async (_req: Request, res: Response) => {
+export const kpiEvents = async (req: Request, res: Response) => {
     try {
-        const result = await getEventKpi();
+        const filters: KpiFilters = {
+            month: req.query.month as string | undefined,
+            week: req.query.week as string | undefined,
+            date: req.query.date as string | undefined,
+            periodType: req.query.period_type as string | undefined,
+        };
+        const result = await getEventKpi(filters);
         res.json(result);
     } catch (err: any) {
         console.error('KPI events error:', err);

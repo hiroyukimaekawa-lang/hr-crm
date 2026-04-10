@@ -32,11 +32,23 @@ import {
 
 // ─── State ───
 
-const activeTab = ref<'monthly' | 'daily' | 'weekly' | 'event' | 'staff' | 'source'>('monthly');
+const activeTab = ref<'monthly' | 'weekly' | 'daily' | 'event' | 'staff' | 'source'>('monthly');
 const loading = ref(false);
 const saving = ref(false);
 const showExpired = ref(false);
 const selectedMonth = ref(new Date().toISOString().slice(0, 7));
+const selectedDate = ref(new Date().toISOString().slice(0, 10));
+
+// Weekly calculation: get current ISO week
+const getISOWeek = (date: Date) => {
+  const d = new Date(date.getTime());
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${d.getFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+};
+const selectedWeek = ref(getISOWeek(new Date()));
 
 const overview = ref<KpiOverviewResponse | null>(null);
 const eventKpi = ref<EventKpiItem[]>([]);
@@ -94,7 +106,11 @@ const monthOptions = computed(() => {
 const fetchOverview = async () => {
   loading.value = true;
   try {
-    const res = await kpiApi.getOverview({ month: selectedMonth.value });
+    const res = await kpiApi.getOverview({ 
+      month: selectedMonth.value,
+      week: selectedWeek.value,
+      date: selectedDate.value
+    });
     overview.value = res.data;
   } catch (err) {
     console.error('KPI overview fetch error:', err);
@@ -105,7 +121,15 @@ const fetchOverview = async () => {
 
 const fetchEvents = async () => {
   try {
-    const res = await kpiApi.getEvents();
+    // Determine the period filters based on active tab
+    const params: any = {
+      period_type: activeTab.value === 'weekly' ? 'weekly' : activeTab.value === 'daily' ? 'daily' : 'monthly'
+    };
+    if (activeTab.value === 'weekly') params.week = selectedWeek.value;
+    else if (activeTab.value === 'daily') params.date = selectedDate.value;
+    else params.month = selectedMonth.value;
+
+    const res = await kpiApi.getEvents(params);
     eventKpi.value = res.data;
   } catch (err) {
     console.error('KPI events fetch error:', err);
@@ -208,9 +232,32 @@ const saveEventSettings = async () => {
   if (!editingEvent.value) return;
   saving.value = true;
   try {
+    // 1. Basic event settings (unit price, rates, custom steps)
     await kpiApi.updateEventKpi(editingEvent.value.event_id, eventForm.value);
+
+    // 2. Period-specific target settings (manual override)
+    const periodType = activeTab.value === 'weekly' ? 'weekly' : activeTab.value === 'daily' ? 'daily' : 'monthly';
+    const periodStart = activeTab.value === 'weekly' ? selectedWeek.value : activeTab.value === 'daily' ? selectedDate.value : selectedMonth.value + '-01';
+    
+    // We only save if a target is actually set or if we want to overwrite
+    // For simplicity, we always sync the target of current period if it's not the 'event' tab
+    if (activeTab.value === 'monthly' || activeTab.value === 'weekly' || activeTab.value === 'daily') {
+      await kpiApi.updateGoals([{
+        scope_type: 'event',
+        scope_id: editingEvent.value.event_id,
+        period_type: periodType,
+        period_start: periodStart,
+        period_end: eventForm.value.entry_deadline || null,
+        metric_key: 'target_seats',
+        target_value: eventForm.value.target_seats
+      }]);
+    }
+
     showEventEditor.value = false;
     await fetchEvents();
+    if (activeTab.value === 'monthly' || activeTab.value === 'weekly' || activeTab.value === 'daily') {
+        await fetchOverview();
+    }
   } catch (err) {
     console.error('Failed to save event settings', err);
     alert('設定の保存に失敗しました');
@@ -357,8 +404,9 @@ const totalCurrentSales = computed(() =>
           <button
             v-for="tab in [
               { id: 'monthly', label: '月間KPI' },
+              { id: 'weekly', label: '週間KPI' },
               { id: 'daily', label: 'デイリー' },
-              { id: 'event', label: 'イベントKPI' },
+              { id: 'event', label: '全イベント' },
               { id: 'staff', label: '担当者別' },
               { id: 'source', label: '流入元別' },
             ]"
@@ -369,6 +417,35 @@ const totalCurrentSales = computed(() =>
               : 'text-gray-500 border-transparent hover:text-gray-800'"
             @click="activeTab = tab.id as any"
           >{{ tab.label }}</button>
+        </div>
+
+        <!-- Period selector -->
+        <div class="flex items-center gap-4 mb-6 bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
+          <div v-if="activeTab === 'monthly' || activeTab === 'staff' || activeTab === 'source'" class="flex items-center gap-2">
+            <span class="text-xs font-bold text-blue-600 uppercase">対象月</span>
+            <select v-model="selectedMonth" class="px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20">
+              <option v-for="m in monthOptions" :key="m" :value="m">{{ m.replace('-', '年') }}月</option>
+            </select>
+          </div>
+          <div v-if="activeTab === 'weekly'" class="flex items-center gap-2">
+            <span class="text-xs font-bold text-blue-600 uppercase">対象週</span>
+            <input type="week" v-model="selectedWeek" class="px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20" />
+          </div>
+          <div v-if="activeTab === 'daily'" class="flex items-center gap-2">
+            <span class="text-xs font-bold text-blue-600 uppercase">対象日</span>
+            <input type="date" v-model="selectedDate" class="px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20" />
+          </div>
+          
+          <div class="ml-auto">
+            <button
+              v-if="activeTab === 'monthly'"
+              @click="showGoalEditor = !showGoalEditor"
+              class="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-200"
+            >
+              <Settings2 class="w-4 h-4" />
+              月間目標設定
+            </button>
+          </div>
         </div>
 
         <!-- ═══════ Monthly KPI Tab ═══════ -->
@@ -467,32 +544,84 @@ const totalCurrentSales = computed(() =>
           </div>
         </div>
 
-        <!-- ═══════ Daily Tab ═══════ -->
-        <div v-if="activeTab === 'daily' && daily">
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <!-- ═══════ Weekly KPI Tab ═══════ -->
+        <div v-if="activeTab === 'weekly' && overview?.weekly">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div v-for="item in [
-              { label: '売上/日', metric: daily.sales, prefix: '¥' },
-              { label: '着座/日', metric: daily.seats },
-              { label: 'エントリー/日', metric: daily.entries },
-              { label: '面談/日', metric: daily.interviews },
-            ]" :key="item.label"
-              class="rounded-xl border p-4 text-center"
-              :class="rateBgColor(item.metric.target > 0 ? 0 : 100)"
-            >
-              <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">{{ item.label }}</p>
-              <p class="text-3xl font-black text-gray-800">{{ item.prefix || '' }}{{ item.metric.target }}</p>
-              <p class="text-[10px] text-gray-400 mt-1">必要数/日</p>
+              { key: 'sales', label: '週間売上', metric: overview.weekly.sales, unit: '円' },
+              { key: 'seats', label: '週間着座数', metric: overview.weekly.seats, unit: '名' },
+              { key: 'entries', label: '週間エントリー数', metric: overview.weekly.entries, unit: '件' },
+              { key: 'interviews', label: '週間面談数', metric: overview.weekly.interviews, unit: '件' },
+            ]" :key="item.key" class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm transition-all hover:shadow-md">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{{ item.label }}</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-black" :class="rateBgColor(item.metric.achievementRate)">
+                  {{ item.metric.achievementRate }}%
+                </span>
+              </div>
+              <div class="flex items-baseline gap-2 mb-2">
+                <span class="text-2xl font-black text-gray-900">{{ item.key === 'sales' ? '¥' : '' }}{{ formatCurrency(item.metric.actual) }}</span>
+                <span class="text-xs text-gray-400 font-bold">/ {{ item.key === 'sales' ? '¥' : '' }}{{ formatCurrency(item.metric.target) }}</span>
+              </div>
+              <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div 
+                  class="h-full rounded-full transition-all duration-1000"
+                  :class="item.metric.achievementRate >= 80 ? 'bg-emerald-500' : 'bg-blue-500'"
+                  :style="{ width: `${Math.min(item.metric.achievementRate, 100)}%` }"
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════ Daily KPI Tab ═══════ -->
+        <div v-if="activeTab === 'daily' && overview?.daily">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div v-for="item in [
+              { label: '本日必要売上', metric: overview.daily.sales, unit: '円' },
+              { label: '本日必要着座', metric: overview.daily.seats, unit: '名' },
+              { label: '本日必要エントリー', metric: overview.daily.entries, unit: '件' },
+              { label: '本日必要面談', metric: overview.daily.interviews, unit: '件' },
+            ]" :key="item.label" class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm text-center">
+              <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">{{ item.label }}</p>
+              <p class="text-3xl font-black text-blue-800">{{ formatCurrency(item.metric.target) }}<span class="text-sm ml-1">{{ item.unit }}</span></p>
             </div>
           </div>
 
           <!-- Daily trend -->
-          <div v-if="daily.trend && daily.trend.length > 0" class="bg-white rounded-2xl border border-gray-200 p-5">
-            <h3 class="text-sm font-bold text-gray-800 mb-4">日次推移（申込数）</h3>
-            <div class="overflow-x-auto">
+          <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8">
+            <div class="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+              <h3 class="text-sm font-bold text-gray-800">エントリー推移 (直近)</h3>
+              <TrendingUp class="w-4 h-4 text-gray-400" />
+            </div>
+            <div class="p-6">
               <table class="w-full text-sm">
-                <thead class="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th class="px-4 py-2 text-left text-xs font-bold text-gray-500">日付</th>
+                <thead>
+                  <tr class="text-left text-[10px] font-bold text-gray-400 uppercase">
+                    <th class="px-4 py-2 border-b">日付</th>
+                    <th class="px-4 py-2 border-b text-right">件数</th>
+                    <th class="px-4 py-2 border-b"></th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr v-for="d in overview.daily.trend.slice(0, 14)" :key="d.day" class="hover:bg-gray-50">
+                    <td class="px-4 py-2 text-gray-700 font-medium whitespace-nowrap">{{ d.day.slice(5) }}</td>
+                    <td class="px-4 py-2 text-right font-bold text-gray-900">{{ d.count }}</td>
+                    <td class="px-4 py-2">
+                      <div class="h-4 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          class="h-full bg-blue-500 rounded-full transition-all"
+                          :style="{ width: `${Math.min((d.count / Math.max(...overview.daily.trend.map(t => t.count), 1)) * 100, 100)}%` }"
+                        ></div>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
                     <th class="px-4 py-2 text-right text-xs font-bold text-gray-500">件数</th>
                     <th class="px-4 py-2 text-left text-xs font-bold text-gray-500 w-1/2">グラフ</th>
                   </tr>

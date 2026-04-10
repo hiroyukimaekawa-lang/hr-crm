@@ -276,26 +276,65 @@ export const getOverview = async (filters: KpiFilters): Promise<KpiOverviewResul
 
 // ─────────────────────── Event KPI ───────────────────────
 
-export const getEventKpi = async (): Promise<any[]> => {
+export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
     const events = await getEventKpiData();
 
+    // 1. Get period-specific goals for events if we have a context (month, week, or date)
+    let periodGoals: Record<number, { target?: number; deadline?: string }> = {};
+    
+    if (filters.month || filters.week || filters.date) {
+        const goalRows = await getGoals({
+            scopeType: 'event',
+            periodType: filters.periodType || (filters.month ? 'monthly' : filters.week ? 'weekly' : 'daily'),
+            month: filters.month,
+            date: filters.date,
+            // note: getGoals handles week by passing filters.month-01 internally if month exists,
+            // we should ensure it handles week correctly.
+        });
+
+        for (const g of goalRows) {
+            if (g.scope_id) {
+                if (!periodGoals[g.scope_id]) periodGoals[g.scope_id] = {};
+                if (g.metric_key === 'target_seats') {
+                    periodGoals[g.scope_id].target = Number(g.target_value);
+                }
+                if (g.period_end) {
+                    periodGoals[g.scope_id].deadline = g.period_end.slice(0, 10);
+                }
+            }
+        }
+    }
+
+    const todayDate = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00');
+
     return events.map(e => {
-        //歩留まり率 (Conversion Rates)
+        // 2. Override with period-specific goals if they exist
+        const override = periodGoals[e.event_id];
+        const targetSeats = override?.target ?? e.target_seats;
+        const deadline = override?.deadline ?? e.deadline;
+
+        // Recalculate days_remaining based on (potentially overridden) deadline
+        let daysRemaining = e.days_remaining;
+        if (deadline) {
+            const deadlineDate = new Date(deadline + 'T00:00:00');
+            daysRemaining = Math.floor((deadlineDate.getTime() - todayDate.getTime()) / 86400000);
+        }
+
+        // 歩留まり率 (Conversion Rates)
         const seatToEntry = safeRate(e.kpi_seat_to_entry_rate, 70) / 100;
         const entryToInterview = safeRate(e.kpi_entry_to_interview_rate, 60) / 100;
         const interviewToReservation = safeRate(e.kpi_interview_to_reservation_rate, 50) / 100;
         const reservationToApplication = safeRate(e.kpi_reservation_to_application_rate, 40) / 100;
 
         // 目標値の逆算 (Back-calculating targets)
-        const targetSeats = e.target_seats;
         const targetEntries = targetSeats > 0 ? Math.ceil(targetSeats / seatToEntry) : 0;
         const targetInterviews = targetEntries > 0 ? Math.ceil(targetEntries / entryToInterview) : 0;
         const targetReservations = targetInterviews > 0 ? Math.ceil(targetInterviews / interviewToReservation) : 0;
         const targetApplications = targetReservations > 0 ? Math.ceil(targetReservations / reservationToApplication) : 0;
 
-        const days = Math.max(e.days_remaining, 0);
+        const days = Math.max(daysRemaining, 0);
 
-        // 必要アクション数計算ヘルパー (Action required calculation helper)
+        // 必要アクション数計算ヘルパー
         const calcAction = (target: number, current: number) => {
             const remaining = Math.max(target - current, 0);
             const daily = days > 0 ? Math.round((remaining / days) * 10) / 10 : 0;
@@ -305,7 +344,6 @@ export const getEventKpi = async (): Promise<any[]> => {
 
         const seatsAction = calcAction(targetSeats, e.current_seats);
         const entriesAction = calcAction(targetEntries, e.current_entries);
-        // 他のステップの実績（current）がリポジトリで取れていない場合は0とする
         const interviewsAction = calcAction(targetInterviews, 0); 
         const reservationsAction = calcAction(targetReservations, 0);
         const applicationsAction = calcAction(targetApplications, 0);
@@ -317,8 +355,8 @@ export const getEventKpi = async (): Promise<any[]> => {
         return {
             event_id: e.event_id,
             event_title: e.event_title,
-            deadline: e.deadline,
-            days_remaining: e.days_remaining,
+            deadline: deadline,
+            days_remaining: daysRemaining,
             
             // Goals
             target_seats: targetSeats,
