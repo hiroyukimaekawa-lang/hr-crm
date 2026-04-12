@@ -1040,34 +1040,71 @@ const salesTargetGap = computed(() =>
                       </td>
                     </tr>
 
-                    <!-- Slot Breakdown Row (案B: 日程別の実績表示) -->
+                    <!-- Slot Breakdown Row (案B: 日程別の実績と目標表示) -->
                     <tr v-if="expandedEvents[e.event_id]">
                       <td colspan="10" class="px-6 py-4 bg-gray-50/80 border-y border-gray-100">
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                          <div v-for="slot in e.slots" :key="slot.date" 
-                            class="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between group hover:border-blue-400 transition-all"
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-3">
+                          <div v-for="slot in e.schedule_breakdown || (e.slots as any[])" :key="slot.date" 
+                            class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-3 group hover:border-blue-400 transition-all"
                           >
-                            <div class="flex items-center gap-3">
-                              <div class="p-2 bg-blue-50 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                                <Calendar class="w-4 h-4" />
-                              </div>
-                              <div class="flex flex-col">
-                                <span class="text-xs font-black text-gray-900">{{ slot.date.replace('T', ' ').slice(5, 16) }}</span>
-                                <span class="text-[10px] font-bold text-gray-400">開催日程</span>
+                            <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+                              <div class="flex items-center gap-3">
+                                <div class="p-2 bg-blue-50 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                  <Calendar class="w-4 h-4" />
+                                </div>
+                                <div class="flex flex-col">
+                                  <span class="text-xs font-black text-gray-900">{{ slot.date.replace('T', ' ').slice(5, 16) }}</span>
+                                  <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-bold text-gray-400">開催日程</span>
+                                    <span v-if="slot.capacity" class="text-[9px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded font-bold">枠: {{ slot.capacity }}名</span>
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                            <div class="flex items-center gap-4">
-                              <div class="text-right">
-                                <p class="text-[10px] font-bold text-gray-400 uppercase">着座</p>
-                                <p class="text-sm font-black text-gray-900">{{ slot.seats }}名</p>
+                            
+                            <div class="grid grid-cols-4 gap-2">
+                              <!-- エントリー -->
+                              <div class="bg-gray-50 rounded p-2 text-center">
+                                <p class="text-[9px] font-bold text-gray-400 uppercase mb-0.5">エントリー</p>
+                                <div class="flex items-baseline justify-center gap-1">
+                                  <span class="text-xs font-black" :class="(slot.actuals?.entries || slot.entries || 0) >= (slot.targets?.entries || 0) ? 'text-indigo-600' : 'text-gray-900'">
+                                    {{ slot.actuals?.entries || slot.entries || 0 }}
+                                  </span>
+                                  <span v-if="slot.targets" class="text-[10px] text-gray-400 font-bold">/ {{ slot.targets.entries }}</span>
+                                </div>
                               </div>
-                              <div class="text-right">
-                                <p class="text-[10px] font-bold text-gray-400 uppercase">Entry</p>
-                                <p class="text-sm font-black text-indigo-600">{{ slot.entries }}名</p>
+                              
+                              <!-- 面談 (目標のみ出せる場合は目標のみ) -->
+                              <div class="bg-gray-50 rounded p-2 text-center">
+                                <p class="text-[9px] font-bold text-gray-400 uppercase mb-0.5">面談</p>
+                                <div class="flex items-baseline justify-center gap-1">
+                                  <span class="text-xs font-black text-gray-900">-</span>
+                                  <span v-if="slot.targets" class="text-[10px] text-gray-400 font-bold">/ {{ slot.targets.interviews }}</span>
+                                </div>
+                              </div>
+                              
+                              <!-- 流入 -->
+                              <div class="bg-gray-50 rounded p-2 text-center">
+                                <p class="text-[9px] font-bold text-gray-400 uppercase mb-0.5">流入</p>
+                                <div class="flex items-baseline justify-center gap-1">
+                                  <span class="text-xs font-black text-gray-900">-</span>
+                                  <span v-if="slot.targets" class="text-[10px] text-gray-400 font-bold">/ {{ slot.targets.inflow }}</span>
+                                </div>
+                              </div>
+                              
+                              <!-- 着座 -->
+                              <div class="bg-blue-50 rounded p-2 text-center border border-blue-100">
+                                <p class="text-[9px] font-bold text-blue-600 uppercase mb-0.5">着座 (目標)</p>
+                                <div class="flex items-baseline justify-center gap-1">
+                                  <span class="text-xs font-black text-blue-700">
+                                    {{ slot.actuals?.seats || slot.seats || 0 }}
+                                  </span>
+                                  <span v-if="slot.targets" class="text-[10px] text-blue-400 font-bold">/ {{ slot.targets.seats }}</span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                          <div v-if="e.slots.length === 0" class="col-span-full text-center py-4 text-xs text-gray-400 italic">
+                          <div v-if="(!e.schedule_breakdown || e.schedule_breakdown.length === 0) && (!e.slots || e.slots.length === 0)" class="col-span-full text-center py-4 text-xs text-gray-400 italic">
                             このイベントに紐づく個別の日程実績はありません。
                           </div>
                         </div>

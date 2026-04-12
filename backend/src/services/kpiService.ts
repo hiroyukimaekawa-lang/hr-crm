@@ -307,6 +307,9 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
                 if (g.metric_key === 'unit_price') {
                     (periodGoals[g.scope_id] as any).unit_price = Number(g.target_value);
                 }
+                if (g.metric_key === 'allocation_weight') {
+                    (periodGoals[g.scope_id] as any).allocation_weight = Number(g.target_value);
+                }
                 if (g.period_end) {
                     periodGoals[g.scope_id].deadline = g.period_end.slice(0, 10);
                 }
@@ -403,6 +406,43 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
             kpi_interview_to_inflow_rate: e.kpi_interview_to_inflow_rate,
             kpi_custom_steps: e.kpi_custom_steps,
             status_breakdown: e.status_breakdown,
+            
+            // Schedule-level breakdown (Decomposition)
+            schedule_breakdown: (e.event_slots || []).map((slot: any) => {
+                const slotDateStr = slot.datetime ? slot.datetime.slice(0, 19) : '';
+                const actual = (e.slots || []).find((s: any) => s.date?.slice(0, 19) === slotDateStr) || { entries: 0, seats: 0 };
+                
+                // Decomposition Logic
+                const totalCap = (e.event_slots || []).reduce((sum: number, s: any) => sum + (Number(s.capacity) || 0), 0);
+                const slotCap = Number(slot.capacity) || 0;
+                
+                let slotTargetSeats = 0;
+                if (totalCap > 0 && slotCap > 0) {
+                    slotTargetSeats = Math.ceil(targetSeats * (slotCap / totalCap));
+                } else {
+                    slotTargetSeats = Math.ceil(targetSeats / Math.max((e.event_slots || []).length, 1));
+                }
+                
+                // Back-calculate funnel for this slot
+                const slotTargetEntries = slotTargetSeats > 0 ? Math.ceil(slotTargetSeats / seatToEntry) : 0;
+                const slotTargetInterviews = slotTargetEntries > 0 ? Math.ceil(slotTargetEntries / entryToInterview) : 0;
+                const slotTargetInflow = slotTargetInterviews > 0 ? Math.ceil(slotTargetInterviews / (safeRate(e.kpi_interview_to_inflow_rate, 50) / 100)) : 0;
+                
+                return {
+                    date: slot.datetime,
+                    capacity: slotCap,
+                    targets: {
+                        seats: slotTargetSeats,
+                        entries: slotTargetEntries,
+                        interviews: slotTargetInterviews,
+                        inflow: slotTargetInflow
+                    },
+                    actuals: {
+                        seats: actual.seats,
+                        entries: actual.entries
+                    }
+                };
+            }),
             slots: e.slots || []
         };
     });

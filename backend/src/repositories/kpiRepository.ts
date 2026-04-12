@@ -57,7 +57,8 @@ export interface EventKpiRow {
     kpi_interview_to_inflow_rate: number;
     kpi_custom_steps: any[];
     status_breakdown: Record<string, number>;
-    slots: any[];
+    event_slots: any[]; // Raw slots from events table
+    slots: any[];       // Aggregated actuals
 }
 
 // ─────────────────────── Table Init ───────────────────────
@@ -368,6 +369,7 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
             COALESCE(e.kpi_reservation_to_application_rate, 40) AS kpi_reservation_to_application_rate,
             COALESCE(e.kpi_interview_to_inflow_rate, 50) AS kpi_interview_to_inflow_rate,
             COALESCE(e.kpi_custom_steps, '[]') AS kpi_custom_steps,
+            COALESCE(e.event_slots, '[]'::jsonb) AS event_slots,
             COALESCE(
                 e.entry_deadline::text,
                 (
@@ -470,6 +472,7 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
             kpi_reservation_to_application_rate: Number(e.kpi_reservation_to_application_rate),
             kpi_interview_to_inflow_rate: Number(e.kpi_interview_to_inflow_rate),
             kpi_custom_steps: customSteps,
+            event_slots: e.event_slots,
             status_breakdown: breakdown,
             slots
         };

@@ -65,8 +65,17 @@ export interface KpiOverviewResponse {
 
 export interface EventKpiSlot {
   date: string;
-  entries: number;
-  seats: number;
+  capacity?: number;
+  targets?: {
+    seats: number;
+    entries: number;
+    interviews: number;
+    inflow: number;
+  };
+  actuals?: {
+    seats: number;
+    entries: number;
+  };
   status_breakdown: Record<string, number>;
 }
 
@@ -107,6 +116,7 @@ export interface EventKpiItem {
   kpi_interview_to_inflow_rate: number;
   kpi_custom_steps: any[];
   status_breakdown: Record<string, number>;
+  schedule_breakdown?: EventKpiSlot[];
   slots: EventKpiSlot[];
   unit_price: number;
 }
