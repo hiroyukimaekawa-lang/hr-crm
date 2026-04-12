@@ -306,22 +306,31 @@ const saveGoals = async () => {
   }
 };
 
-const onAllocationChange = (ea: any, field: 'sales' | 'seats' | 'price' | 'rate' | 'weight') => {
+const onAllocationChange = (ea: any, field: 'guaranteed' | 'seats' | 'price' | 'weight') => {
   if (field === 'weight') {
-    // Top-down: Sales = Global * weight%
+    // Top-down: 確約金額 = 全体目標 × 配分%
     ea.guaranteed_sales = Math.round(goalForm.value.sales_target * (ea.weight_pct / 100));
     if (ea.unit_price > 0) {
       ea.target_seats = Math.ceil(ea.guaranteed_sales / ea.unit_price);
     }
-  } else if (field === 'sales' || field === 'price') {
-    if (ea.unit_price > 0) {
-      ea.target_seats = Math.ceil(ea.guaranteed_sales / ea.unit_price);
-    }
-    // Update weight based on new sales
     if (goalForm.value.sales_target > 0) {
       ea.weight_pct = Math.round((ea.guaranteed_sales / goalForm.value.sales_target) * 100);
     }
+  } else if (field === 'guaranteed') {
+    // 確約金額を直接入力 → 着座数を自動算出
+    if (ea.unit_price > 0) {
+      ea.target_seats = Math.ceil(ea.guaranteed_sales / ea.unit_price);
+    }
+    if (goalForm.value.sales_target > 0) {
+      ea.weight_pct = Math.round((ea.guaranteed_sales / goalForm.value.sales_target) * 100);
+    }
+  } else if (field === 'price') {
+    // 単価変更 → 確約金額から着座数を再算出
+    if (ea.unit_price > 0) {
+      ea.target_seats = Math.ceil(ea.guaranteed_sales / ea.unit_price);
+    }
   } else if (field === 'seats') {
+    // 着座数を直接入力 → 確約金額を再算出
     ea.guaranteed_sales = ea.target_seats * ea.unit_price;
     if (goalForm.value.sales_target > 0) {
       ea.weight_pct = Math.round((ea.guaranteed_sales / goalForm.value.sales_target) * 100);
@@ -610,30 +619,35 @@ const salesTargetGap = computed(() =>
                     <input 
                       v-model.number="ea.guaranteed_sales" 
                       type="number" 
-                      @input="onAllocationChange(ea, 'sales')"
+                      @input="onAllocationChange(ea, 'guaranteed')"
                       class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none" 
                     />
                   </td>
                   <td class="px-3 py-3">
+                    <!-- 目標出席率：イベントKPIマスタ値を初期値として表示・編集可能 -->
                     <div class="flex items-center gap-1.5">
-                      <input v-model.number="ea.cvr_seat_to_entry" type="number" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none" />
-                      <span class="text-[10px] text-gray-400 font-medium">(マスタ:{{ ea.master_rate }}%)</span>
+                      <input
+                        v-model.number="ea.cvr_seat_to_entry"
+                        type="number"
+                        min="1" max="100"
+                        class="w-16 px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none text-center"
+                      />
+                      <span class="text-[10px] text-gray-400 font-medium whitespace-nowrap">(マスタ:{{ ea.master_rate }}%)</span>
                     </div>
                   </td>
                   <td class="px-3 py-3">
                     <div class="flex flex-col gap-0.5">
                       <div class="text-[9px] text-gray-400 font-bold uppercase">必要数:</div>
-                      <div class="text-[10px] font-bold text-gray-600">
-                        エ: {{ Math.ceil((ea.target_seats || 0) / ((ea.cvr_seat_to_entry || 70) / 100)) }}
-                        <span class="mx-1 text-gray-300">/</span>
-                        面: {{ Math.ceil((ea.target_seats || 0) / ((ea.cvr_seat_to_entry || 70) / 100) / ((ea.entry_to_interview_rate || 60) / 100)) }}
-                        <span class="mx-1 text-gray-300">/</span>
-                        流: {{ Math.ceil((ea.target_seats || 0) / ((ea.cvr_seat_to_entry || 70) / 100) / ((ea.entry_to_interview_rate || 60) / 100) / ((ea.interview_to_res_rate || 50) / 100)) }}
+                      <div class="text-[10px] font-bold text-gray-600 space-y-0.5">
+                        <div>エ: <span class="text-blue-600">{{ ea.target_seats > 0 && ea.cvr_seat_to_entry > 0 ? Math.ceil(ea.target_seats / (ea.cvr_seat_to_entry / 100)) : '-' }}</span></div>
+                        <div>面: <span class="text-indigo-600">{{ ea.target_seats > 0 && ea.cvr_seat_to_entry > 0 ? Math.ceil(ea.target_seats / (ea.cvr_seat_to_entry / 100) / ((ea.entry_to_interview_rate || 60) / 100)) : '-' }}</span></div>
+                        <div>流: <span class="text-violet-600">{{ ea.target_seats > 0 && ea.cvr_seat_to_entry > 0 ? Math.ceil(ea.target_seats / (ea.cvr_seat_to_entry / 100) / ((ea.entry_to_interview_rate || 60) / 100) / ((ea.interview_to_res_rate || 50) / 100)) : '-' }}</span></div>
                       </div>
                     </div>
                   </td>
-                  <td class="px-3 py-3 text-sm font-bold text-gray-400 text-right">
-                    ¥{{ Math.round((ea.target_seats || 0) * (ea.unit_price || 0) * ((ea.cvr_seat_to_entry || 0) / 100)).toLocaleString() }}
+                  <td class="px-3 py-3 text-sm font-bold text-emerald-600 text-right">
+                    <!-- 期待売上：着座数 × 単価 -->
+                    ¥{{ ((ea.target_seats || 0) * (ea.unit_price || 0)).toLocaleString() }}
                   </td>
                 </tr>
               </tbody>
