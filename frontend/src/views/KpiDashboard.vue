@@ -272,7 +272,16 @@ const saveGoals = async () => {
 };
 
 const loadAll = async () => {
-  await Promise.all([fetchOverview(), fetchEvents(), fetchGoals()]);
+  loading.value = true;
+  try {
+    // Sequence important: Overview and Events first, then Goals which depends on event data
+    await Promise.all([fetchOverview(), fetchEvents()]);
+    await fetchGoals();
+  } catch (err) {
+    console.error('Initial data load error:', err);
+  } finally {
+    loading.value = false;
+  }
 };
 
 watch(selectedMonth, () => {
@@ -479,9 +488,9 @@ const salesTargetGap = computed(() =>
               イベント別内訳 (月間担保設定)
             </h4>
             <div class="flex items-center gap-4">
-              <div class="text-[10px] font-bold text-gray-400 uppercase">確約合計: <span class="text-gray-900 text-sm ml-1">¥{{ totalEventGuaranteedSales.toLocaleString() }}</span></div>
-              <div :class="salesTargetGap >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold uppercase">
-                乖離: <span class="text-sm ml-1">{{ salesTargetGap >= 0 ? '+' : '' }}{{ salesTargetGap.toLocaleString() }}</span>
+              <div class="text-[10px] font-bold text-gray-400 uppercase">確約合計: <span class="text-gray-900 text-sm ml-1">¥{{ (totalEventGuaranteedSales || 0).toLocaleString() }}</span></div>
+              <div :class="(salesTargetGap || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold uppercase">
+                乖離: <span class="text-sm ml-1">{{ (salesTargetGap || 0) >= 0 ? '+' : '' }}{{ (salesTargetGap || 0).toLocaleString() }}</span>
               </div>
             </div>
           </div>
@@ -501,7 +510,7 @@ const salesTargetGap = computed(() =>
               <tbody>
                 <tr v-for="ea in eventAllocations" :key="ea.event_id" class="bg-gray-50/50 hover:bg-gray-50 transition-colors rounded-lg overflow-hidden">
                   <td class="px-3 py-3 text-sm font-bold text-gray-700">{{ ea.event_title }}</td>
-                  <td class="px-3 py-3 text-sm font-medium text-gray-500 text-center">¥{{ ea.unit_price.toLocaleString() }}</td>
+                  <td class="px-3 py-3 text-sm font-medium text-gray-500 text-center">¥{{ (ea.unit_price || 0).toLocaleString() }}</td>
                   <td class="px-3 py-3">
                     <input v-model.number="ea.target_seats" type="number" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none" />
                   </td>
@@ -515,7 +524,7 @@ const salesTargetGap = computed(() =>
                     </div>
                   </td>
                   <td class="px-3 py-3 text-sm font-bold text-gray-400 text-right">
-                    ¥{{ Math.round(ea.target_seats * ea.unit_price * (ea.cvr_seat_to_entry / 100)).toLocaleString() }}
+                    ¥{{ Math.round((ea.target_seats || 0) * (ea.unit_price || 0) * ((ea.cvr_seat_to_entry || 0) / 100)).toLocaleString() }}
                   </td>
                 </tr>
               </tbody>
