@@ -1644,6 +1644,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
               </div>
             </div>
         </div>
+          </div>
         </div>
       </div>
     </Teleport>
