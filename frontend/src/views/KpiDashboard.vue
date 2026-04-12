@@ -534,28 +534,13 @@ const salesTargetGap = computed(() =>
               selectedMonth.replace('-', '年') + '月' 
           }})
         </h3>
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-          <div v-for="[key, label] in [
-            ['sales_target', '売上目標 (円)'],
-            ['required_seats', '必要着座数'],
-            ['required_entries', '必要エントリー数'],
-            ['required_interviews', '必要面談数'],
-            ['required_interview_settings', '必要面談設定数'],
-            ['required_inflow', '必要流入数'],
-            ['cvr_seat_to_entry', '着座→エントリー率 (%)'],
-            ['cvr_entry_to_interview', 'エントリー→面談率 (%)'],
-            ['cvr_interview_to_setting', '面談→設定率 (%)'],
-            ['cvr_inflow_to_setting', '流入→設定率 (%)'],
-          ] as const" :key="key">
-            <div>
-              <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">{{ label }}</label>
-              <input
-                v-model.number="(goalForm as any)[key]"
-                type="number"
-                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
-              />
-            </div>
-          </div>
+        <div class="mb-6 max-w-xs">
+          <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">売上目標 (円)</label>
+          <input
+            v-model.number="goalForm.sales_target"
+            type="number"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+          />
         </div>
 
         <!-- Event Breakdown Table (New) -->
