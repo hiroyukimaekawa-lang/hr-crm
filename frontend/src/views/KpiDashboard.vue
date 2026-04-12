@@ -78,7 +78,11 @@ const eventAllocations = ref<Array<{
   target_seats: number;
   guaranteed_sales: number;
   cvr_seat_to_entry: number;
+  weight_pct: number;
   master_rate: number;
+  entry_to_interview_rate: number;
+  interview_to_res_rate: number;
+  res_to_app_rate: number;
 }>>([]);
 
 // Event editing
@@ -219,17 +223,25 @@ const fetchGoals = async () => {
         const goalSales = eventGoals.find(g => g.metric_key === 'guaranteed_sales')?.target_value;
         const goalUnitPrice = eventGoals.find(g => g.metric_key === 'unit_price')?.target_value;
         const goalRate = eventGoals.find(g => g.metric_key === 'cvr_seat_to_entry')?.target_value;
+        const goalWeight = eventGoals.find(g => g.metric_key === 'allocation_weight')?.target_value;
 
         const unitPrice = goalUnitPrice !== undefined ? Number(goalUnitPrice) : e.unit_price;
+        const guaranteedSales = goalSales !== undefined ? Number(goalSales) : (unitPrice * e.target_seats);
 
         return {
             event_id: e.event_id,
             event_title: e.event_title,
             unit_price: unitPrice,
             target_seats: goalSeats !== undefined ? Number(goalSeats) : e.target_seats,
-            guaranteed_sales: goalSales !== undefined ? Number(goalSales) : (unitPrice * e.target_seats),
+            guaranteed_sales: guaranteedSales,
             cvr_seat_to_entry: goalRate !== undefined ? Number(goalRate) : e.kpi_seat_to_entry_rate,
-            master_rate: e.kpi_seat_to_entry_rate
+            weight_pct: goalWeight !== undefined ? Number(goalWeight) : (goalForm.value.sales_target > 0 ? Math.round((guaranteedSales / goalForm.value.sales_target) * 100) : 0),
+            
+            // Rates for reverse calculation
+            master_rate: e.kpi_seat_to_entry_rate,
+            entry_to_interview_rate: e.kpi_entry_to_interview_rate,
+            interview_to_res_rate: (e as any).kpi_interview_to_reservation_rate || 50,
+            res_to_app_rate: (e as any).kpi_reservation_to_application_rate || 40
         };
     });
   } catch (err) {
@@ -278,6 +290,8 @@ const saveGoals = async () => {
       goals.push({ ...base, metric_key: 'guaranteed_sales', target_value: ea.guaranteed_sales });
       // unit price override
       goals.push({ ...base, metric_key: 'unit_price', target_value: ea.unit_price });
+      // weight override
+      goals.push({ ...base, metric_key: 'allocation_weight', target_value: ea.weight_pct });
       // rate override
       goals.push({ ...base, metric_key: 'cvr_seat_to_entry', target_value: ea.cvr_seat_to_entry });
     });
@@ -292,15 +306,44 @@ const saveGoals = async () => {
   }
 };
 
-const onAllocationChange = (ea: any, field: 'sales' | 'seats' | 'price' | 'rate') => {
-  if (field === 'sales' || field === 'price') {
+const onAllocationChange = (ea: any, field: 'sales' | 'seats' | 'price' | 'rate' | 'weight') => {
+  if (field === 'weight') {
+    // Top-down: Sales = Global * weight%
+    ea.guaranteed_sales = Math.round(goalForm.value.sales_target * (ea.weight_pct / 100));
     if (ea.unit_price > 0) {
       ea.target_seats = Math.ceil(ea.guaranteed_sales / ea.unit_price);
     }
+  } else if (field === 'sales' || field === 'price') {
+    if (ea.unit_price > 0) {
+      ea.target_seats = Math.ceil(ea.guaranteed_sales / ea.unit_price);
+    }
+    // Update weight based on new sales
+    if (goalForm.value.sales_target > 0) {
+      ea.weight_pct = Math.round((ea.guaranteed_sales / goalForm.value.sales_target) * 100);
+    }
   } else if (field === 'seats') {
     ea.guaranteed_sales = ea.target_seats * ea.unit_price;
+    if (goalForm.value.sales_target > 0) {
+      ea.weight_pct = Math.round((ea.guaranteed_sales / goalForm.value.sales_target) * 100);
+    }
   }
 };
+
+// Global Target change handler
+const distributeGlobalTarget = () => {
+    eventAllocations.value.forEach(ea => {
+        if (ea.weight_pct > 0) {
+            onAllocationChange(ea, 'weight');
+        } else {
+            // If No weights set yet, we don't auto-distribute unless requested?
+            // For now, only update if there's a ratio.
+        }
+    });
+};
+
+watch(() => goalForm.value.sales_target, () => {
+    distributeGlobalTarget();
+});
 
 const loadAll = async () => {
   loading.value = true;
@@ -535,16 +578,26 @@ const salesTargetGap = computed(() =>
               <thead>
                 <tr class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                   <th class="px-3 pb-2">イベント名</th>
+                  <th class="px-3 pb-2 w-20 text-center">配分 (%)</th>
                   <th class="px-3 pb-2 text-center">単価</th>
                   <th class="px-3 pb-2 w-24">目標座席数</th>
                   <th class="px-3 pb-2 w-32">確約金額 (円)</th>
                   <th class="px-3 pb-2 w-24">目標出席率 (%)</th>
+                  <th class="px-3 pb-2">必要数 (逆算)</th>
                   <th class="px-3 pb-2 text-right">期待売上 (参考)</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="ea in eventAllocations" :key="ea.event_id" class="bg-gray-50/50 hover:bg-gray-50 transition-colors rounded-lg overflow-hidden">
                   <td class="px-3 py-3 text-sm font-bold text-gray-700">{{ ea.event_title }}</td>
+                  <td class="px-3 py-3">
+                    <input 
+                      v-model.number="ea.weight_pct" 
+                      type="number" 
+                      @input="onAllocationChange(ea, 'weight')"
+                      class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold text-blue-600 focus:ring-2 focus:ring-blue-500/20 outline-none text-center" 
+                    />
+                  </td>
                   <td class="px-3 py-3">
                     <div class="relative flex items-center gap-1">
                       <span class="text-xs text-gray-400">¥</span>
@@ -580,6 +633,18 @@ const salesTargetGap = computed(() =>
                     <div class="flex items-center gap-1.5">
                       <input v-model.number="ea.cvr_seat_to_entry" type="number" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none" />
                       <span class="text-[10px] text-gray-400 font-medium">(マスタ:{{ ea.master_rate }}%)</span>
+                    </div>
+                  </td>
+                  <td class="px-3 py-3">
+                    <div class="flex flex-col gap-0.5">
+                      <div class="text-[9px] text-gray-400 font-bold uppercase">必要数:</div>
+                      <div class="text-[10px] font-bold text-gray-600">
+                        エ: {{ Math.ceil((ea.target_seats || 0) / ((ea.cvr_seat_to_entry || 70) / 100)) }}
+                        <span class="mx-1 text-gray-300">/</span>
+                        面: {{ Math.ceil((ea.target_seats || 0) / ((ea.cvr_seat_to_entry || 70) / 100) / ((ea.entry_to_interview_rate || 60) / 100)) }}
+                        <span class="mx-1 text-gray-300">/</span>
+                        流: {{ Math.ceil((ea.target_seats || 0) / ((ea.cvr_seat_to_entry || 70) / 100) / ((ea.entry_to_interview_rate || 60) / 100) / ((ea.interview_to_res_rate || 50) / 100)) }}
+                      </div>
                     </div>
                   </td>
                   <td class="px-3 py-3 text-sm font-bold text-gray-400 text-right">
