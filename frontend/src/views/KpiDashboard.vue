@@ -206,8 +206,14 @@ const fetchGoals = async () => {
     });
     const eventGoalRows: GoalSetting[] = resEventGoals.data;
 
-    // Show ALL events as requested by user
-    eventAllocations.value = eventKpi.value.map(e => {
+    // Filter events to only show those happening in the selected month
+    const targetMonth = selectedMonth.value; // 'YYYY-MM'
+    const filteredEvents = eventKpi.value.filter(e => {
+        if (!e.deadline) return true; // Show events without deadline so they can be set
+        return e.deadline.startsWith(targetMonth);
+    });
+
+    eventAllocations.value = filteredEvents.map(e => {
         const eventGoals = eventGoalRows.filter(g => Number(g.scope_id) === e.event_id);
         const goalSeats = eventGoals.find(g => g.metric_key === 'target_seats')?.target_value;
         const goalSales = eventGoals.find(g => g.metric_key === 'guaranteed_sales')?.target_value;
@@ -547,9 +553,10 @@ const salesTargetGap = computed(() =>
                         type="number" 
                         @input="onAllocationChange(ea, 'price')"
                         class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500/20 outline-none" 
+                        :class="ea.unit_price === 0 ? 'bg-rose-50 border-rose-200' : ''"
                       />
-                      <div v-if="ea.unit_price === 0" class="absolute -top-6 left-0 bg-rose-500 text-white text-[9px] px-1.5 py-0.5 rounded shadow-lg whitespace-nowrap animate-bounce">
-                        売上計算不可
+                      <div v-if="ea.unit_price === 0" class="absolute -bottom-5 left-0 text-rose-500 text-[9px] font-bold whitespace-nowrap">
+                        ※単価0のため計算不可
                       </div>
                     </div>
                   </td>
