@@ -823,10 +823,10 @@ const salesTargetGap = computed(() =>
             <h3 class="text-sm font-bold text-gray-800 mb-4">CVR（コンバージョン率）</h3>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div v-for="cvr in [
-                { label: '着座→エントリー', value: monthly.rates.seatToEntry },
-                { label: 'エントリー→面談', value: monthly.rates.entryToInterview },
-                { label: '面談→設定', value: monthly.rates.interviewToSetting },
-                { label: '流入→設定', value: monthly.rates.inflowToSetting },
+                { label: '着座→エントリー', value: monthly?.rates.seatToEntry },
+                { label: 'エントリー→面談', value: monthly?.rates.entryToInterview },
+                { label: '面談→設定', value: monthly?.rates.interviewToSetting },
+                { label: '流入→設定', value: monthly?.rates.inflowToSetting },
               ]" :key="cvr.label" class="text-center p-3 bg-gray-50 rounded-xl">
                 <p class="text-[10px] font-bold text-gray-500 mb-1 uppercase">{{ cvr.label }}</p>
                 <p class="text-2xl font-black text-gray-900">{{ cvr.value }}<span class="text-sm text-gray-400">%</span></p>
