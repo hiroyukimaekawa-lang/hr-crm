@@ -688,7 +688,7 @@ const salesTargetGap = computed(() =>
           <button
             v-for="tab in [
               { id: 'monthly', label: '月間KPI' },
-              { id: 'weekly', label: '週間KPI' },
+              { id: 'weekly', label: '日程別KPI' },
               { id: 'daily', label: 'デイリー' },
               { id: 'event', label: '全イベント' },
               { id: 'staff', label: '担当者別' },
@@ -902,71 +902,132 @@ const salesTargetGap = computed(() =>
           </div>
         </div>
 
-        <!-- ═══════ Weekly = イベント別KPIテーブル ═══════ -->
-        <div v-if="activeTab === 'weekly'">
-          <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-              <div class="w-1 h-5 bg-indigo-600 rounded-full"></div>
-              <h3 class="text-sm font-bold text-gray-800">イベント別KPI進捗</h3>
-              <span class="text-[10px] text-gray-400 ml-1">— 月間目標 × 転換率から逆算</span>
+        <!-- ═══════ 日程別KPIタブ ═══════ -->
+        <div v-if="activeTab === 'weekly'" class="space-y-6">
+          <!-- 各イベントを日程ごとに展開 -->
+          <div
+            v-for="ev in activeEventsForMonth"
+            :key="ev.event_id"
+            class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+          >
+            <!-- イベントヘッダー -->
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-1 h-5 bg-indigo-600 rounded-full"></div>
+                <div>
+                  <h3 class="text-sm font-bold text-gray-900">{{ ev.event_title }}</h3>
+                  <p class="text-[10px] text-gray-400 mt-0.5">
+                    締日: {{ ev.deadline ? ev.deadline.slice(5).replace('-', '/') : '未設定' }}
+                    ·
+                    残<span :class="ev.days_remaining <= 3 ? 'text-rose-600 font-black' : ev.days_remaining <= 7 ? 'text-amber-600 font-bold' : 'text-gray-600'">{{ Math.max(ev.days_remaining, 0) }}</span>日
+                  </p>
+                </div>
+              </div>
+              <!-- 全体サマリー -->
+              <div class="hidden md:flex items-center gap-6 text-center">
+                <div>
+                  <p class="text-[9px] font-bold text-gray-400 uppercase">目標着座</p>
+                  <p class="text-base font-black text-blue-600">{{ ev.target_seats > 0 ? ev.target_seats : '-' }}</p>
+                </div>
+                <div>
+                  <p class="text-[9px] font-bold text-gray-400 uppercase">現着座</p>
+                  <p class="text-base font-black text-blue-400">{{ ev.current_seats }}</p>
+                </div>
+                <div>
+                  <p class="text-[9px] font-bold text-gray-400 uppercase">目標エントリー</p>
+                  <p class="text-base font-black text-indigo-600">{{ ev.target_entries > 0 ? ev.target_entries : '-' }}</p>
+                </div>
+                <div>
+                  <p class="text-[9px] font-bold text-gray-400 uppercase">現エントリー</p>
+                  <p class="text-base font-black text-indigo-400">{{ ev.current_entries }}</p>
+                </div>
+                <div>
+                  <p class="text-[9px] font-bold text-gray-400 uppercase">残必要エントリー</p>
+                  <p class="text-base font-black" :class="ev.target_entries > 0 && ev.current_entries >= ev.target_entries ? 'text-emerald-600' : 'text-rose-600'">
+                    <span v-if="ev.target_entries > 0 && ev.current_entries >= ev.target_entries">達成</span>
+                    <span v-else-if="ev.target_entries > 0">{{ ev.target_entries - ev.current_entries }}</span>
+                    <span v-else class="text-gray-400">-</span>
+                  </p>
+                </div>
+                <div>
+                  <p class="text-[9px] font-bold text-gray-400 uppercase">デイリー必要面談</p>
+                  <p class="text-base font-black text-orange-500">
+                    <span v-if="ev.target_entries > 0 && ev.current_entries >= ev.target_entries" class="text-emerald-600">0</span>
+                    <span v-else-if="ev.target_entries > 0 && ev.days_remaining > 0">
+                      {{ (((ev.target_entries - ev.current_entries) / ev.days_remaining) / ((ev.kpi_entry_to_interview_rate || 60) / 100)).toFixed(1) }}
+                    </span>
+                    <span v-else class="text-gray-400">-</span>
+                  </p>
+                </div>
+                <div>
+                  <p class="text-[9px] font-bold text-gray-400 uppercase">達成率</p>
+                  <span class="px-2 py-1 rounded-lg text-xs font-black" :class="rateBgColor(ev.achievementRate)">
+                    <span :class="rateColor(ev.achievementRate)">{{ ev.achievementRate }}%</span>
+                  </span>
+                </div>
+              </div>
             </div>
-            <div class="overflow-x-auto">
+
+            <!-- 日程別スロット -->
+            <div v-if="ev.slots && ev.slots.length > 0" class="overflow-x-auto">
               <table class="w-full text-sm">
                 <thead class="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th class="px-4 py-3 text-left text-xs font-bold text-gray-500">イベント名</th>
-                    <th class="px-4 py-3 text-center text-xs font-bold text-gray-500">締日</th>
-                    <th class="px-4 py-3 text-center text-xs font-bold text-gray-500">残日数</th>
-                    <th class="px-4 py-3 text-center text-xs font-bold text-blue-600">目標着座</th>
-                    <th class="px-4 py-3 text-center text-xs font-bold text-blue-400">現着座</th>
-                    <th class="px-4 py-3 text-center text-xs font-bold text-indigo-600">目標エントリー</th>
-                    <th class="px-4 py-3 text-center text-xs font-bold text-indigo-400">現エントリー</th>
-                    <th class="px-4 py-3 text-center text-xs font-bold text-rose-600">残り必要<br>エントリー数</th>
-                    <th class="px-4 py-3 text-center text-xs font-bold text-orange-600">デイリー<br>必要面談数</th>
-                    <th class="px-4 py-3 text-center text-xs font-bold text-gray-500">達成率</th>
+                    <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">開催日</th>
+                    <th class="px-4 py-2 text-center text-[10px] font-bold text-indigo-500 uppercase">エントリー数</th>
+                    <th class="px-4 py-2 text-center text-[10px] font-bold text-blue-500 uppercase">着座数</th>
+                    <th class="px-4 py-2 text-center text-[10px] font-bold text-gray-400 uppercase">残必要エントリー(*)逆算</th>
+                    <th class="px-4 py-2 text-center text-[10px] font-bold text-orange-500 uppercase">1日あたり必要面談(逆算)</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                  <tr v-for="e in activeEventsForMonth" :key="e.event_id"
-                    class="hover:bg-indigo-50/30 transition-colors"
-                    :class="{ 'opacity-60': e.days_remaining < 0 }"
+                  <tr
+                    v-for="slot in ev.slots"
+                    :key="slot.date"
+                    class="hover:bg-indigo-50/20 transition-colors"
                   >
-                    <td class="px-4 py-3.5 font-bold text-gray-900 max-w-[160px] truncate" :title="e.event_title">{{ e.event_title }}</td>
-                    <td class="px-4 py-3.5 text-center text-gray-600 font-medium">
-                      {{ e.deadline ? e.deadline.slice(5).replace('-', '/') : '-' }}
+                    <td class="px-4 py-3 font-bold text-gray-700">
+                      {{ slot.date ? slot.date.replace(/-/g, '/') : '-' }}
+                      <!-- 当日識別 -->
+                      <span v-if="slot.date === new Date().toISOString().slice(0, 10)" class="ml-2 text-[9px] font-black text-white bg-blue-500 px-1.5 py-0.5 rounded-full">TODAY</span>
                     </td>
-                    <td class="px-4 py-3.5 text-center font-black"
-                      :class="e.days_remaining <= 3 ? 'text-rose-600' : e.days_remaining <= 7 ? 'text-amber-600' : 'text-gray-700'">
-                      {{ Math.max(e.days_remaining, 0) }}
+                    <td class="px-4 py-3 text-center font-bold text-indigo-500">
+                      {{ slot.entries || 0 }}
                     </td>
-                    <td class="px-4 py-3.5 text-center font-black text-blue-600 italic">{{ e.target_seats > 0 ? e.target_seats : '-' }}</td>
-                    <td class="px-4 py-3.5 text-center font-bold text-blue-400 italic">{{ e.current_seats }}</td>
-                    <td class="px-4 py-3.5 text-center font-black text-indigo-600 italic">{{ e.target_entries > 0 ? e.target_entries : '-' }}</td>
-                    <td class="px-4 py-3.5 text-center font-bold text-indigo-400 italic">{{ e.current_entries }}</td>
-                    <td class="px-4 py-3.5 text-center">
-                      <span v-if="e.target_entries > 0 && e.current_entries >= e.target_entries" class="text-emerald-600 font-black text-xs">達成</span>
-                      <span v-else-if="e.target_entries > 0" class="font-black text-rose-600">{{ e.target_entries - e.current_entries }}</span>
+                    <td class="px-4 py-3 text-center font-bold text-blue-500">
+                      {{ slot.seats || 0 }}
+                    </td>
+                    <!-- 残りエントリー逆算: スロット目標=全体目標/スロット数 として逆算 -->
+                    <td class="px-4 py-3 text-center">
+                      <template v-if="ev.target_entries > 0 && ev.slots.length > 0">
+                        <span class="font-bold" :class="Math.ceil(ev.target_entries / ev.slots.length) - (slot.entries || 0) <= 0 ? 'text-emerald-600' : 'text-rose-600'">
+                          <span v-if="Math.ceil(ev.target_entries / ev.slots.length) - (slot.entries || 0) <= 0">達成</span>
+                          <span v-else>{{ Math.ceil(ev.target_entries / ev.slots.length) - (slot.entries || 0) }}</span>
+                        </span>
+                      </template>
                       <span v-else class="text-gray-400">-</span>
                     </td>
-                    <td class="px-4 py-3.5 text-center">
-                      <span v-if="e.target_entries > 0 && e.current_entries >= e.target_entries" class="font-black text-emerald-600">0</span>
-                      <span v-else-if="e.target_entries > 0 && e.days_remaining > 0" class="font-black text-orange-500">
-                        {{ (((e.target_entries - e.current_entries) / e.days_remaining) / ((e.kpi_entry_to_interview_rate || 60) / 100)).toFixed(1) }}
-                      </span>
+                    <td class="px-4 py-3 text-center">
+                      <template v-if="ev.target_entries > 0 && ev.days_remaining > 0">
+                        <span class="font-black text-orange-500">
+                          {{ (((Math.ceil(ev.target_entries / (ev.slots.length || 1)) - (slot.entries || 0)) / Math.max(ev.days_remaining, 1)) / ((ev.kpi_entry_to_interview_rate || 60) / 100)).toFixed(1) }}
+                        </span>
+                      </template>
                       <span v-else class="text-gray-400">-</span>
                     </td>
-                    <td class="px-4 py-3.5 text-center">
-                      <span class="px-2 py-1 rounded-lg text-xs font-black" :class="rateBgColor(e.achievementRate)">
-                        <span :class="rateColor(e.achievementRate)">{{ e.achievementRate }}%</span>
-                      </span>
-                    </td>
-                  </tr>
-                  <tr v-if="activeEventsForMonth.length === 0">
-                    <td colspan="10" class="px-4 py-12 text-center text-gray-400">対象月のイベントがありません</td>
                   </tr>
                 </tbody>
               </table>
             </div>
+            <!-- スロットなしの場合 -->
+            <div v-else class="px-5 py-6 text-center text-gray-400 text-xs">
+              開催日程データがありません。イベント設定でスロットを追加してください。
+            </div>
+          </div>
+
+          <!-- イベントなし -->
+          <div v-if="activeEventsForMonth.length === 0" class="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center text-gray-400">
+            対象月のイベントがありません
           </div>
         </div>
 

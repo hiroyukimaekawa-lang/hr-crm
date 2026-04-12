@@ -1523,10 +1523,11 @@ watch(selectedGraduationYear, fetchFunnelKpi);
       </div>
     </div>
 
-    <div v-if="selectedYomiEvent" class="fixed inset-0 z-[90]">
-      <div class="absolute inset-0 bg-black/30" @click="closeYomiEventDetail"></div>
-      <div class="absolute right-0 top-0 h-full w-full md:w-[90vw] md:max-w-6xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
-        <div class="flex items-center justify-between mb-4">
+    <Teleport to="body">
+      <div v-if="selectedYomiEvent" class="fixed inset-0 z-[100]">
+        <div class="absolute inset-0 bg-black/30" @click="closeYomiEventDetail"></div>
+        <div class="absolute right-0 top-0 h-full w-full md:w-[90vw] md:max-w-6xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
+          <div class="flex items-center justify-between mb-4">
           <div>
             <h2 class="text-xl font-bold text-gray-900">イベント参加詳細</h2>
             <p class="text-sm text-gray-500">{{ selectedYomiEvent.title }}</p>
@@ -1643,8 +1644,9 @@ watch(selectedGraduationYear, fetchFunnelKpi);
               </div>
             </div>
         </div>
+        </div>
       </div>
-    </div>
+    </Teleport>
 
       <!-- 初回ファネル登録セクション -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
