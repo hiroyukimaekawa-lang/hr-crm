@@ -137,12 +137,11 @@ const fetchOverview = async () => {
 const fetchEvents = async () => {
   try {
     // Determine the period filters based on active tab
+    // Always fetch events based on selectedMonth because event goals are tied to monthly decomposition
     const params: any = {
-      period_type: activeTab.value === 'weekly' ? 'weekly' : activeTab.value === 'daily' ? 'daily' : 'monthly'
+      period_type: 'monthly',
+      month: selectedMonth.value
     };
-    if (activeTab.value === 'weekly') params.week = selectedWeek.value;
-    else if (activeTab.value === 'daily') params.date = selectedDate.value;
-    else params.month = selectedMonth.value;
 
     const res = await kpiApi.getEvents(params);
     eventKpi.value = res.data;
@@ -339,19 +338,13 @@ const onAllocationChange = (ea: any, field: 'guaranteed' | 'seats' | 'price' | '
 };
 
 // Global Target change handler
-const distributeGlobalTarget = () => {
-    eventAllocations.value.forEach(ea => {
-        if (ea.weight_pct > 0) {
-            onAllocationChange(ea, 'weight');
-        } else {
-            // If No weights set yet, we don't auto-distribute unless requested?
-            // For now, only update if there's a ratio.
-        }
-    });
-};
-
-watch(() => goalForm.value.sales_target, () => {
-    distributeGlobalTarget();
+watch(() => goalForm.value.sales_target, (newTarget) => {
+    if (newTarget > 0) {
+        eventAllocations.value.forEach(ea => {
+            // Recalculate weight_pct based on current guaranteed_sales vs new global target
+            ea.weight_pct = Math.round((ea.guaranteed_sales / newTarget) * 100);
+        });
+    }
 });
 
 const loadAll = async () => {
@@ -712,45 +705,20 @@ const salesTargetGap = computed(() =>
 
         <!-- Period selector -->
         <div class="flex items-center gap-4 mb-6 bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
-          <div v-if="activeTab === 'monthly' || activeTab === 'staff' || activeTab === 'source'" class="flex items-center gap-2">
+          <div class="flex items-center gap-2">
             <span class="text-xs font-bold text-blue-600 uppercase">対象月</span>
             <select v-model="selectedMonth" class="px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20">
               <option v-for="m in monthOptions" :key="m" :value="m">{{ m.replace('-', '年') }}月</option>
             </select>
           </div>
-          <div v-if="activeTab === 'weekly'" class="flex items-center gap-2">
-            <span class="text-xs font-bold text-blue-600 uppercase">対象週</span>
-            <input type="week" v-model="selectedWeek" class="px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20" />
-          </div>
-          <div v-if="activeTab === 'daily'" class="flex items-center gap-2">
-            <span class="text-xs font-bold text-blue-600 uppercase">対象日</span>
-            <input type="date" v-model="selectedDate" class="px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20" />
-          </div>
           
           <div class="ml-auto">
             <button
-              v-if="activeTab === 'monthly'"
               @click="openGoalEditor('monthly')"
               class="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-200"
             >
               <Settings2 class="w-4 h-4" />
-              月間目標設定
-            </button>
-            <button
-              v-if="activeTab === 'weekly'"
-              @click="openGoalEditor('weekly')"
-              class="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200"
-            >
-              <Settings2 class="w-4 h-4" />
-              週間目標設定
-            </button>
-            <button
-              v-if="activeTab === 'daily'"
-              @click="openGoalEditor('daily')"
-              class="flex items-center gap-2 px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-200"
-            >
-              <Settings2 class="w-4 h-4" />
-              デイリー目標設定
+              月間・イベント目標設定
             </button>
           </div>
         </div>
