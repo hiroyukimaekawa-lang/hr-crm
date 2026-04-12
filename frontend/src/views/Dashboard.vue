@@ -1646,7 +1646,8 @@ watch(selectedGraduationYear, fetchFunnelKpi);
         </div>
       </div>
     </div>
-  </Teleport>
+  </div>
+</Teleport>
 
       <!-- 初回ファネル登録セクション -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 overflow-hidden">
@@ -2045,6 +2046,5 @@ watch(selectedGraduationYear, fetchFunnelKpi);
       </div>
     </div>
   </Teleport>
-  </div>
 </Layout>
 </template>
