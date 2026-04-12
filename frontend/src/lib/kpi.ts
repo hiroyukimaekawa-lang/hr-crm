@@ -76,6 +76,8 @@ export interface EventKpiSlot {
     seats: number;
     entries: number;
   };
+  entries?: number;
+  seats?: number;
   status_breakdown: Record<string, number>;
 }
 
