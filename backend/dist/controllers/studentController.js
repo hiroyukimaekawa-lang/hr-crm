@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteGraduationYearCategory = exports.createGraduationYearCategory = exports.getGraduationYearCategories = exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.getStudentEventProposals = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.updateInterviewLog = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = exports.normalizeToHour = void 0;
+exports.updateStudentReferralStatus = exports.updateStudentFavorite = exports.deleteGraduationYearCategory = exports.createGraduationYearCategory = exports.getGraduationYearCategories = exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.getStudentEventProposals = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.updateInterviewLog = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = exports.normalizeToHour = void 0;
 const db_1 = __importDefault(require("../config/db"));
 let interviewScheduleTableReady = false;
 let interviewScheduleTablePromise = null;
@@ -77,6 +77,18 @@ const ensureStudentExtendedColumns = () => __awaiter(void 0, void 0, void 0, fun
             yield db_1.default.query(`
                 ALTER TABLE students
                 ADD COLUMN IF NOT EXISTS second_interview_date DATE
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS referral_outreach_status VARCHAR(50) DEFAULT 'unapproached'
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS referred_by_id INTEGER REFERENCES students(id) ON DELETE SET NULL
             `);
             cachedStudentColumns = null;
             studentExtendedColumnsReady = true;
@@ -190,9 +202,27 @@ const ensureSalesFunnelTables = () => __awaiter(void 0, void 0, void 0, function
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
             `);
+            // UNIQUE constraint preparation without deletion (Best effort)
+            try {
+                // Ignore actual row deletion to comply with "data loss prevention" rule.
+                // Instead, we ensure the index exists for UPSERT safety.
+                yield db_1.default.query(`
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_student_schedule') THEN
+                            ALTER TABLE interviews ADD CONSTRAINT unique_student_schedule UNIQUE (student_id, scheduled_at);
+                        END IF;
+                    END $$;
+                `);
+            }
+            catch (constraintErr) {
+                console.error("Warning: unique_student_schedule could not be created. This is likely due to pre-existing duplicates. KPI queries will still work correctly using ROW_NUMBER() filtering.", constraintErr);
+            }
             yield db_1.default.query(`
                 ALTER TABLE events
-                ADD COLUMN IF NOT EXISTS company VARCHAR(255)
+                ADD COLUMN IF NOT EXISTS company VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS kpi_interview_to_reservation_rate INTEGER DEFAULT 50,
+                ADD COLUMN IF NOT EXISTS kpi_reservation_to_application_rate INTEGER DEFAULT 40
             `);
             yield db_1.default.query(`
                 CREATE TABLE IF NOT EXISTS event_dates (
@@ -239,6 +269,42 @@ const ensureSalesFunnelTables = () => __awaiter(void 0, void 0, void 0, function
                     ('その他')
                 ON CONFLICT (reason_name) DO NOTHING
             `);
+            // --- KPI Data Backfill (Matcher Funnel -> Interviews) ---
+            try {
+                // Backfill reservations AND interviews
+                yield db_1.default.query(`
+                    INSERT INTO interviews (student_id, scheduled_at, interviewed_at, status)
+                    SELECT 
+                        student_id, 
+                        interview_scheduled_at, 
+                        interview_actual_at, 
+                        COALESCE(interview_status, 'completed')
+                    FROM matcher_funnel_logs
+                    WHERE interview_scheduled_at IS NOT NULL
+                      AND student_id IN (SELECT id FROM students)
+                    ON CONFLICT (student_id, scheduled_at) 
+                    DO UPDATE SET 
+                        interviewed_at = COALESCE(interviews.interviewed_at, EXCLUDED.interviewed_at),
+                        status = CASE 
+                            WHEN interviews.status IN ('completed', '面談実施') THEN interviews.status 
+                            ELSE EXCLUDED.status 
+                        END;
+                `);
+                // Extra check for interviewed_at completion if scheduled_at exists but interviewed_at is null
+                yield db_1.default.query(`
+                    UPDATE interviews i
+                    SET interviewed_at = m.interview_actual_at,
+                        status = COALESCE(m.interview_status, 'completed')
+                    FROM matcher_funnel_logs m
+                    WHERE i.student_id = m.student_id
+                      AND i.scheduled_at = m.interview_scheduled_at
+                      AND i.interviewed_at IS NULL
+                      AND m.interview_actual_at IS NOT NULL;
+                `);
+            }
+            catch (backfillErr) {
+                console.error("KPI Data Backfill Error:", backfillErr);
+            }
             salesFunnelTablesReady = true;
         }))().finally(() => {
             salesFunnelTablesPromise = null;
@@ -495,7 +561,8 @@ const getStudents = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 mf.applied_at as matcher_applied_at,
                 mf.reservation_created_at as matcher_reservation_created_at,
                 mf.interview_scheduled_at as matcher_interview_scheduled_at,
-                mf.interview_actual_at as matcher_interview_actual_at
+                mf.interview_actual_at as matcher_interview_actual_at,
+                (SELECT count(*) FROM students s2 WHERE s2.referred_by_id = students.id) as referral_count
             FROM students
             LEFT JOIN users ON students.staff_id = users.id
             LEFT JOIN LATERAL (
@@ -1408,6 +1475,13 @@ const registerMatcherReservation = (req, res) => __awaiter(void 0, void 0, void 
             res.status(404).json({ error: 'Student not found' });
             return;
         }
+        // Sync with interviews table (Reservation)
+        if (normalizedInterviewScheduledAt) {
+            yield db_1.default.query(`INSERT INTO interviews (student_id, scheduled_at, status)
+                 VALUES ($1, $2, 'scheduled')
+                 ON CONFLICT (student_id, scheduled_at) 
+                 DO UPDATE SET status = EXCLUDED.status`, [id, normalizedInterviewScheduledAt]);
+        }
         yield db_1.default.query(`UPDATE students
              SET meeting_decided_date = COALESCE($1, meeting_decided_date),
                  first_interview_date = COALESCE($2, first_interview_date),
@@ -1434,6 +1508,22 @@ const registerMatcherInterview = (req, res) => __awaiter(void 0, void 0, void 0,
         if (!row) {
             res.status(404).json({ error: 'Student not found' });
             return;
+        }
+        // Sync with interviews table
+        if (normalizedInterviewScheduledAt) {
+            yield db_1.default.query(`INSERT INTO interviews (student_id, scheduled_at, interviewed_at, status)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (student_id, scheduled_at) 
+                 DO UPDATE SET 
+                    interviewed_at = COALESCE(interviews.interviewed_at, EXCLUDED.interviewed_at),
+                    status = EXCLUDED.status`, [id, normalizedInterviewScheduledAt, normalizedInterviewActualAt, normalizeNullableText(interview_status) || 'completed']);
+        }
+        else if (normalizedInterviewActualAt) {
+            // If scheduled_at is missing but played out, find or create
+            yield db_1.default.query(`INSERT INTO interviews (student_id, scheduled_at, interviewed_at, status)
+                 VALUES ($1, $2, $2, $3)
+                 ON CONFLICT (student_id, scheduled_at) 
+                 DO UPDATE SET interviewed_at = EXCLUDED.interviewed_at, status = EXCLUDED.status`, [id, normalizedInterviewActualAt, normalizeNullableText(interview_status) || 'completed']);
         }
         yield db_1.default.query(`UPDATE students
              SET first_interview_date = COALESCE($1, first_interview_date),
@@ -1739,38 +1829,41 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 WITH months AS (
                     SELECT TO_CHAR(a.applied_at, 'YYYY-MM') AS month FROM applications a JOIN students s ON s.id = a.student_id WHERE a.applied_at IS NOT NULL ${sSourceFilter} ${yearFilter}
                     UNION
-                    SELECT TO_CHAR(a.reservation_created_at, 'YYYY-MM') FROM applications a JOIN students s ON s.id = a.student_id WHERE a.reservation_created_at IS NOT NULL ${sSourceFilter} ${yearFilter}
-                    UNION
                     SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL ${sSourceFilter} ${yearFilter}
                 ),
                 app_bm AS (
                     SELECT TO_CHAR(a.applied_at, 'YYYY-MM') AS month, COUNT(DISTINCT a.student_id)::int AS cnt
                     FROM applications a JOIN students s ON s.id = a.student_id WHERE a.applied_at IS NOT NULL ${sSourceFilter} ${yearFilter} GROUP BY 1
                 ),
-                reserve_bm AS (
-                    SELECT TO_CHAR(a.reservation_created_at, 'YYYY-MM') AS month, COUNT(DISTINCT a.student_id)::int AS cnt
-                    FROM applications a JOIN students s ON s.id = a.student_id WHERE a.reservation_created_at IS NOT NULL ${sSourceFilter} ${yearFilter} GROUP BY 1
-                ),
-                interview_bm AS (
-                    SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL ${sSourceFilter} ${yearFilter} GROUP BY 1
-                ),
                 first_interview_per_student AS (
-                    SELECT DISTINCT ON (i.student_id)
+                    SELECT
                         i.student_id,
                         i.scheduled_at,
                         i.interviewed_at,
-                        i.status
+                        i.status,
+                        ROW_NUMBER() OVER (PARTITION BY i.student_id ORDER BY i.scheduled_at ASC NULLS LAST, i.id ASC) as rn
                     FROM interviews i
                     JOIN students s ON s.id = i.student_id
                     WHERE i.student_id IS NOT NULL ${sSourceFilter} ${yearFilter}
-                    ORDER BY i.student_id, COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) ASC, i.id ASC
                 ),
+                -- 予約月別
+                reserve_bm AS (
+                    SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
+                    FROM first_interview_per_student
+                    WHERE rn = 1 AND (status = 'scheduled' OR interviewed_at IS NOT NULL)
+                    GROUP BY 1
+                ),
+                -- 面談実施月別
                 completed_bm AS (
                     SELECT TO_CHAR(scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT student_id)::int AS cnt
                     FROM first_interview_per_student
-                    WHERE COALESCE(status,'') IN ('completed','面談実施','interviewed') OR interviewed_at IS NOT NULL
+                    WHERE rn = 1 AND interviewed_at IS NOT NULL
                     GROUP BY 1
+                ),
+                -- 全予定月別 (分母用)
+                interview_bm AS (
+                    SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT i.student_id)::int AS cnt
+                    FROM interviews i JOIN students s ON s.id = i.student_id WHERE i.scheduled_at IS NOT NULL ${sSourceFilter} ${yearFilter} GROUP BY 1
                 ),
                 noshow_bm AS (
                     SELECT TO_CHAR(i.scheduled_at, 'YYYY-MM') AS month, COUNT(DISTINCT i.student_id)::int AS cnt
@@ -1816,34 +1909,31 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     FROM applications a JOIN students s ON s.id = a.student_id
                     WHERE a.student_id IS NOT NULL ${appMonthCond} ${yearFilter} GROUP BY 1
                 ),
-                reserve_s AS (
-                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
-                           COUNT(DISTINCT a.student_id)::int AS cnt
-                    FROM applications a JOIN students s ON s.id = a.student_id
-                    WHERE a.student_id IS NOT NULL AND a.reservation_created_at IS NOT NULL ${resMonthCond} ${yearFilter} GROUP BY 1
-                ),
-                interview_s AS (
-                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
-                           COUNT(DISTINCT i.student_id)::int AS cnt
-                    FROM interviews i JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL AND i.scheduled_at IS NOT NULL ${intMonthCond} ${yearFilter} GROUP BY 1
-                ),
                 first_interview_per_student AS (
-                    SELECT DISTINCT ON (i.student_id)
+                    SELECT
                         i.student_id,
                         i.scheduled_at,
                         i.interviewed_at,
-                        i.status
+                        i.status,
+                        ROW_NUMBER() OVER (PARTITION BY i.student_id ORDER BY i.scheduled_at ASC NULLS LAST, i.id ASC) as rn
                     FROM interviews i
                     JOIN students s ON s.id = i.student_id
                     WHERE i.student_id IS NOT NULL ${yearFilter}
-                    ORDER BY i.student_id, COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) ASC, i.id ASC
+                ),
+                reserve_s AS (
+                    SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
+                           COUNT(DISTINCT fi.student_id)::int AS cnt
+                    FROM first_interview_per_student fi JOIN students s ON s.id = fi.student_id
+                    WHERE fi.rn = 1 
+                      AND (fi.status = 'scheduled' OR fi.interviewed_at IS NOT NULL)
+                      ${intMonthCond.replace('i.scheduled_at', 'fi.scheduled_at')}
+                    GROUP BY 1
                 ),
                 interview_completed_s AS (
                     SELECT COALESCE(NULLIF(TRIM(s.source_company), ''), '未設定') AS source_company,
                            COUNT(DISTINCT fi.student_id)::int AS cnt
                     FROM first_interview_per_student fi JOIN students s ON s.id = fi.student_id
-                    WHERE (COALESCE(fi.status,'') IN ('completed','面談実施','interviewed') OR fi.interviewed_at IS NOT NULL)
+                    WHERE fi.rn = 1 AND fi.interviewed_at IS NOT NULL
                       ${intMonthCond.replace('i.scheduled_at', 'fi.scheduled_at')}
                     GROUP BY 1
                 ),
@@ -1976,33 +2066,37 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     SELECT COUNT(DISTINCT a.student_id)::int AS cnt FROM applications a JOIN students s ON s.id = a.student_id
                     WHERE a.student_id IS NOT NULL ${appMonthCond} ${sSourceFilter} ${yearFilter}
                 ),
-                reserve_s AS (
-                    SELECT COUNT(DISTINCT a.student_id)::int AS cnt FROM applications a JOIN students s ON s.id = a.student_id
-                    WHERE a.student_id IS NOT NULL AND a.reservation_created_at IS NOT NULL ${resMonthCond} ${sSourceFilter} ${yearFilter}
-                ),
-                interview_s AS (
-                    SELECT COUNT(DISTINCT i.student_id)::int AS cnt FROM interviews i JOIN students s ON s.id = i.student_id
-                    WHERE i.student_id IS NOT NULL AND i.scheduled_at IS NOT NULL ${intMonthCond} ${sSourceFilter} ${yearFilter}
-                ),
                 first_interview_per_student AS (
-                    SELECT DISTINCT ON (i.student_id)
+                    SELECT
                         i.student_id,
                         i.scheduled_at,
                         i.interviewed_at,
-                        i.status
+                        i.status,
+                        ROW_NUMBER() OVER (PARTITION BY i.student_id ORDER BY i.scheduled_at ASC NULLS LAST, i.id ASC) as rn
                     FROM interviews i
                     JOIN students s ON s.id = i.student_id
                     WHERE i.student_id IS NOT NULL ${sSourceFilter} ${yearFilter}
-                    ORDER BY i.student_id,
-                             COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) ASC,
-                             i.id ASC
                 ),
+                -- 予約数: 初回面談のアサインがある学生 (指示: status=scheduled OR interviewed_at IS NOT NULL)
+                reserve_s AS (
+                    SELECT COUNT(DISTINCT student_id)::int AS cnt 
+                    FROM first_interview_per_student
+                    WHERE rn = 1 
+                      AND (status = 'scheduled' OR interviewed_at IS NOT NULL)
+                      ${intMonthCond.replace('i.scheduled_at', 'scheduled_at')}
+                ),
+                -- 面談数: 実際に実施された学生
                 interview_completed_s AS (
                     SELECT COUNT(DISTINCT student_id)::int AS cnt
                     FROM first_interview_per_student
-                    WHERE (COALESCE(status,'') IN ('completed','面談実施','interviewed')
-                       OR interviewed_at IS NOT NULL)
+                    WHERE rn = 1 
+                      AND interviewed_at IS NOT NULL
                       ${intMonthCond.replace('i.scheduled_at', 'scheduled_at')}
+                ),
+                -- 予定ベースの全カウント（旧称 interview_s）
+                interview_s AS (
+                    SELECT COUNT(DISTINCT i.student_id)::int AS cnt FROM interviews i JOIN students s ON s.id = i.student_id
+                    WHERE i.student_id IS NOT NULL AND i.scheduled_at IS NOT NULL ${intMonthCond} ${sSourceFilter} ${yearFilter}
                 ),
                 interview_no_show_s AS (
                     SELECT COUNT(DISTINCT i.student_id)::int AS cnt FROM interviews i JOIN students s ON s.id = i.student_id
@@ -2056,11 +2150,11 @@ const getFunnelKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 FROM students s
                 LEFT JOIN applications a ON a.student_id = s.id
                 LEFT JOIN (
-                    SELECT DISTINCT ON (i.student_id)
-                        i.student_id, i.scheduled_at, i.interviewed_at, i.status
-                    FROM interviews i
-                    ORDER BY i.student_id, COALESCE(i.scheduled_at, i.interviewed_at, i.created_at) ASC, i.id ASC
-                ) fi ON fi.student_id = s.id
+                    SELECT 
+                        student_id, scheduled_at, interviewed_at, status,
+                        ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY scheduled_at ASC NULLS LAST, id ASC) as rn
+                    FROM interviews
+                ) fi ON fi.student_id = s.id AND fi.rn = 1
                 WHERE s.graduation_year IN (2027, 2028)
                 ${sSourceFilter}
                 GROUP BY s.graduation_year
@@ -2370,3 +2464,37 @@ const deleteGraduationYearCategory = (req, res) => __awaiter(void 0, void 0, voi
     }
 });
 exports.deleteGraduationYearCategory = deleteGraduationYearCategory;
+const updateStudentFavorite = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { is_favorite } = req.body;
+    try {
+        yield ensureStudentExtendedColumns();
+        const result = yield db_1.default.query('UPDATE students SET is_favorite = $1 WHERE id = $2 RETURNING *', [is_favorite, id]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(result.rows[0]);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.updateStudentFavorite = updateStudentFavorite;
+const updateStudentReferralStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { referral_outreach_status } = req.body;
+    try {
+        yield ensureStudentExtendedColumns();
+        const result = yield db_1.default.query('UPDATE students SET referral_outreach_status = $1 WHERE id = $2 RETURNING *', [referral_outreach_status, id]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(result.rows[0]);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.updateStudentReferralStatus = updateStudentReferralStatus;

@@ -47,9 +47,6 @@ interface Student {
   matcher_reservation_created_at?: string | null;
   matcher_interview_scheduled_at?: string | null;
   matcher_interview_actual_at?: string | null;
-  is_favorite?: boolean;
-  referral_count?: number;
-  referral_outreach_status?: string;
 }
 
 const INVALID_SOURCE_COMPANY_VALUES = new Set(['初回平均(日)', '氏名', '流入経路', 'source_company']);
@@ -169,7 +166,8 @@ const appliedFilters = ref({
   nextMeetingDateFrom: '',
   nextMeetingDateTo: '',
   taskDueDateFrom: '',
-  taskDueDateTo: ''
+  taskDueDateTo: '',
+  showFavoritesOnly: false
 });
 
 const showCreate = ref(false);
@@ -244,13 +242,10 @@ const toggleFavorite = async (student: Student) => {
       headers: { Authorization: token }
     });
     student.is_favorite = newValue;
-    pushNotification({
-      title: newValue ? 'お気に入り登録しました' : 'お気に入り解除しました',
-      type: 'success'
-    });
+    pushNotification(newValue ? 'お気に入り登録しました' : 'お気に入り解除しました', 'success');
   } catch (err) {
     console.error(err);
-    pushNotification({ title: 'エラーが発生しました', type: 'error' });
+    pushNotification('エラーが発生しました', 'error');
   }
 };
 

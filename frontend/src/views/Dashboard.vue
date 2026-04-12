@@ -71,7 +71,7 @@ interface KgiProgress {
 }
 
 const students = ref<Student[]>([]);
-const dashboardTab = ref('MAIN');
+const dashboardTab = ref<'MAIN' | 'REFERRAL'>('MAIN');
 const events = ref<EventItem[]>([]);
 const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
 const selectedYomiEvent = ref<EventItem | null>(null);
@@ -1785,7 +1785,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
 
   </div>
 
-  <div v-if="dashboardTab === 'REFERRAL'" class="space-y-8">
+  <div v-else class="space-y-8">
     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
       <div class="flex items-center justify-between mb-8">
         <div>

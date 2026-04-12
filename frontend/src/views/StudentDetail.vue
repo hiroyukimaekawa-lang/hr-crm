@@ -103,7 +103,8 @@ const basicDraft = ref({
   first_interview_date: '',
   second_interview_date: '',
   next_meeting_date: '',
-  next_action: ''
+  next_action: '',
+  referred_by_id: ''
 });
 
 // Matcher Funnel v-model bindings

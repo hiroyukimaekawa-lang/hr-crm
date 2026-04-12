@@ -368,7 +368,7 @@ const totalCurrentSales = computed(() =>
             ['cvr_entry_to_interview', 'エントリー→面談率 (%)'],
             ['cvr_interview_to_setting', '面談→設定率 (%)'],
             ['cvr_inflow_to_setting', '流入→設定率 (%)'],
-          ]" :key="key">
+          ] as const" :key="key">
             <div>
               <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">{{ label }}</label>
               <input
@@ -622,28 +622,6 @@ const totalCurrentSales = computed(() =>
           </div>
         </div>
 
-                    <th class="px-4 py-2 text-right text-xs font-bold text-gray-500">件数</th>
-                    <th class="px-4 py-2 text-left text-xs font-bold text-gray-500 w-1/2">グラフ</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                  <tr v-for="d in daily.trend.slice(0, 31)" :key="d.day" class="hover:bg-gray-50">
-                    <td class="px-4 py-2 text-gray-700 font-medium whitespace-nowrap">{{ d.day.slice(5) }}</td>
-                    <td class="px-4 py-2 text-right font-bold text-gray-900">{{ d.count }}</td>
-                    <td class="px-4 py-2">
-                      <div class="h-4 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          class="h-full bg-blue-500 rounded-full transition-all"
-                          :style="{ width: `${Math.min((d.count / Math.max(...daily!.trend.map(t => t.count), 1)) * 100, 100)}%` }"
-                        ></div>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
 
         <!-- ═══════ Event KPI Tab ═══════ -->
         <div v-if="activeTab === 'event'">
@@ -856,7 +834,7 @@ const totalCurrentSales = computed(() =>
                     ['kpi_entry_to_interview_rate', 'エントリー → 面談率 (%)'],
                     ['kpi_interview_to_reservation_rate', '面談 → 予約率 (%)'],
                     ['kpi_reservation_to_application_rate', '予約 → 申込率 (%)'],
-                  ]" :key="key">
+                  ] as const" :key="key">
                     <label class="block text-xs font-bold text-gray-600 mb-1">{{ label }}</label>
                     <div class="flex items-center gap-3">
                       <input v-model.number="(eventForm as any)[key]" type="range" min="0" max="100" class="flex-1">

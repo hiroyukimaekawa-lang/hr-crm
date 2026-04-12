@@ -53,11 +53,13 @@ const fetchSources = async () => {
 const funnelKpi = ref({
   daily_applications: [] as Array<{ day: string; count: number; count_27: number; count_28: number }>,
   application_to_reservation_rate: 0,
+  reservation_to_interview_rate: 0,
   apply_to_reservation_lead_time_days_avg: null as number | null,
   reservation_to_interview_lead_time_days_avg: null as number | null,
   counts: {
     applications_students: 0,
     reserved_students: 0,
+    interview_scheduled_students: 0,
     interviewed_students: 0,
   },
   graduation_year_breakdown: [] as Array<{

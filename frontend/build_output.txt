@@ -1,0 +1,22 @@
+
+> frontend@0.0.0 build
+> vue-tsc -b && vite build
+
+vite v7.3.2 building client environment for production...
+transforming...
+✓ 10 modules transformed.
+✗ Build failed in 200ms
+error during build:
+[vite:vue] [plugin vite:vue] src/views/KpiDashboard.vue (627:19): Invalid end tag.
+file: /Users/maekawahiroyuki/Desktop/hr-crm/frontend/src/views/KpiDashboard.vue:627:19
+SyntaxError: [plugin vite:vue] src/views/KpiDashboard.vue (627:19): Invalid end tag.
+    at createCompilerError (/Users/maekawahiroyuki/Desktop/hr-crm/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.prod.js:1374:17)
+    at emitError (/Users/maekawahiroyuki/Desktop/hr-crm/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.prod.js:2980:5)
+    at Object.onclosetag (/Users/maekawahiroyuki/Desktop/hr-crm/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.prod.js:2387:9)
+    at Tokenizer.stateInClosingTagName (/Users/maekawahiroyuki/Desktop/hr-crm/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.prod.js:799:16)
+    at Tokenizer.parse (/Users/maekawahiroyuki/Desktop/hr-crm/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.prod.js:1157:16)
+    at Object.baseParse (/Users/maekawahiroyuki/Desktop/hr-crm/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.prod.js:3012:13)
+    at Object.parse (/Users/maekawahiroyuki/Desktop/hr-crm/frontend/node_modules/@vue/compiler-dom/dist/compiler-dom.cjs.prod.js:665:23)
+    at Object.parse$1 [as parse] (/Users/maekawahiroyuki/Desktop/hr-crm/frontend/node_modules/@vue/compiler-sfc/dist/compiler-sfc.cjs.js:1824:24)
+    at createDescriptor (file:///Users/maekawahiroyuki/Desktop/hr-crm/frontend/node_modules/@vitejs/plugin-vue/dist/index.mjs:54:42)
+    at transformMain (file:///Users/maekawahiroyuki/Desktop/hr-crm/frontend/node_modules/@vitejs/plugin-vue/dist/index.mjs:1319:33)

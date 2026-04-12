@@ -57,6 +57,7 @@ export interface EventKpiRow {
     kpi_interview_to_inflow_rate: number;
     kpi_custom_steps: any[];
     status_breakdown: Record<string, number>;
+    slots: any[];
 }
 
 // ─────────────────────── Table Init ───────────────────────

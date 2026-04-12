@@ -108,6 +108,7 @@ export interface EventKpiItem {
   kpi_custom_steps: any[];
   status_breakdown: Record<string, number>;
   slots: EventKpiSlot[];
+  unit_price: number;
 }
 
 export interface GoalSetting {

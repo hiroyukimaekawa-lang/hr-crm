@@ -39,11 +39,11 @@ const ensureEventDatesTable = () => __awaiter(void 0, void 0, void 0, function* 
             `);
             yield db_1.default.query(`
                 ALTER TABLE events
-                ADD COLUMN IF NOT EXISTS kpi_interview_to_inflow_rate NUMERIC(5,2) DEFAULT 50
+                ADD COLUMN IF NOT EXISTS kpi_interview_to_reservation_rate NUMERIC(5,2) DEFAULT 50
             `);
             yield db_1.default.query(`
                 ALTER TABLE events
-                ADD COLUMN IF NOT EXISTS kpi_inflow_to_reservation_rate NUMERIC(5,2) DEFAULT 50
+                ADD COLUMN IF NOT EXISTS kpi_reservation_to_application_rate NUMERIC(5,2) DEFAULT 40
             `);
             yield db_1.default.query(`
                 ALTER TABLE events
@@ -201,7 +201,7 @@ const getEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.getEvents = getEvents;
 const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline, kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_inflow_to_reservation_rate, kpi_custom_steps, event_slots } = req.body;
+    const { title, description, event_date, event_dates, location, lp_url, capacity, target_seats, unit_price, target_sales, current_sales, entry_deadline, kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_reservation_rate, kpi_reservation_to_application_rate, kpi_custom_steps, event_slots } = req.body;
     try {
         yield ensureEventDatesTable();
         let dates = normalizeEventDates(event_dates, event_date);
@@ -232,8 +232,8 @@ const createEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         push('entry_deadline', entry_deadline || null);
         push('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate !== null && kpi_seat_to_entry_rate !== void 0 ? kpi_seat_to_entry_rate : 70);
         push('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate !== null && kpi_entry_to_interview_rate !== void 0 ? kpi_entry_to_interview_rate : 60);
-        push('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate !== null && kpi_interview_to_inflow_rate !== void 0 ? kpi_interview_to_inflow_rate : 50);
-        push('kpi_inflow_to_reservation_rate', kpi_inflow_to_reservation_rate !== null && kpi_inflow_to_reservation_rate !== void 0 ? kpi_inflow_to_reservation_rate : 50);
+        push('kpi_interview_to_reservation_rate', kpi_interview_to_reservation_rate !== null && kpi_interview_to_reservation_rate !== void 0 ? kpi_interview_to_reservation_rate : 50);
+        push('kpi_reservation_to_application_rate', kpi_reservation_to_application_rate !== null && kpi_reservation_to_application_rate !== void 0 ? kpi_reservation_to_application_rate : 40);
         push('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
         push('event_slots', Array.isArray(event_slots) ? JSON.stringify(event_slots) : '[]');
         const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ');
@@ -319,7 +319,7 @@ const updateEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 exports.updateEvent = updateEvent;
 const updateEventKpi = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { entry_deadline, capacity, target_seats, unit_price, target_sales, current_sales, kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_inflow_rate, kpi_inflow_to_reservation_rate, kpi_custom_steps } = req.body;
+    const { entry_deadline, capacity, target_seats, unit_price, target_sales, current_sales, kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, kpi_interview_to_reservation_rate, kpi_reservation_to_application_rate, kpi_custom_steps } = req.body;
     try {
         yield ensureEventDatesTable();
         const cols = yield getEventColumns();
@@ -339,8 +339,8 @@ const updateEventKpi = (req, res) => __awaiter(void 0, void 0, void 0, function*
         pushSet('current_sales', current_sales);
         pushSet('kpi_seat_to_entry_rate', kpi_seat_to_entry_rate);
         pushSet('kpi_entry_to_interview_rate', kpi_entry_to_interview_rate);
-        pushSet('kpi_interview_to_inflow_rate', kpi_interview_to_inflow_rate);
-        pushSet('kpi_inflow_to_reservation_rate', kpi_inflow_to_reservation_rate);
+        pushSet('kpi_interview_to_reservation_rate', kpi_interview_to_reservation_rate);
+        pushSet('kpi_reservation_to_application_rate', kpi_reservation_to_application_rate);
         if (kpi_custom_steps !== undefined) {
             pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
         }
@@ -460,7 +460,8 @@ const getKgiProgress = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 e.capacity AS capacity_entry,
                 COALESCE(e.kpi_seat_to_entry_rate, 70) AS kpi_seat_to_entry_rate,
                 COALESCE(e.kpi_entry_to_interview_rate, 60) AS kpi_entry_to_interview_rate,
-                COALESCE(e.kpi_interview_to_inflow_rate, 50) AS kpi_interview_to_inflow_rate,
+                COALESCE(e.kpi_interview_to_reservation_rate, 50) AS kpi_interview_to_reservation_rate,
+                COALESCE(e.kpi_reservation_to_application_rate, 40) AS kpi_reservation_to_application_rate,
                 COALESCE(e.kpi_custom_steps, '[]') AS kpi_custom_steps,
                 COALESCE(
                     e.entry_deadline::text,
@@ -574,8 +575,8 @@ const getKgiProgress = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 daily_required_interview: dailyRequiredInterview, // デイリー必要面談数
                 kpi_rate: kpiRate,
                 kpi_entry_to_interview_rate: kpiEntryToInterview,
-                kpi_interview_to_inflow_rate: kpiInterviewToInflow,
-                kpi_inflow_to_reservation_rate: Number(e.kpi_inflow_to_reservation_rate || 50),
+                kpi_interview_to_reservation_rate: Number(e.kpi_interview_to_reservation_rate || 50),
+                kpi_reservation_to_application_rate: Number(e.kpi_reservation_to_application_rate || 40),
                 kpi_custom_steps: customSteps,
                 current_entry: currentEntry,
                 target_seats: targetSeats,
