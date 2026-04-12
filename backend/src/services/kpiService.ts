@@ -375,7 +375,6 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
             days_remaining: daysRemaining,
             
             // Goals
-            target_seats: targetSeats,
             target_entries: targetEntries,
             target_interviews: targetInterviews,
             target_reservations: targetReservations,
@@ -397,8 +396,6 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
             daily_required_applications: applicationsAction.daily,
             weekly_required_applications: applicationsAction.weekly,
 
-            target_sales: targetSales,
-            current_sales: currentSales,
             achievementRate,
             
             kpi_seat_to_entry_rate: e.kpi_seat_to_entry_rate,

@@ -167,8 +167,10 @@ export const kpiApi = {
     source_company?: string;
     event_id?: number;
     period_type?: string;
+    period_start?: string;
     month?: string;
     date?: string;
+    week?: string;
   } = {}) =>
     api.get<GoalSetting[]>('/api/kpi/goals', { ...authHeaders(), params }),
 
