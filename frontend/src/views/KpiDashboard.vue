@@ -70,6 +70,16 @@ const goalForm = ref({
   cvr_inflow_to_setting: 40,
 });
 
+const eventAllocations = ref<Array<{
+  event_id: number;
+  event_title: string;
+  unit_price: number;
+  target_seats: number;
+  guaranteed_sales: number;
+  cvr_seat_to_entry: number;
+  master_rate: number;
+}>>([]);
+
 // Event editing
 const showEventEditor = ref(false);
 const editingEvent = ref<EventKpiItem | null>(null);
@@ -156,13 +166,48 @@ const fetchSourceBreakdown = async () => {
 
 const fetchGoals = async () => {
   try {
-    const res = await kpiApi.getGoals({ scope_type: 'global', period_type: 'monthly', month: selectedMonth.value });
-    const goals: GoalSetting[] = res.data;
-    for (const g of goals) {
+    // 1. Fetch Global Goals
+    const resGlobal = await kpiApi.getGoals({ scope_type: 'global', period_type: 'monthly', month: selectedMonth.value });
+    const globalGoals: GoalSetting[] = resGlobal.data;
+    
+    // Reset global form
+    goalForm.value = {
+      sales_target: 0, required_seats: 0, required_entries: 0, required_interviews: 0,
+      required_interview_settings: 0, required_inflow: 0,
+      cvr_seat_to_entry: 70, cvr_entry_to_interview: 60, cvr_interview_to_setting: 50, cvr_inflow_to_setting: 40
+    };
+    for (const g of globalGoals) {
       if (g.metric_key in goalForm.value) {
         (goalForm.value as any)[g.metric_key] = Number(g.target_value);
       }
     }
+
+    // 2. Fetch Event Specific Goals and merge with Master data
+    const resEventGoals = await kpiApi.getGoals({ scope_type: 'event', period_type: 'monthly', month: selectedMonth.value });
+    const eventGoalRows: GoalSetting[] = resEventGoals.data;
+
+    // Filter events for the current month context
+    const monthEvents = eventKpi.value.filter(e => {
+        if (!e.deadline) return false;
+        return e.deadline.slice(0, 7) === selectedMonth.value;
+    });
+
+    eventAllocations.value = monthEvents.map(e => {
+        const eventGoals = eventGoalRows.filter(g => Number(g.scope_id) === e.event_id);
+        const goalSeats = eventGoals.find(g => g.metric_key === 'target_seats')?.target_value;
+        const goalSales = eventGoals.find(g => g.metric_key === 'guaranteed_sales')?.target_value;
+        const goalRate = eventGoals.find(g => g.metric_key === 'cvr_seat_to_entry')?.target_value;
+
+        return {
+            event_id: e.event_id,
+            event_title: e.event_title,
+            unit_price: e.unit_price,
+            target_seats: goalSeats !== undefined ? Number(goalSeats) : e.target_seats,
+            guaranteed_sales: goalSales !== undefined ? Number(goalSales) : (e.unit_price * e.target_seats),
+            cvr_seat_to_entry: goalRate !== undefined ? Number(goalRate) : e.kpi_seat_to_entry_rate,
+            master_rate: e.kpi_seat_to_entry_rate
+        };
+    });
   } catch (err) {
     console.error('KPI goals fetch error:', err);
   }
@@ -171,16 +216,54 @@ const fetchGoals = async () => {
 const saveGoals = async () => {
   saving.value = true;
   try {
-    const goals: GoalSetting[] = Object.entries(goalForm.value).map(([key, value]) => ({
-      scope_type: 'global',
-      period_type: 'monthly',
-      period_start: selectedMonth.value + '-01',
-      metric_key: key,
-      target_value: Number(value),
-    }));
+    const periodStart = selectedMonth.value + '-01';
+    const goals: GoalSetting[] = [];
+
+    // 1. Global Goals
+    Object.entries(goalForm.value).forEach(([key, value]) => {
+      goals.push({
+        scope_type: 'global',
+        period_type: 'monthly',
+        period_start: periodStart,
+        metric_key: key,
+        target_value: Number(value),
+      });
+    });
+
+    // 2. Event Allocations
+    eventAllocations.value.forEach(ea => {
+      // seats
+      goals.push({
+        scope_type: 'event',
+        scope_id: ea.event_id,
+        period_type: 'monthly',
+        period_start: periodStart,
+        metric_key: 'target_seats',
+        target_value: ea.target_seats
+      });
+      // guaranteed sales
+      goals.push({
+        scope_type: 'event',
+        scope_id: ea.event_id,
+        period_type: 'monthly',
+        period_start: periodStart,
+        metric_key: 'guaranteed_sales',
+        target_value: ea.guaranteed_sales
+      });
+      // rate override
+      goals.push({
+        scope_type: 'event',
+        scope_id: ea.event_id,
+        period_type: 'monthly',
+        period_start: periodStart,
+        metric_key: 'cvr_seat_to_entry',
+        target_value: ea.cvr_seat_to_entry
+      });
+    });
+
     await kpiApi.updateGoals(goals);
     showGoalEditor.value = false;
-    await fetchOverview();
+    await loadAll();
   } catch (err) {
     console.error('KPI goals save error:', err);
   } finally {
@@ -316,6 +399,14 @@ const totalTargetSales = computed(() =>
 const totalCurrentSales = computed(() =>
   activeEvents.value.reduce((s, e) => s + e.current_sales, 0)
 );
+
+const totalEventGuaranteedSales = computed(() =>
+  eventAllocations.value.reduce((sum, ea) => sum + ea.guaranteed_sales, 0)
+);
+
+const salesTargetGap = computed(() =>
+  totalEventGuaranteedSales.value - goalForm.value.sales_target
+);
 </script>
 
 <template>
@@ -356,7 +447,7 @@ const totalCurrentSales = computed(() =>
           <Target class="w-4 h-4 text-blue-600" />
           {{ selectedMonth.replace('-', '年') }}月 月間目標設定
         </h3>
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <div v-for="[key, label] in [
             ['sales_target', '売上目標 (円)'],
             ['required_seats', '必要着座数'],
@@ -377,6 +468,58 @@ const totalCurrentSales = computed(() =>
                 class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
               />
             </div>
+          </div>
+        </div>
+
+        <!-- Event Breakdown Table (New) -->
+        <div v-if="eventAllocations.length > 0" class="mt-8 border-t border-gray-100 pt-6">
+          <div class="flex items-center justify-between mb-4">
+            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+              <Calendar class="w-3.5 h-3.5" />
+              イベント別内訳 (月間担保設定)
+            </h4>
+            <div class="flex items-center gap-4">
+              <div class="text-[10px] font-bold text-gray-400 uppercase">確約合計: <span class="text-gray-900 text-sm ml-1">¥{{ totalEventGuaranteedSales.toLocaleString() }}</span></div>
+              <div :class="salesTargetGap >= 0 ? 'text-emerald-600' : 'text-rose-600'" class="text-[10px] font-bold uppercase">
+                乖離: <span class="text-sm ml-1">{{ salesTargetGap >= 0 ? '+' : '' }}{{ salesTargetGap.toLocaleString() }}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-separate border-spacing-y-2">
+              <thead>
+                <tr class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  <th class="px-3 pb-2">イベント名</th>
+                  <th class="px-3 pb-2 text-center">単価</th>
+                  <th class="px-3 pb-2 w-24">目標座席数</th>
+                  <th class="px-3 pb-2 w-32">確約金額 (円)</th>
+                  <th class="px-3 pb-2 w-24">目標出席率 (%)</th>
+                  <th class="px-3 pb-2 text-right">期待売上 (参考)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="ea in eventAllocations" :key="ea.event_id" class="bg-gray-50/50 hover:bg-gray-50 transition-colors rounded-lg overflow-hidden">
+                  <td class="px-3 py-3 text-sm font-bold text-gray-700">{{ ea.event_title }}</td>
+                  <td class="px-3 py-3 text-sm font-medium text-gray-500 text-center">¥{{ ea.unit_price.toLocaleString() }}</td>
+                  <td class="px-3 py-3">
+                    <input v-model.number="ea.target_seats" type="number" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none" />
+                  </td>
+                  <td class="px-3 py-3">
+                    <input v-model.number="ea.guaranteed_sales" type="number" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none" />
+                  </td>
+                  <td class="px-3 py-3">
+                    <div class="flex items-center gap-1.5">
+                      <input v-model.number="ea.cvr_seat_to_entry" type="number" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none" />
+                      <span class="text-[10px] text-gray-400 font-medium">(マスタ:{{ ea.master_rate }}%)</span>
+                    </div>
+                  </td>
+                  <td class="px-3 py-3 text-sm font-bold text-gray-400 text-right">
+                    ¥{{ Math.round(ea.target_seats * ea.unit_price * (ea.cvr_seat_to_entry / 100)).toLocaleString() }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
         <div class="flex justify-end gap-2">

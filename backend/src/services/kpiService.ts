@@ -298,6 +298,12 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
                 if (g.metric_key === 'target_seats') {
                     periodGoals[g.scope_id].target = Number(g.target_value);
                 }
+                if (g.metric_key === 'guaranteed_sales') {
+                    (periodGoals[g.scope_id] as any).guaranteed_sales = Number(g.target_value);
+                }
+                if (g.metric_key === 'cvr_seat_to_entry') {
+                    (periodGoals[g.scope_id] as any).cvr_seat_to_entry = Number(g.target_value);
+                }
                 if (g.period_end) {
                     periodGoals[g.scope_id].deadline = g.period_end.slice(0, 10);
                 }
@@ -312,6 +318,8 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
         const override = periodGoals[e.event_id];
         const targetSeats = override?.target ?? e.target_seats;
         const deadline = override?.deadline ?? e.deadline;
+        const monthlyCvrOverride = (override as any)?.cvr_seat_to_entry;
+        const monthlyGuaranteedSales = (override as any)?.guaranteed_sales;
 
         // Recalculate days_remaining based on (potentially overridden) deadline
         let daysRemaining = e.days_remaining;
@@ -320,8 +328,8 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
             daysRemaining = Math.floor((deadlineDate.getTime() - todayDate.getTime()) / 86400000);
         }
 
-        // 歩留まり率 (Conversion Rates)
-        const seatToEntry = safeRate(e.kpi_seat_to_entry_rate, 70) / 100;
+        // 歩留まり率 (Conversion Rates) - Use monthly override if present
+        const seatToEntry = safeRate(monthlyCvrOverride ?? e.kpi_seat_to_entry_rate, 70) / 100;
         const entryToInterview = safeRate(e.kpi_entry_to_interview_rate, 60) / 100;
         const interviewToReservation = safeRate(e.kpi_interview_to_reservation_rate, 50) / 100;
         const reservationToApplication = safeRate(e.kpi_reservation_to_application_rate, 40) / 100;
@@ -348,7 +356,7 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
         const reservationsAction = calcAction(targetReservations, 0);
         const applicationsAction = calcAction(targetApplications, 0);
 
-        const targetSales = e.unit_price * targetSeats;
+        const targetSales = monthlyGuaranteedSales ?? (e.unit_price * targetSeats);
         const currentSales = e.unit_price * e.current_seats;
         const achievementRate = targetSeats > 0 ? Math.round((e.current_seats / targetSeats) * 1000) / 10 : 0;
 
