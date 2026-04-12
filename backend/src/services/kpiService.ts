@@ -304,6 +304,9 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
                 if (g.metric_key === 'cvr_seat_to_entry') {
                     (periodGoals[g.scope_id] as any).cvr_seat_to_entry = Number(g.target_value);
                 }
+                if (g.metric_key === 'unit_price') {
+                    (periodGoals[g.scope_id] as any).unit_price = Number(g.target_value);
+                }
                 if (g.period_end) {
                     periodGoals[g.scope_id].deadline = g.period_end.slice(0, 10);
                 }
@@ -320,6 +323,9 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
         const deadline = override?.deadline ?? e.deadline;
         const monthlyCvrOverride = (override as any)?.cvr_seat_to_entry;
         const monthlyGuaranteedSales = (override as any)?.guaranteed_sales;
+        const monthlyUnitPriceOverride = (override as any)?.unit_price;
+
+        const unitPrice = monthlyUnitPriceOverride ?? e.unit_price;
 
         // Recalculate days_remaining based on (potentially overridden) deadline
         let daysRemaining = e.days_remaining;
@@ -356,14 +362,16 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
         const reservationsAction = calcAction(targetReservations, 0);
         const applicationsAction = calcAction(targetApplications, 0);
 
-        const targetSales = monthlyGuaranteedSales ?? (e.unit_price * targetSeats);
-        const currentSales = e.unit_price * e.current_seats;
-        const achievementRate = targetSeats > 0 ? Math.round((e.current_seats / targetSeats) * 1000) / 10 : 0;
+        const targetSales = monthlyGuaranteedSales ?? (targetSeats * unitPrice);
+        const currentSales = e.current_seats * unitPrice;
+        const achievementRate = targetSales > 0 ? Math.round((currentSales / targetSales) * 1000) / 10 : 0;
 
         return {
-            event_id: e.event_id,
-            event_title: e.event_title,
-            deadline: deadline,
+            ...e,
+            target_seats: targetSeats,
+            target_sales: targetSales,
+            current_sales: currentSales,
+            unit_price: unitPrice,
             days_remaining: daysRemaining,
             
             // Goals

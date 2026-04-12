@@ -57,6 +57,7 @@ const sourceOverview = ref<any[]>([]);
 
 // Goal editing
 const showGoalEditor = ref(false);
+const editorPeriodType = ref<'monthly' | 'weekly' | 'daily'>('monthly');
 const goalForm = ref({
   sales_target: 0,
   required_seats: 0,
@@ -166,8 +167,20 @@ const fetchSourceBreakdown = async () => {
 
 const fetchGoals = async () => {
   try {
+    const periodType = editorPeriodType.value;
+    const periodStart = periodType === 'weekly' ? selectedWeek.value : 
+                       periodType === 'daily' ? selectedDate.value : 
+                       selectedMonth.value + '-01';
+
     // 1. Fetch Global Goals
-    const resGlobal = await kpiApi.getGoals({ scope_type: 'global', period_type: 'monthly', month: selectedMonth.value });
+    const resGlobal = await kpiApi.getGoals({ 
+      scope_type: 'global', 
+      period_type: periodType, 
+      period_start: periodStart,
+      month: periodType === 'monthly' ? selectedMonth.value : undefined,
+      date: periodType === 'daily' ? selectedDate.value : undefined,
+      week: periodType === 'weekly' ? selectedWeek.value : undefined
+    });
     const globalGoals: GoalSetting[] = resGlobal.data;
     
     // Reset global form
@@ -183,27 +196,32 @@ const fetchGoals = async () => {
     }
 
     // 2. Fetch Event Specific Goals and merge with Master data
-    const resEventGoals = await kpiApi.getGoals({ scope_type: 'event', period_type: 'monthly', month: selectedMonth.value });
+    const resEventGoals = await kpiApi.getGoals({ 
+      scope_type: 'event', 
+      period_type: periodType, 
+      period_start: periodStart,
+      month: periodType === 'monthly' ? selectedMonth.value : undefined,
+      date: periodType === 'daily' ? selectedDate.value : undefined,
+      week: periodType === 'weekly' ? selectedWeek.value : undefined
+    });
     const eventGoalRows: GoalSetting[] = resEventGoals.data;
 
-    // Filter events for the current month context
-    const monthEvents = eventKpi.value.filter(e => {
-        if (!e.deadline) return false;
-        return e.deadline.slice(0, 7) === selectedMonth.value;
-    });
-
-    eventAllocations.value = monthEvents.map(e => {
+    // Show ALL events as requested by user
+    eventAllocations.value = eventKpi.value.map(e => {
         const eventGoals = eventGoalRows.filter(g => Number(g.scope_id) === e.event_id);
         const goalSeats = eventGoals.find(g => g.metric_key === 'target_seats')?.target_value;
         const goalSales = eventGoals.find(g => g.metric_key === 'guaranteed_sales')?.target_value;
+        const goalUnitPrice = eventGoals.find(g => g.metric_key === 'unit_price')?.target_value;
         const goalRate = eventGoals.find(g => g.metric_key === 'cvr_seat_to_entry')?.target_value;
+
+        const unitPrice = goalUnitPrice !== undefined ? Number(goalUnitPrice) : e.unit_price;
 
         return {
             event_id: e.event_id,
             event_title: e.event_title,
-            unit_price: e.unit_price,
+            unit_price: unitPrice,
             target_seats: goalSeats !== undefined ? Number(goalSeats) : e.target_seats,
-            guaranteed_sales: goalSales !== undefined ? Number(goalSales) : (e.unit_price * e.target_seats),
+            guaranteed_sales: goalSales !== undefined ? Number(goalSales) : (unitPrice * e.target_seats),
             cvr_seat_to_entry: goalRate !== undefined ? Number(goalRate) : e.kpi_seat_to_entry_rate,
             master_rate: e.kpi_seat_to_entry_rate
         };
@@ -213,17 +231,26 @@ const fetchGoals = async () => {
   }
 };
 
+const openGoalEditor = (period: 'monthly' | 'weekly' | 'daily') => {
+    editorPeriodType.value = period;
+    fetchGoals();
+    showGoalEditor.value = true;
+};
+
 const saveGoals = async () => {
   saving.value = true;
   try {
-    const periodStart = selectedMonth.value + '-01';
+    const periodType = editorPeriodType.value;
+    const periodStart = periodType === 'weekly' ? selectedWeek.value : 
+                       periodType === 'daily' ? selectedDate.value : 
+                       selectedMonth.value + '-01';
     const goals: GoalSetting[] = [];
 
     // 1. Global Goals
     Object.entries(goalForm.value).forEach(([key, value]) => {
       goals.push({
         scope_type: 'global',
-        period_type: 'monthly',
+        period_type: periodType,
         period_start: periodStart,
         metric_key: key,
         target_value: Number(value),
@@ -232,33 +259,21 @@ const saveGoals = async () => {
 
     // 2. Event Allocations
     eventAllocations.value.forEach(ea => {
+      const base = {
+        scope_type: 'event',
+        scope_id: ea.event_id,
+        period_type: periodType,
+        period_start: periodStart
+      };
+
       // seats
-      goals.push({
-        scope_type: 'event',
-        scope_id: ea.event_id,
-        period_type: 'monthly',
-        period_start: periodStart,
-        metric_key: 'target_seats',
-        target_value: ea.target_seats
-      });
+      goals.push({ ...base, metric_key: 'target_seats', target_value: ea.target_seats });
       // guaranteed sales
-      goals.push({
-        scope_type: 'event',
-        scope_id: ea.event_id,
-        period_type: 'monthly',
-        period_start: periodStart,
-        metric_key: 'guaranteed_sales',
-        target_value: ea.guaranteed_sales
-      });
+      goals.push({ ...base, metric_key: 'guaranteed_sales', target_value: ea.guaranteed_sales });
+      // unit price override
+      goals.push({ ...base, metric_key: 'unit_price', target_value: ea.unit_price });
       // rate override
-      goals.push({
-        scope_type: 'event',
-        scope_id: ea.event_id,
-        period_type: 'monthly',
-        period_start: periodStart,
-        metric_key: 'cvr_seat_to_entry',
-        target_value: ea.cvr_seat_to_entry
-      });
+      goals.push({ ...base, metric_key: 'cvr_seat_to_entry', target_value: ea.cvr_seat_to_entry });
     });
 
     await kpiApi.updateGoals(goals);
@@ -268,6 +283,16 @@ const saveGoals = async () => {
     console.error('KPI goals save error:', err);
   } finally {
     saving.value = false;
+  }
+};
+
+const onAllocationChange = (ea: any, field: 'sales' | 'seats' | 'price' | 'rate') => {
+  if (field === 'sales' || field === 'price') {
+    if (ea.unit_price > 0) {
+      ea.target_seats = Math.ceil(ea.guaranteed_sales / ea.unit_price);
+    }
+  } else if (field === 'seats') {
+    ea.guaranteed_sales = ea.target_seats * ea.unit_price;
   }
 };
 
@@ -441,7 +466,7 @@ const salesTargetGap = computed(() =>
             <option v-for="m in monthOptions" :key="m" :value="m">{{ m.replace('-', '年') }}月</option>
           </select>
           <button
-            @click="showGoalEditor = !showGoalEditor"
+            @click="openGoalEditor('monthly')"
             class="flex items-center gap-1.5 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 shadow-sm transition-all"
           >
             <Settings2 class="w-4 h-4" />
@@ -454,7 +479,11 @@ const salesTargetGap = computed(() =>
       <div v-if="showGoalEditor" class="bg-white rounded-2xl border border-blue-200 p-6 mb-6 shadow-sm">
         <h3 class="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
           <Target class="w-4 h-4 text-blue-600" />
-          {{ selectedMonth.replace('-', '年') }}月 月間目標設定
+          {{ editorPeriodType === 'weekly' ? '週間' : editorPeriodType === 'daily' ? 'デイリー' : '月間' }}目標設定 ({{ 
+              editorPeriodType === 'weekly' ? selectedWeek : 
+              editorPeriodType === 'daily' ? selectedDate : 
+              selectedMonth.replace('-', '年') + '月' 
+          }})
         </h3>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <div v-for="[key, label] in [
@@ -510,12 +539,35 @@ const salesTargetGap = computed(() =>
               <tbody>
                 <tr v-for="ea in eventAllocations" :key="ea.event_id" class="bg-gray-50/50 hover:bg-gray-50 transition-colors rounded-lg overflow-hidden">
                   <td class="px-3 py-3 text-sm font-bold text-gray-700">{{ ea.event_title }}</td>
-                  <td class="px-3 py-3 text-sm font-medium text-gray-500 text-center">¥{{ (ea.unit_price || 0).toLocaleString() }}</td>
                   <td class="px-3 py-3">
-                    <input v-model.number="ea.target_seats" type="number" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none" />
+                    <div class="relative flex items-center gap-1">
+                      <span class="text-xs text-gray-400">¥</span>
+                      <input 
+                        v-model.number="ea.unit_price" 
+                        type="number" 
+                        @input="onAllocationChange(ea, 'price')"
+                        class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500/20 outline-none" 
+                      />
+                      <div v-if="ea.unit_price === 0" class="absolute -top-6 left-0 bg-rose-500 text-white text-[9px] px-1.5 py-0.5 rounded shadow-lg whitespace-nowrap animate-bounce">
+                        売上計算不可
+                      </div>
+                    </div>
                   </td>
                   <td class="px-3 py-3">
-                    <input v-model.number="ea.guaranteed_sales" type="number" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none" />
+                    <input 
+                      v-model.number="ea.target_seats" 
+                      type="number" 
+                      @input="onAllocationChange(ea, 'seats')"
+                      class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none" 
+                    />
+                  </td>
+                  <td class="px-3 py-3">
+                    <input 
+                      v-model.number="ea.guaranteed_sales" 
+                      type="number" 
+                      @input="onAllocationChange(ea, 'sales')"
+                      class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 outline-none" 
+                    />
                   </td>
                   <td class="px-3 py-3">
                     <div class="flex items-center gap-1.5">
@@ -591,11 +643,27 @@ const salesTargetGap = computed(() =>
           <div class="ml-auto">
             <button
               v-if="activeTab === 'monthly'"
-              @click="showGoalEditor = !showGoalEditor"
+              @click="openGoalEditor('monthly')"
               class="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-200"
             >
               <Settings2 class="w-4 h-4" />
               月間目標設定
+            </button>
+            <button
+              v-if="activeTab === 'weekly'"
+              @click="openGoalEditor('weekly')"
+              class="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200"
+            >
+              <Settings2 class="w-4 h-4" />
+              週間目標設定
+            </button>
+            <button
+              v-if="activeTab === 'daily'"
+              @click="openGoalEditor('daily')"
+              class="flex items-center gap-2 px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-200"
+            >
+              <Settings2 class="w-4 h-4" />
+              デイリー目標設定
             </button>
           </div>
         </div>
