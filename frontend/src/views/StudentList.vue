@@ -927,6 +927,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize);
 });
 
+watch(() => user.value?.role, (newRole) => {
+  if (newRole === 'admin') {
+    fetchStaffUsers();
+  }
+}, { immediate: true });
+
 watch(filteredStudents, () => {
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value;
 });

@@ -501,6 +501,12 @@ watch(activeTab, (tab) => {
   if (tab === 'source' && sourceOverview.value.length === 0) fetchSourceBreakdown();
 });
 
+watch(() => user.value?.role, (newRole) => {
+  if (newRole === 'admin') {
+    fetchStaffUsers();
+  }
+}, { immediate: true });
+
 onMounted(loadAll);
 
 // ─── Actions ───

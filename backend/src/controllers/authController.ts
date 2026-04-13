@@ -64,7 +64,6 @@ export const getUsers = async (req: Request, res: Response) => {
         const result = await pool.query(`
             SELECT DISTINCT ON (name) id, name
             FROM users
-            WHERE role = 'staff'
             ORDER BY name, created_at DESC, id DESC
         `);
         res.json(result.rows);
