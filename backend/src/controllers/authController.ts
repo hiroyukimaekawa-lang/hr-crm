@@ -135,3 +135,28 @@ export const registerByInvite = async (req: Request, res: Response): Promise<voi
         res.status(500).json({ error: err.message });
     }
 };
+
+export const getMe = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user?.sub;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
+        const result = await pool.query(
+            'SELECT id, username, name, role FROM users WHERE id = $1',
+            [userId]
+        );
+
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+
+        res.json({ user: result.rows[0] });
+    } catch (err: any) {
+        console.error('getMe error:', err);
+        res.status(500).json({ error: err.message });
+    }
+};

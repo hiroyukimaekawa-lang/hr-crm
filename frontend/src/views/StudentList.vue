@@ -116,7 +116,7 @@ const funnelKpi = ref({
 });
 const router = useRouter();
 const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
-const showAll = ref(user.role === 'admin');
+const showAll = ref(true); // Default to showing all students for everyone as requested
 const selectedExportColumns = ref<ExportColumnKey[]>(exportColumnOptions.map(c => c.key));
 const toastMessage = ref('');
 const toastType = ref<'success' | 'error'>('success');

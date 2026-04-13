@@ -44,7 +44,24 @@ const pinnedPanelOpen = ref(false);
 const initializedNotification = ref(false);
 let popupTimer: ReturnType<typeof setTimeout> | null = null;
 
-const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
+const user = ref<any>(JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}'));
+
+const syncUser = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const res = await api.get('/api/auth/me', {
+      headers: { Authorization: token }
+    });
+    if (res.data.user) {
+      user.value = res.data.user;
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+    }
+  } catch (err) {
+    console.error('Failed to sync user profile:', err);
+  }
+};
+
 
 const menuItems = computed(() => [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard, path: '/dashboard' },
@@ -116,6 +133,7 @@ watch(
 );
 
 onMounted(() => {
+  syncUser();
   refreshNotifications();
   refreshPinnedStudent();
   window.addEventListener('storage', refreshNotifications);

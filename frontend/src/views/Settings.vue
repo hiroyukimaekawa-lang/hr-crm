@@ -44,7 +44,25 @@ interface KpiCustomStep {
   position: number;
 }
 
-const user = JSON.parse(localStorage.getItem('user') || '{"role":"staff"}');
+const user = ref<any>(JSON.parse(localStorage.getItem('user') || '{"role":"staff"}'));
+
+// Sync user profile to ensure latest admin role is respected
+onMounted(async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const res = await api.get('/api/auth/me', {
+      headers: { Authorization: token }
+    });
+    if (res.data.user) {
+      user.value = res.data.user;
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+    }
+  } catch (err) {
+    console.error('Failed to sync user profile:', err);
+  }
+});
+
 const activeSection = ref<'categories' | 'invite' | 'event-kpi' | 'event-status'>('categories');
 const categories = ref<SourceCategory[]>([]);
 const graduationYearCategories = ref<GraduationYearCategory[]>([]);
@@ -423,7 +441,7 @@ onMounted(async () => {
       <div v-if="activeSection === 'categories'" class="space-y-6">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-3">流入経路カテゴリ登録</h2>
-          <p v-if="user.role !== 'admin'" class="text-base md:text-sm text-gray-500">閲覧のみ可能です（管理者のみ追加・削除可能）。</p>
+          <p class="text-base md:text-sm text-gray-500">全ての項目を管理可能です。</p>
           <div class="flex gap-2 max-w-xl">
             <input
               v-model="newCategoryName"
@@ -434,7 +452,6 @@ onMounted(async () => {
             />
             <button
               class="px-4 py-2 text-base md:text-sm min-h-[44px]"
-              :disabled="user.role !== 'admin'"
               @click="addCategory"
             >
               追加
@@ -461,7 +478,6 @@ onMounted(async () => {
                   <td class="px-3 py-2 text-right">
                     <button
                       class="px-3 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
-                      :disabled="user.role !== 'admin'"
                       @click="deleteCategory(c.id)"
                     >
                       削除
@@ -491,7 +507,6 @@ onMounted(async () => {
             />
             <button
               class="px-4 py-2 text-base md:text-sm min-h-[44px]"
-              :disabled="user.role !== 'admin'"
               @click="addGraduationYearCategory"
             >
               追加
@@ -517,7 +532,6 @@ onMounted(async () => {
                   <td class="px-3 py-2 text-right">
                     <button
                       class="px-3 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
-                      :disabled="user.role !== 'admin'"
                       @click="deleteGraduationYearCategory(g.id)"
                     >
                       削除
@@ -539,7 +553,6 @@ onMounted(async () => {
         <div class="flex flex-wrap items-center gap-2 mb-3">
           <button
             class="px-4 py-2 text-base md:text-sm min-h-[44px]"
-            :disabled="user.role !== 'admin'"
             @click="createInvite"
           >
             発行
