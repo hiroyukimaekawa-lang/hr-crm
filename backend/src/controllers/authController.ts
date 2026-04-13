@@ -86,7 +86,7 @@ export const createInvite = async (req: Request, res: Response) => {
 
         const result = await pool.query(
             'INSERT INTO invites (token, role, expires_at) VALUES ($1, $2, $3) RETURNING token, expires_at',
-            [token, 'staff', expiresAt]
+            [token, 'admin', expiresAt]
         );
 
         // Prefer explicit APP_URL, otherwise derive from browser Origin header.

@@ -580,11 +580,7 @@ export const getStudents = async (req: Request, res: Response) => {
         `;
         const params: any[] = [];
 
-        // staff users can only see their own students regardless of query param
-        if (authUser?.role !== 'admin' && authUser?.sub) {
-            query += ' WHERE students.staff_id = $1';
-            params.push(Number(authUser.sub));
-        } else if (staffId) {
+        if (staffId) {
             query += ' WHERE staff_id = $1';
             params.push(staffId);
         }
