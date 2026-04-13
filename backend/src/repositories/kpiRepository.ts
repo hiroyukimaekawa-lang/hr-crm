@@ -164,6 +164,27 @@ const ensureDepTables = async () => {
                 )
             `);
 
+            // events テーブルに必要なカラムを保証
+            await pool.query(`
+                ALTER TABLE events
+                ADD COLUMN IF NOT EXISTS entry_deadline TIMESTAMP,
+                ADD COLUMN IF NOT EXISTS kpi_seat_to_entry_rate NUMERIC(5,2) DEFAULT 70,
+                ADD COLUMN IF NOT EXISTS kpi_entry_to_interview_rate NUMERIC(5,2) DEFAULT 60,
+                ADD COLUMN IF NOT EXISTS kpi_interview_to_reservation_rate NUMERIC(5,2) DEFAULT 50,
+                ADD COLUMN IF NOT EXISTS kpi_reservation_to_application_rate NUMERIC(5,2) DEFAULT 40,
+                ADD COLUMN IF NOT EXISTS kpi_interview_to_inflow_rate NUMERIC(5,2) DEFAULT 50,
+                ADD COLUMN IF NOT EXISTS kpi_custom_steps TEXT DEFAULT '[]',
+                ADD COLUMN IF NOT EXISTS yomi_statuses JSONB DEFAULT '["A_ENTRY", "B_WAITING", "C_WAITING", "D_PASS", "E_FAIL", "XA_CANCEL"]',
+                ADD COLUMN IF NOT EXISTS event_slots JSONB DEFAULT '[]'
+            `);
+
+            // student_events テーブルに必要なカラムを保証
+            await pool.query(`
+                ALTER TABLE student_events
+                ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP,
+                ADD COLUMN IF NOT EXISTS id SERIAL
+            `);
+
             depTablesReady = true;
         })().finally(() => { depTablesPromise = null; });
     }
@@ -446,6 +467,9 @@ export const upsertGoals = async (goals: GoalRow[]): Promise<void> => {
 // ─────────────────────── Event KPI ───────────────────────
 
 export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
+    // 依存テーブルとカラム(events / student_events)を保証
+    await ensureDepTables();
+
     const now = new Date();
     const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
     const todayStr = jstNow.toISOString().slice(0, 10);
@@ -579,6 +603,9 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
  * Get Sales Actuals for a given period (Monthly, Weekly, or Daily).
  */
 export const getSalesActuals = async (filters: KpiFilters) => {
+    // 依存テーブルとカラム(events / student_events)を保証
+    await ensureDepTables();
+
     const params: any[] = [];
     let idx = 1;
     
