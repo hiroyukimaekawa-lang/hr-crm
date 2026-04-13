@@ -828,36 +828,32 @@ const salesTargetGap = computed(() =>
               </p>
             </div>
 
-            <!-- Seats / Entries / Interviews -->
-            <div v-for="item in [
-              { key: 'seats', label: '着座数', metric: monthly.seats, unit: '名' },
-              { key: 'entries', label: 'エントリー数', metric: monthly.entries, unit: '名' },
-              { key: 'interviews', label: '面談実施数', metric: monthly.interviews, unit: '名' },
-              { key: 'interviewSettings', label: '面談設定数', metric: monthly.interviewSettings, unit: '名' },
-              { key: 'inflow', label: '流入数', metric: monthly.inflow, unit: '名' },
-            ]" :key="item.key"
+            <!-- Event Sales Progress -->
+            <div v-for="ev in activeEventsForMonth" :key="'sales-'+ev.event_id"
               class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm"
             >
               <div class="flex items-center justify-between mb-3">
-                <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase">{{ item.key }}</span>
-                <span class="text-xs font-bold" :class="rateColor(item.metric.achievementRate)">
-                  {{ item.metric.achievementRate }}%
+                <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase truncate max-w-[150px]">{{ ev.event_title }}</span>
+                <span class="text-xs font-bold" :class="rateColor(ev.target_seats > 0 ? (ev.current_seats / ev.target_seats) * 100 : 0)">
+                  {{ ev.target_seats > 0 ? Math.round((ev.current_seats / ev.target_seats) * 100) : 0 }}%
                 </span>
               </div>
-              <p class="text-xs font-bold text-gray-400 mb-1">{{ item.label }}</p>
+              <p class="text-xs font-bold text-gray-400 mb-1">イベント目標振込</p>
               <div class="flex items-baseline gap-2 mb-2">
-                <span class="text-2xl font-black text-gray-900">{{ item.metric.actual }}</span>
-                <span class="text-xs text-gray-400">/ {{ item.metric.target }} {{ item.unit }}</span>
+                <span class="text-2xl font-black text-gray-900">¥{{ formatCurrency((ev.current_seats || 0) * (ev.unit_price || 0)) }}</span>
+                <span class="text-xs text-gray-400">/ ¥{{ formatCurrency((ev.target_seats || 0) * (ev.unit_price || 0)) }}</span>
               </div>
               <div class="h-2 bg-gray-100 rounded-full overflow-hidden mb-1">
                 <div
+                  v-if="ev.target_seats > 0"
                   class="h-full rounded-full transition-all duration-700"
-                  :class="item.metric.achievementRate >= 80 ? 'bg-emerald-500' : item.metric.achievementRate >= 50 ? 'bg-amber-500' : 'bg-rose-500'"
-                  :style="{ width: `${Math.min(item.metric.achievementRate, 100)}%` }"
+                  :class="Math.round((ev.current_seats / ev.target_seats) * 100) >= 80 ? 'bg-emerald-500' : Math.round((ev.current_seats / ev.target_seats) * 100) >= 50 ? 'bg-amber-500' : 'bg-rose-500'"
+                  :style="{ width: `${Math.min(Math.round((ev.current_seats / ev.target_seats) * 100), 100)}%` }"
                 ></div>
+                <div v-else class="h-full bg-gray-200 w-0"></div>
               </div>
-              <p class="text-xs font-bold" :class="gapColor(item.metric.gap)">
-                差分: {{ item.metric.gap >= 0 ? '+' : '' }}{{ item.metric.gap }}
+              <p class="text-xs font-bold" :class="gapColor((ev.current_seats || 0) * (ev.unit_price || 0) - (ev.target_seats || 0) * (ev.unit_price || 0))">
+                差分: {{ ((ev.current_seats || 0) * (ev.unit_price || 0) - (ev.target_seats || 0) * (ev.unit_price || 0)) >= 0 ? '+' : '' }}¥{{ formatCurrency((ev.current_seats || 0) * (ev.unit_price || 0) - (ev.target_seats || 0) * (ev.unit_price || 0)) }}
               </p>
             </div>
           </div>
