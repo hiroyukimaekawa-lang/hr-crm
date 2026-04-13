@@ -78,6 +78,7 @@ export interface EventKpiSlot {
   };
   entries?: number;
   seats?: number;
+  target_seats?: number;
   status_breakdown: Record<string, number>;
 }
 
@@ -120,6 +121,7 @@ export interface EventKpiItem {
   status_breakdown: Record<string, number>;
   schedule_breakdown?: EventKpiSlot[];
   slots: EventKpiSlot[];
+  event_slots?: any[];
   unit_price: number;
 }
 

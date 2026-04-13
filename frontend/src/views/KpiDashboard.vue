@@ -145,9 +145,51 @@ const saveInlineTarget = async (ev: EventKpiItem) => {
     }
     await kpiApi.updateGoals(goals);
     editingEventTargetId.value = null;
-    await loadAll();
+    await fetchEvents();
+    if (activeTab.value === 'monthly' || activeTab.value === 'weekly' || activeTab.value === 'daily') {
+        await fetchOverview();
+    }
   } catch (err) {
     console.error('Failed to save inline target', err);
+    alert('保存に失敗しました');
+  } finally {
+    saving.value = false;
+  }
+};
+
+const editingSlotTargetDate = ref<{ eventId: number; date: string } | null>(null);
+const slotInlineTargetForm = ref<{ target_seats: number }>({ target_seats: 0 });
+
+const openSlotInlineTargetEdit = (ev: EventKpiItem, slotDate: string, currentTarget: number) => {
+  editingSlotTargetDate.value = { eventId: ev.event_id, date: slotDate };
+  slotInlineTargetForm.value.target_seats = currentTarget || 0;
+};
+
+const closeSlotInlineTargetEdit = () => {
+  editingSlotTargetDate.value = null;
+};
+
+const saveSlotInlineTarget = async (ev: EventKpiItem, slotDate: string) => {
+  saving.value = true;
+  try {
+    const slotsArr = Array.isArray(ev.event_slots) ? [...ev.event_slots] : [];
+    const existingIdx = slotsArr.findIndex((s: any) => s.datetime === slotDate);
+    
+    if (existingIdx !== -1) {
+      slotsArr[existingIdx].target_seats = slotInlineTargetForm.value.target_seats;
+    } else {
+      slotsArr.push({ datetime: slotDate, target_seats: slotInlineTargetForm.value.target_seats });
+    }
+
+    await kpiApi.updateEventKpi(ev.event_id, { event_slots: slotsArr });
+    
+    editingSlotTargetDate.value = null;
+    await fetchEvents();
+    if (activeTab.value === 'monthly' || activeTab.value === 'weekly' || activeTab.value === 'daily') {
+        await fetchOverview();
+    }
+  } catch (err) {
+    console.error('Failed to save slot target', err);
     alert('保存に失敗しました');
   } finally {
     saving.value = false;
@@ -1100,9 +1142,10 @@ const salesTargetGap = computed(() =>
                 <thead class="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">開催日</th>
+                    <th class="px-4 py-2 text-center text-[10px] font-bold text-indigo-500 uppercase">目標着座(個別設定)</th>
                     <th class="px-4 py-2 text-center text-[10px] font-bold text-indigo-500 uppercase">エントリー数</th>
-                    <th class="px-4 py-2 text-center text-[10px] font-bold text-blue-500 uppercase">着座数</th>
-                    <th class="px-4 py-2 text-center text-[10px] font-bold text-gray-400 uppercase">残必要エントリー(*)逆算</th>
+                    <th class="px-4 py-2 text-center text-[10px] font-bold text-blue-500 uppercase">現着座数</th>
+                    <th class="px-4 py-2 text-center text-[10px] font-bold text-gray-400 uppercase">残必要エントリー(個別目標考慮)</th>
                     <th class="px-4 py-2 text-center text-[10px] font-bold text-orange-500 uppercase">1日あたり必要面談(逆算)</th>
                   </tr>
                 </thead>
@@ -1117,26 +1160,48 @@ const salesTargetGap = computed(() =>
                       <!-- 当日識別 -->
                       <span v-if="slot.date === new Date().toISOString().slice(0, 10)" class="ml-2 text-[9px] font-black text-white bg-blue-500 px-1.5 py-0.5 rounded-full">TODAY</span>
                     </td>
+                    
+                    <!-- 日程別目標着座数 -->
+                    <td class="px-4 py-3 text-center">
+                      <div class="flex items-center justify-center gap-2">
+                        <template v-if="editingSlotTargetDate?.eventId === ev.event_id && editingSlotTargetDate?.date === slot.date">
+                          <input
+                            v-model.number="slotInlineTargetForm.target_seats"
+                            type="number" min="0" class="w-16 px-1 py-0.5 border border-blue-300 rounded text-xs font-bold text-center outline-none"
+                          />
+                          <button @click="saveSlotInlineTarget(ev, slot.date)" class="text-blue-600 hover:text-blue-800"><Save class="w-3 h-3" /></button>
+                          <button @click="closeSlotInlineTargetEdit()" class="text-gray-400 hover:text-gray-600"><X class="w-3 h-3" /></button>
+                        </template>
+                        <template v-else>
+                          <span class="text-xs font-bold text-blue-600 cursor-pointer hover:underline" @click="openSlotInlineTargetEdit(ev, slot.date, slot.target_seats || 0)">
+                            {{ (slot.target_seats || 0) > 0 ? (slot.target_seats || 0) : ((ev.target_seats || 0) > 0 ? `(全体から)` : '-') }}
+                          </span>
+                          <button @click="openSlotInlineTargetEdit(ev, slot.date, slot.target_seats || 0)" class="text-gray-400 hover:text-blue-500"><Edit3 class="w-3 h-3" /></button>
+                        </template>
+                      </div>
+                    </td>
+
                     <td class="px-4 py-3 text-center font-bold text-indigo-500">
                       {{ slot.entries || 0 }}
                     </td>
                     <td class="px-4 py-3 text-center font-bold text-blue-500">
                       {{ slot.seats || 0 }}
                     </td>
-                    <!-- 残りエントリー逆算: スロット目標=全体目標/スロット数 として逆算 -->
+
+                    <!-- 残りエントリー逆算: 個別目標(target_seats) があればそれで計算、なければ全体目標÷スロット数 -->
                     <td class="px-4 py-3 text-center">
-                      <template v-if="ev.target_entries > 0 && ev.slots.length > 0">
-                        <span class="font-bold" :class="Math.ceil(ev.target_entries / ev.slots.length) - (slot.entries || 0) <= 0 ? 'text-emerald-600' : 'text-rose-600'">
-                          <span v-if="Math.ceil(ev.target_entries / ev.slots.length) - (slot.entries || 0) <= 0">達成</span>
-                          <span v-else>{{ Math.ceil(ev.target_entries / ev.slots.length) - (slot.entries || 0) }}</span>
+                      <template v-if="ev.target_entries > 0 || (slot.target_seats || 0) > 0">
+                        <span class="font-bold" :class="((slot.target_seats || 0) > 0 ? Math.ceil((slot.target_seats || 0) / ((ev.kpi_seat_to_entry_rate || 70)/100)) : Math.ceil(ev.target_entries / Math.max(ev.slots.length, 1))) - (slot.entries || 0) <= 0 ? 'text-emerald-600' : 'text-rose-600'">
+                          <span v-if="((slot.target_seats || 0) > 0 ? Math.ceil((slot.target_seats || 0) / ((ev.kpi_seat_to_entry_rate || 70)/100)) : Math.ceil(ev.target_entries / Math.max(ev.slots.length, 1))) - (slot.entries || 0) <= 0">達成</span>
+                          <span v-else>{{ ((slot.target_seats || 0) > 0 ? Math.ceil((slot.target_seats || 0) / ((ev.kpi_seat_to_entry_rate || 70)/100)) : Math.ceil(ev.target_entries / Math.max(ev.slots.length, 1))) - (slot.entries || 0) }}</span>
                         </span>
                       </template>
                       <span v-else class="text-gray-400">-</span>
                     </td>
                     <td class="px-4 py-3 text-center">
-                      <template v-if="ev.target_entries > 0 && ev.days_remaining > 0">
+                      <template v-if="(ev.target_entries > 0 || (slot.target_seats || 0) > 0) && ev.days_remaining > 0">
                         <span class="font-black text-orange-500">
-                          {{ (((Math.ceil(ev.target_entries / (ev.slots.length || 1)) - (slot.entries || 0)) / Math.max(ev.days_remaining, 1)) / ((ev.kpi_entry_to_interview_rate || 60) / 100)).toFixed(1) }}
+                          {{ (((((slot.target_seats || 0) > 0 ? Math.ceil((slot.target_seats || 0) / ((ev.kpi_seat_to_entry_rate || 70)/100)) : Math.ceil(ev.target_entries / Math.max(ev.slots.length, 1))) - (slot.entries || 0)) / Math.max(ev.days_remaining, 1)) / ((ev.kpi_entry_to_interview_rate || 60) / 100)).toFixed(1) }}
                         </span>
                       </template>
                       <span v-else class="text-gray-400">-</span>

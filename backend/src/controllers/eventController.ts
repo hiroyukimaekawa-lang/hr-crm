@@ -338,7 +338,7 @@ export const updateEventKpi = async (req: Request, res: Response) => {
         entry_deadline, capacity, target_seats, unit_price, target_sales, current_sales,
         kpi_seat_to_entry_rate, kpi_entry_to_interview_rate, 
         kpi_interview_to_reservation_rate, kpi_reservation_to_application_rate,
-        kpi_custom_steps
+        kpi_custom_steps, event_slots
     } = req.body;
     try {
         await ensureEventDatesTable();
@@ -363,6 +363,9 @@ export const updateEventKpi = async (req: Request, res: Response) => {
         pushSet('kpi_reservation_to_application_rate', kpi_reservation_to_application_rate);
         if (kpi_custom_steps !== undefined) {
           pushSet('kpi_custom_steps', Array.isArray(kpi_custom_steps) ? JSON.stringify(kpi_custom_steps) : '[]');
+        }
+        if (event_slots !== undefined) {
+          pushSet('event_slots', Array.isArray(event_slots) ? JSON.stringify(event_slots) : '[]');
         }
 
         if (setParts.length === 0) {

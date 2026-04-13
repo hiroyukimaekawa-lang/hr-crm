@@ -547,12 +547,28 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
         const currentSeats = breakdown['attended'] || 0;
 
         // 開催日ごとのスロット内訳
-        const slots = Object.entries(slotBreakdown).map(([date, b]) => ({
-            date,
-            entries: (b['entry'] || 0) + (b['A_ENTRY'] || 0) + (b['attended'] || 0) + (b['reserved'] || 0),
-            seats: b['attended'] || 0,
-            status_breakdown: b
-        }));
+        // DBに保存されている event_slots (JSON配列) をベースにする
+        let rawEventSlots: any[] = [];
+        try {
+            rawEventSlots = typeof e.event_slots === 'string'
+                ? JSON.parse(e.event_slots)
+                : (Array.isArray(e.event_slots) ? e.event_slots : []);
+        } catch { rawEventSlots = []; }
+
+        // slotBreakdown に存在する日付も、event_slots に無い場合は追加できるようにする
+        const slotKeys = new Set([...rawEventSlots.map(s => s.datetime), ...Object.keys(slotBreakdown)]);
+        
+        const slots = Array.from(slotKeys).filter(Boolean).map(dateKey => {
+            const b = slotBreakdown[dateKey] || {};
+            const slotConfig = rawEventSlots.find(s => s.datetime === dateKey) || {};
+            return {
+                date: dateKey,
+                entries: (b['entry'] || 0) + (b['A_ENTRY'] || 0) + (b['attended'] || 0) + (b['reserved'] || 0),
+                seats: b['attended'] || 0,
+                status_breakdown: b,
+                target_seats: Number(slotConfig.target_seats || 0)
+            };
+        }).sort((a, b) => b.date.localeCompare(a.date));
 
         let daysRemaining = 0;
         let deadlineStr: string | null = null;
@@ -583,6 +599,7 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
             target_seats: Number(e.target_seats || 0),
             current_seats: currentSeats,
             current_entries: currentEntries,
+            event_slots: rawEventSlots,
             unit_price: Number(e.unit_price || 0),
             kpi_seat_to_entry_rate: Number(e.kpi_seat_to_entry_rate),
             kpi_entry_to_interview_rate: Number(e.kpi_entry_to_interview_rate),
