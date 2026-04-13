@@ -9,6 +9,7 @@ import {
   formatCurrency,
   type KpiOverviewResponse,
   type EventKpiItem,
+  type EventKpiSlot,
   type GoalSetting,
   type KpiMetric,
 } from '../lib/kpi';
@@ -626,6 +627,44 @@ const totalEventGuaranteedSales = computed(() =>
 const salesTargetGap = computed(() =>
   totalEventGuaranteedSales.value - goalForm.value.sales_target
 );
+
+// --- Rollover Target Seat Helpers ---
+const getEffectiveTargetSeatsForSlot = (ev: EventKpiItem, slot: EventKpiSlot): number => {
+  if (!ev || !slot) return 0;
+  
+  const today = new Date().toISOString().slice(0, 10);
+  let totalMissing = 0;
+  let futureSlotsCount = 0;
+
+  // Calculate missing targets from past
+  (ev.slots || []).forEach(s => {
+    let baseTarget = (s.target_seats || 0) > 0 ? (s.target_seats || 0) : Math.ceil(ev.target_seats / Math.max(ev.slots.length, 1));
+    if (s.date < today) {
+      const deficit = baseTarget - (s.seats || 0);
+      if (deficit > 0) {
+        totalMissing += deficit;
+      }
+    } else {
+      futureSlotsCount++;
+    }
+  });
+
+  let baseTargetSeat = (slot.target_seats || 0) > 0 ? (slot.target_seats || 0) : Math.ceil(ev.target_seats / Math.max(ev.slots.length, 1));
+
+  // If this slot is today or in the future
+  if (slot.date >= today && futureSlotsCount > 0) {
+    // Add evenly distributed missing seats to this slot
+    return baseTargetSeat + (totalMissing / futureSlotsCount);
+  }
+
+  return baseTargetSeat;
+}
+
+const getEffectiveTargetEntriesForSlot = (ev: EventKpiItem, slot: EventKpiSlot): number => {
+  const seats = getEffectiveTargetSeatsForSlot(ev, slot);
+  if (seats <= 0) return 0;
+  return Math.ceil(seats / ((ev.kpi_seat_to_entry_rate || 70) / 100));
+}
 </script>
 
 <template>
@@ -1175,6 +1214,7 @@ const salesTargetGap = computed(() =>
                         <template v-else>
                           <span class="text-xs font-bold text-blue-600 cursor-pointer hover:underline" @click="openSlotInlineTargetEdit(ev, slot.date, slot.target_seats || 0)">
                             {{ (slot.target_seats || 0) > 0 ? (slot.target_seats || 0) : ((ev.target_seats || 0) > 0 ? `(全体から)` : '-') }}
+                            <span v-if="getEffectiveTargetSeatsForSlot(ev, slot) > ((slot.target_seats || 0) > 0 ? (slot.target_seats || 0) : ev.target_seats/Math.max(ev.slots.length,1))" class="text-[9px] text-rose-500 ml-1">+繰越</span>
                           </span>
                           <button @click="openSlotInlineTargetEdit(ev, slot.date, slot.target_seats || 0)" class="text-gray-400 hover:text-blue-500"><Edit3 class="w-3 h-3" /></button>
                         </template>
@@ -1188,12 +1228,12 @@ const salesTargetGap = computed(() =>
                       {{ slot.seats || 0 }}
                     </td>
 
-                    <!-- 残りエントリー逆算: 個別目標(target_seats) があればそれで計算、なければ全体目標÷スロット数 -->
+                    <!-- 残りエントリー逆算: 繰り越し加味目標エントリー - 現エントリー -->
                     <td class="px-4 py-3 text-center">
                       <template v-if="ev.target_entries > 0 || (slot.target_seats || 0) > 0">
-                        <span class="font-bold" :class="((slot.target_seats || 0) > 0 ? Math.ceil((slot.target_seats || 0) / ((ev.kpi_seat_to_entry_rate || 70)/100)) : Math.ceil(ev.target_entries / Math.max(ev.slots.length, 1))) - (slot.entries || 0) <= 0 ? 'text-emerald-600' : 'text-rose-600'">
-                          <span v-if="((slot.target_seats || 0) > 0 ? Math.ceil((slot.target_seats || 0) / ((ev.kpi_seat_to_entry_rate || 70)/100)) : Math.ceil(ev.target_entries / Math.max(ev.slots.length, 1))) - (slot.entries || 0) <= 0">達成</span>
-                          <span v-else>{{ ((slot.target_seats || 0) > 0 ? Math.ceil((slot.target_seats || 0) / ((ev.kpi_seat_to_entry_rate || 70)/100)) : Math.ceil(ev.target_entries / Math.max(ev.slots.length, 1))) - (slot.entries || 0) }}</span>
+                        <span class="font-bold" :class="getEffectiveTargetEntriesForSlot(ev, slot) - (slot.entries || 0) <= 0 ? 'text-emerald-600' : 'text-rose-600'">
+                          <span v-if="getEffectiveTargetEntriesForSlot(ev, slot) - (slot.entries || 0) <= 0">達成</span>
+                          <span v-else>{{ (getEffectiveTargetEntriesForSlot(ev, slot) - (slot.entries || 0)).toFixed(1).replace(/\.0$/, '') }}</span>
                         </span>
                       </template>
                       <span v-else class="text-gray-400">-</span>
@@ -1201,7 +1241,7 @@ const salesTargetGap = computed(() =>
                     <td class="px-4 py-3 text-center">
                       <template v-if="(ev.target_entries > 0 || (slot.target_seats || 0) > 0) && ev.days_remaining > 0">
                         <span class="font-black text-orange-500">
-                          {{ (((((slot.target_seats || 0) > 0 ? Math.ceil((slot.target_seats || 0) / ((ev.kpi_seat_to_entry_rate || 70)/100)) : Math.ceil(ev.target_entries / Math.max(ev.slots.length, 1))) - (slot.entries || 0)) / Math.max(ev.days_remaining, 1)) / ((ev.kpi_entry_to_interview_rate || 60) / 100)).toFixed(1) }}
+                          {{ (((getEffectiveTargetEntriesForSlot(ev, slot) - (slot.entries || 0)) / Math.max(ev.days_remaining, 1)) / ((ev.kpi_entry_to_interview_rate || 60) / 100)).toFixed(1) }}
                         </span>
                       </template>
                       <span v-else class="text-gray-400">-</span>
