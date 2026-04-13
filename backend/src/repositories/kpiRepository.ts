@@ -110,6 +110,66 @@ export const ensureKpiTable = async () => {
     await kpiTablePromise;
 };
 
+// ─────────────────────── Dependent Table Init ───────────────────────
+// getCanonicalFunnelCounts が参照するテーブルを事前に作成する
+// (studentController の ensure* が呼ばれていない場合でも安全に動く)
+let depTablesReady = false;
+let depTablesPromise: Promise<void> | null = null;
+
+const ensureDepTables = async () => {
+    if (depTablesReady) return;
+    if (!depTablesPromise) {
+        depTablesPromise = (async () => {
+            // pgcrypto が必要な場合は先に作成
+            try { await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`); } catch { /* ok */ }
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS applications (
+                    id SERIAL PRIMARY KEY,
+                    student_id INTEGER REFERENCES students(id) ON DELETE SET NULL,
+                    student_name VARCHAR(255) NOT NULL DEFAULT '',
+                    source VARCHAR(255),
+                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    first_message_sent_at TIMESTAMP,
+                    reservation_status VARCHAR(100),
+                    reservation_date TIMESTAMP,
+                    reservation_created_at TIMESTAMP,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS matcher_funnel_logs (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    student_id INTEGER UNIQUE REFERENCES students(id) ON DELETE CASCADE,
+                    applied_at TIMESTAMP,
+                    message_sent_at TIMESTAMP,
+                    reservation_created_at TIMESTAMP,
+                    interview_scheduled_at TIMESTAMP,
+                    interview_actual_at TIMESTAMP,
+                    reservation_status TEXT,
+                    interview_status TEXT,
+                    created_at TIMESTAMP DEFAULT now()
+                )
+            `);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS interviews (
+                    id SERIAL PRIMARY KEY,
+                    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                    scheduled_at TIMESTAMP,
+                    interviewed_at TIMESTAMP,
+                    status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
+            depTablesReady = true;
+        })().finally(() => { depTablesPromise = null; });
+    }
+    await depTablesPromise;
+};
+
 // ─────────────────────── Canonical Funnel CTE ───────────────────────
 
 /**
@@ -168,10 +228,15 @@ const buildDateFilter = (column: string, filters: KpiFilters, params: any[], sta
 /**
  * Get canonical funnel counts — the single source of truth.
  */
-export const getCanonicalFunnelCounts = async (filters: KpiFilters): Promise<FunnelCounts & {
+export const getCanonicalFunnelCounts = async (
+    filters: KpiFilters
+): Promise<FunnelCounts & {
     per_staff?: any[];
     per_source?: any[];
 }> => {
+    // 依存テーブル（applications / interviews / matcher_funnel_logs）を保証
+    await ensureDepTables();
+
     const { whereClause, params, paramIndex } = buildFunnelFilters(filters);
     let currentIdx = paramIndex;
 
