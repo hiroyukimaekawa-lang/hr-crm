@@ -628,7 +628,7 @@ const salesTargetGap = computed(() =>
   totalEventGuaranteedSales.value - goalForm.value.sales_target
 );
 
-// --- Rollover Target Seat Helpers ---
+// --- Rollover & Reverse Calculation Helpers ---
 const getEffectiveTargetSeatsForSlot = (ev: EventKpiItem, slot: EventKpiSlot): number => {
   if (!ev || !slot) return 0;
   
@@ -636,34 +636,45 @@ const getEffectiveTargetSeatsForSlot = (ev: EventKpiItem, slot: EventKpiSlot): n
   let totalMissing = 0;
   let futureSlotsCount = 0;
 
-  // Calculate missing targets from past
+  // Calculate total deficit from all PAST slots
   (ev.slots || []).forEach(s => {
     let baseTarget = (s.target_seats || 0) > 0 ? (s.target_seats || 0) : Math.ceil(ev.target_seats / Math.max(ev.slots.length, 1));
     if (s.date < today) {
       const deficit = baseTarget - (s.seats || 0);
-      if (deficit > 0) {
-        totalMissing += deficit;
-      }
+      if (deficit > 0) totalMissing += deficit;
     } else {
       futureSlotsCount++;
     }
   });
 
-  let baseTargetSeat = (slot.target_seats || 0) > 0 ? (slot.target_seats || 0) : Math.ceil(ev.target_seats / Math.max(ev.slots.length, 1));
+  const baseTargetSeat = (slot.target_seats || 0) > 0 ? (slot.target_seats || 0) : Math.ceil(ev.target_seats / Math.max(ev.slots.length, 1));
 
-  // If this slot is today or in the future
+  // If this slot is today or in the future, distribute the rollover
   if (slot.date >= today && futureSlotsCount > 0) {
-    // Add evenly distributed missing seats to this slot
     return baseTargetSeat + (totalMissing / futureSlotsCount);
   }
 
   return baseTargetSeat;
 }
 
-const getEffectiveTargetEntriesForSlot = (ev: EventKpiItem, slot: EventKpiSlot): number => {
-  const seats = getEffectiveTargetSeatsForSlot(ev, slot);
-  if (seats <= 0) return 0;
-  return Math.ceil(seats / ((ev.kpi_seat_to_entry_rate || 70) / 100));
+const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot): { value: number; status: 'achievement' | 'pending' | 'finished' } => {
+  const today = new Date().toISOString().slice(0, 10);
+  const effectiveTargetSeats = getEffectiveTargetSeatsForSlot(ev, slot);
+  const targetEntries = Math.ceil(effectiveTargetSeats / ((ev.kpi_seat_to_entry_rate || 70) / 100));
+  const diff = targetEntries - (slot.entries || 0);
+
+  if (slot.date < today) {
+    const baseTarget = (slot.target_seats || 0) > 0 ? (slot.target_seats || 0) : Math.ceil(ev.target_seats / Math.max(ev.slots.length, 1));
+    return { 
+      value: Math.max(0, diff), 
+      status: (slot.seats || 0) >= baseTarget ? 'achievement' : 'finished' 
+    };
+  }
+
+  return {
+    value: Math.max(0, diff),
+    status: diff <= 0 ? 'achievement' : 'pending'
+  };
 }
 </script>
 
@@ -1231,17 +1242,18 @@ const getEffectiveTargetEntriesForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                     <!-- 残りエントリー逆算: 繰り越し加味目標エントリー - 現エントリー -->
                     <td class="px-4 py-3 text-center">
                       <template v-if="ev.target_entries > 0 || (slot.target_seats || 0) > 0">
-                        <span class="font-bold" :class="getEffectiveTargetEntriesForSlot(ev, slot) - (slot.entries || 0) <= 0 ? 'text-emerald-600' : 'text-rose-600'">
-                          <span v-if="getEffectiveTargetEntriesForSlot(ev, slot) - (slot.entries || 0) <= 0">達成</span>
-                          <span v-else>{{ (getEffectiveTargetEntriesForSlot(ev, slot) - (slot.entries || 0)).toFixed(1).replace(/\.0$/, '') }}</span>
+                        <span class="font-bold" :class="getRemainingEntriesNeededForSlot(ev, slot).status === 'achievement' ? 'text-emerald-600' : (getRemainingEntriesNeededForSlot(ev, slot).status === 'finished' ? 'text-gray-400' : 'text-rose-600')">
+                          <span v-if="getRemainingEntriesNeededForSlot(ev, slot).status === 'achievement'">達成</span>
+                          <span v-else-if="getRemainingEntriesNeededForSlot(ev, slot).status === 'finished'">終了/未達</span>
+                          <span v-else>{{ getRemainingEntriesNeededForSlot(ev, slot).value.toFixed(1).replace(/\.0$/, '') }}</span>
                         </span>
                       </template>
                       <span v-else class="text-gray-400">-</span>
                     </td>
                     <td class="px-4 py-3 text-center">
-                      <template v-if="(ev.target_entries > 0 || (slot.target_seats || 0) > 0) && ev.days_remaining > 0">
+                      <template v-if="(ev.target_entries > 0 || (slot.target_seats || 0) > 0) && ev.days_remaining > 0 && getRemainingEntriesNeededForSlot(ev, slot).status === 'pending'">
                         <span class="font-black text-orange-500">
-                          {{ (((getEffectiveTargetEntriesForSlot(ev, slot) - (slot.entries || 0)) / Math.max(ev.days_remaining, 1)) / ((ev.kpi_entry_to_interview_rate || 60) / 100)).toFixed(1) }}
+                          {{ ((getRemainingEntriesNeededForSlot(ev, slot).value / Math.max(ev.days_remaining, 1)) / ((ev.kpi_entry_to_interview_rate || 60) / 100)).toFixed(1) }}
                         </span>
                       </template>
                       <span v-else class="text-gray-400">-</span>
