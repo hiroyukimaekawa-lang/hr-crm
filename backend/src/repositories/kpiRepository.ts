@@ -324,30 +324,59 @@ export const getGoals = async (filters: KpiFilters): Promise<GoalRow[]> => {
 export const upsertGoals = async (goals: GoalRow[]): Promise<void> => {
     await ensureKpiTable();
     for (const g of goals) {
-        await pool.query(`
-            INSERT INTO kpi_goal_settings (scope_type, scope_id, source_company, period_type, period_start, period_end, metric_key, metric_label, target_value, meta)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            ON CONFLICT ON CONSTRAINT uq_kpi_goal
-            DO UPDATE SET
-                target_value = EXCLUDED.target_value,
-                metric_label = COALESCE(EXCLUDED.metric_label, kpi_goal_settings.metric_label),
-                period_end = COALESCE(EXCLUDED.period_end, kpi_goal_settings.period_end),
-                meta = COALESCE(EXCLUDED.meta, kpi_goal_settings.meta),
-                updated_at = CURRENT_TIMESTAMP
+        // PostgreSQL は COALESCE が含まれる制約名に ON CONFLICT ON CONSTRAINT を使えないため
+        // 手動で UPDATE → INSERT のパターンで対応する
+        const updateResult = await pool.query(`
+            UPDATE kpi_goal_settings
+            SET
+                target_value = $1,
+                metric_label = COALESCE($2, metric_label),
+                period_end   = COALESCE($3, period_end),
+                meta         = COALESCE($4::jsonb, meta),
+                updated_at   = CURRENT_TIMESTAMP
+            WHERE
+                scope_type                        = $5
+                AND COALESCE(scope_id, 0)         = COALESCE($6::int, 0)
+                AND COALESCE(source_company, '')  = COALESCE($7, '')
+                AND period_type                   = $8
+                AND period_start                  = $9
+                AND metric_key                    = $10
         `, [
-            g.scope_type || 'global',
-            g.scope_id || null,
-            g.source_company || null,
-            g.period_type || 'monthly',
-            g.period_start,
-            g.period_end || null,
-            g.metric_key,
-            g.metric_label || null,
             g.target_value,
-            g.meta ? JSON.stringify(g.meta) : '{}'
+            g.metric_label || null,
+            g.period_end   || null,
+            g.meta ? JSON.stringify(g.meta) : null,
+            g.scope_type   || 'global',
+            g.scope_id     ?? null,
+            g.source_company || null,
+            g.period_type  || 'monthly',
+            g.period_start,
+            g.metric_key,
         ]);
+
+        // UPDATE で既存行がなければ INSERT
+        if (updateResult.rowCount === 0) {
+            await pool.query(`
+                INSERT INTO kpi_goal_settings
+                    (scope_type, scope_id, source_company, period_type, period_start, period_end, metric_key, metric_label, target_value, meta)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ON CONFLICT DO NOTHING
+            `, [
+                g.scope_type    || 'global',
+                g.scope_id      ?? null,
+                g.source_company || null,
+                g.period_type   || 'monthly',
+                g.period_start,
+                g.period_end    || null,
+                g.metric_key,
+                g.metric_label  || null,
+                g.target_value,
+                g.meta ? JSON.stringify(g.meta) : '{}',
+            ]);
+        }
     }
 };
+
 
 // ─────────────────────── Event KPI ───────────────────────
 
