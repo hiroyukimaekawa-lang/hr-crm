@@ -99,6 +99,61 @@ const eventForm = ref({
   kpi_custom_steps: [] as any[],
 });
 
+// Inline event target editing (for weekly tab)
+const editingEventTargetId = ref<number | null>(null);
+const inlineTargetForm = ref({
+  target_seats: 0,
+  target_entries: 0,
+});
+
+const openInlineTargetEdit = (ev: EventKpiItem) => {
+  editingEventTargetId.value = ev.event_id;
+  inlineTargetForm.value = {
+    target_seats: ev.target_seats || 0,
+    target_entries: ev.target_entries || 0,
+  };
+};
+
+const closeInlineTargetEdit = () => {
+  editingEventTargetId.value = null;
+};
+
+const saveInlineTarget = async (ev: EventKpiItem) => {
+  saving.value = true;
+  try {
+    const periodStart = selectedMonth.value + '-01';
+    const goals = [
+      {
+        scope_type: 'event',
+        scope_id: ev.event_id,
+        period_type: 'monthly',
+        period_start: periodStart,
+        metric_key: 'target_seats',
+        target_value: inlineTargetForm.value.target_seats,
+      }
+    ];
+    // target_entriesは手動上書き用のカスタムキーとして保存
+    if (inlineTargetForm.value.target_entries > 0) {
+      goals.push({
+        scope_type: 'event',
+        scope_id: ev.event_id,
+        period_type: 'monthly',
+        period_start: periodStart,
+        metric_key: 'target_entries_override',
+        target_value: inlineTargetForm.value.target_entries,
+      });
+    }
+    await kpiApi.updateGoals(goals);
+    editingEventTargetId.value = null;
+    await loadAll();
+  } catch (err) {
+    console.error('Failed to save inline target', err);
+    alert('保存に失敗しました');
+  } finally {
+    saving.value = false;
+  }
+};
+
 const expandedEvents = ref<Record<number, boolean>>({});
 const toggleEvent = (eventId: number) => {
   expandedEvents.value[eventId] = !expandedEvents.value[eventId];
@@ -121,11 +176,16 @@ const monthOptions = computed(() => {
 const fetchOverview = async () => {
   loading.value = true;
   try {
-    const res = await kpiApi.getOverview({ 
-      month: selectedMonth.value,
-      week: selectedWeek.value,
-      date: selectedDate.value
-    });
+    // タブに応じて適切なパラメータのみ送信（複数同時送信すると500エラーになる）
+    let params: Record<string, any> = {};
+    if (activeTab.value === 'daily') {
+      params = { date: selectedDate.value };
+    } else if (activeTab.value === 'weekly') {
+      params = { month: selectedMonth.value }; // 週次は月で取得
+    } else {
+      params = { month: selectedMonth.value };
+    }
+    const res = await kpiApi.getOverview(params);
     overview.value = res.data;
   } catch (err) {
     console.error('KPI overview fetch error:', err);
@@ -170,19 +230,15 @@ const fetchSourceBreakdown = async () => {
 
 const fetchGoals = async () => {
   try {
-    const periodType = editorPeriodType.value;
-    const periodStart = periodType === 'weekly' ? selectedWeek.value : 
-                       periodType === 'daily' ? selectedDate.value : 
-                       selectedMonth.value + '-01';
+    // 常に月間（monthly）で goals を取得・表示する
+    const periodType = 'monthly';
+    const periodStart = selectedMonth.value + '-01';
 
     // 1. Fetch Global Goals
     const resGlobal = await kpiApi.getGoals({ 
       scope_type: 'global', 
       period_type: periodType, 
-      period_start: periodStart,
-      month: periodType === 'monthly' ? selectedMonth.value : undefined,
-      date: periodType === 'daily' ? selectedDate.value : undefined,
-      week: periodType === 'weekly' ? selectedWeek.value : undefined
+      month: selectedMonth.value,
     });
     const globalGoals: GoalSetting[] = resGlobal.data;
     
@@ -202,10 +258,7 @@ const fetchGoals = async () => {
     const resEventGoals = await kpiApi.getGoals({ 
       scope_type: 'event', 
       period_type: periodType, 
-      period_start: periodStart,
-      month: periodType === 'monthly' ? selectedMonth.value : undefined,
-      date: periodType === 'daily' ? selectedDate.value : undefined,
-      week: periodType === 'weekly' ? selectedWeek.value : undefined
+      month: selectedMonth.value,
     });
     const eventGoalRows: GoalSetting[] = resEventGoals.data;
 
@@ -257,10 +310,9 @@ const openGoalEditor = (period: 'monthly' | 'weekly' | 'daily') => {
 const saveGoals = async () => {
   saving.value = true;
   try {
-    const periodType = editorPeriodType.value;
-    const periodStart = periodType === 'weekly' ? selectedWeek.value : 
-                       periodType === 'daily' ? selectedDate.value : 
-                       selectedMonth.value + '-01';
+    // 月間目標は常にmonthlyで保存（period_startはYYYY-MM-01形式）
+    const periodType = 'monthly';
+    const periodStart = selectedMonth.value + '-01';
     const goals: GoalSetting[] = [];
 
     // 1. Global Goals
@@ -297,9 +349,13 @@ const saveGoals = async () => {
 
     await kpiApi.updateGoals(goals);
     showGoalEditor.value = false;
-    await loadAll();
+    // 保存後にデータを再取得
+    await fetchEvents();
+    await fetchGoals();
+    await fetchOverview();
   } catch (err) {
     console.error('KPI goals save error:', err);
+    alert('保存に失敗しました。再試行してください。');
   } finally {
     saving.value = false;
   }
@@ -911,9 +967,9 @@ const salesTargetGap = computed(() =>
             class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
           >
             <!-- イベントヘッダー -->
-            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div class="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
               <div class="flex items-center gap-3">
-                <div class="w-1 h-5 bg-indigo-600 rounded-full"></div>
+                <div class="w-1 h-5 bg-indigo-600 rounded-full flex-shrink-0"></div>
                 <div>
                   <h3 class="text-sm font-bold text-gray-900">{{ ev.event_title }}</h3>
                   <p class="text-[10px] text-gray-400 mt-0.5">
@@ -923,47 +979,101 @@ const salesTargetGap = computed(() =>
                   </p>
                 </div>
               </div>
-              <!-- 全体サマリー -->
-              <div class="hidden md:flex items-center gap-6 text-center">
-                <div>
-                  <p class="text-[9px] font-bold text-gray-400 uppercase">目標着座</p>
-                  <p class="text-base font-black text-blue-600">{{ ev.target_seats > 0 ? ev.target_seats : '-' }}</p>
+
+              <!-- 全体サマリー + 目標編集ボタン -->
+              <div class="flex items-center gap-3 flex-wrap justify-end">
+                <!-- インライン目標編集フォーム -->
+                <div v-if="editingEventTargetId === ev.event_id" class="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-1.5">
+                      <label class="text-[10px] font-bold text-blue-600 whitespace-nowrap">目標着座</label>
+                      <input
+                        v-model.number="inlineTargetForm.target_seats"
+                        type="number" min="0"
+                        class="w-16 px-2 py-1 border border-blue-300 rounded-lg text-xs font-bold text-center outline-none focus:ring-2 focus:ring-blue-500/30"
+                      />
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <label class="text-[10px] font-bold text-indigo-600 whitespace-nowrap">目標E数</label>
+                      <input
+                        v-model.number="inlineTargetForm.target_entries"
+                        type="number" min="0"
+                        class="w-16 px-2 py-1 border border-indigo-300 rounded-lg text-xs font-bold text-center outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        placeholder="自動"
+                      />
+                    </div>
+                  </div>
+                  <div class="flex flex-col gap-1.5">
+                    <button
+                      @click="saveInlineTarget(ev)"
+                      :disabled="saving"
+                      class="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-bold hover:bg-blue-700 disabled:opacity-50 transition-all"
+                    >
+                      <Save class="w-3 h-3" />
+                      {{ saving ? '保存中' : '保存' }}
+                    </button>
+                    <button
+                      @click="closeInlineTargetEdit()"
+                      class="px-3 py-1.5 text-gray-500 hover:text-gray-700 text-[10px] font-bold border border-gray-200 rounded-lg bg-white"
+                    >
+                      キャンセル
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <p class="text-[9px] font-bold text-gray-400 uppercase">現着座</p>
-                  <p class="text-base font-black text-blue-400">{{ ev.current_seats }}</p>
-                </div>
-                <div>
-                  <p class="text-[9px] font-bold text-gray-400 uppercase">目標エントリー</p>
-                  <p class="text-base font-black text-indigo-600">{{ ev.target_entries > 0 ? ev.target_entries : '-' }}</p>
-                </div>
-                <div>
-                  <p class="text-[9px] font-bold text-gray-400 uppercase">現エントリー</p>
-                  <p class="text-base font-black text-indigo-400">{{ ev.current_entries }}</p>
-                </div>
-                <div>
-                  <p class="text-[9px] font-bold text-gray-400 uppercase">残必要エントリー</p>
-                  <p class="text-base font-black" :class="ev.target_entries > 0 && ev.current_entries >= ev.target_entries ? 'text-emerald-600' : 'text-rose-600'">
-                    <span v-if="ev.target_entries > 0 && ev.current_entries >= ev.target_entries">達成</span>
-                    <span v-else-if="ev.target_entries > 0">{{ ev.target_entries - ev.current_entries }}</span>
-                    <span v-else class="text-gray-400">-</span>
-                  </p>
-                </div>
-                <div>
-                  <p class="text-[9px] font-bold text-gray-400 uppercase">デイリー必要面談</p>
-                  <p class="text-base font-black text-orange-500">
-                    <span v-if="ev.target_entries > 0 && ev.current_entries >= ev.target_entries" class="text-emerald-600">0</span>
-                    <span v-else-if="ev.target_entries > 0 && ev.days_remaining > 0">
-                      {{ (((ev.target_entries - ev.current_entries) / ev.days_remaining) / ((ev.kpi_entry_to_interview_rate || 60) / 100)).toFixed(1) }}
-                    </span>
-                    <span v-else class="text-gray-400">-</span>
-                  </p>
-                </div>
-                <div>
-                  <p class="text-[9px] font-bold text-gray-400 uppercase">達成率</p>
-                  <span class="px-2 py-1 rounded-lg text-xs font-black" :class="rateBgColor(ev.achievementRate)">
-                    <span :class="rateColor(ev.achievementRate)">{{ ev.achievementRate }}%</span>
-                  </span>
+
+                <!-- 通常表示モード -->
+                <div v-else class="hidden md:flex items-center gap-4">
+                  <div class="flex items-center gap-5 text-center">
+                    <div>
+                      <p class="text-[9px] font-bold text-gray-400 uppercase">目標着座</p>
+                      <p class="text-base font-black text-blue-600">{{ ev.target_seats > 0 ? ev.target_seats : '-' }}</p>
+                    </div>
+                    <div>
+                      <p class="text-[9px] font-bold text-gray-400 uppercase">現着座</p>
+                      <p class="text-base font-black text-blue-400">{{ ev.current_seats }}</p>
+                    </div>
+                    <div>
+                      <p class="text-[9px] font-bold text-gray-400 uppercase">目標エントリー</p>
+                      <p class="text-base font-black text-indigo-600">{{ ev.target_entries > 0 ? ev.target_entries : '-' }}</p>
+                    </div>
+                    <div>
+                      <p class="text-[9px] font-bold text-gray-400 uppercase">現エントリー</p>
+                      <p class="text-base font-black text-indigo-400">{{ ev.current_entries }}</p>
+                    </div>
+                    <div>
+                      <p class="text-[9px] font-bold text-gray-400 uppercase">残必要エントリー</p>
+                      <p class="text-base font-black" :class="ev.target_entries > 0 && ev.current_entries >= ev.target_entries ? 'text-emerald-600' : 'text-rose-600'">
+                        <span v-if="ev.target_entries > 0 && ev.current_entries >= ev.target_entries">達成</span>
+                        <span v-else-if="ev.target_entries > 0">{{ ev.target_entries - ev.current_entries }}</span>
+                        <span v-else class="text-gray-400">-</span>
+                      </p>
+                    </div>
+                    <div>
+                      <p class="text-[9px] font-bold text-gray-400 uppercase">デイリー必要面談</p>
+                      <p class="text-base font-black text-orange-500">
+                        <span v-if="ev.target_entries > 0 && ev.current_entries >= ev.target_entries" class="text-emerald-600">0</span>
+                        <span v-else-if="ev.target_entries > 0 && ev.days_remaining > 0">
+                          {{ (((ev.target_entries - ev.current_entries) / ev.days_remaining) / ((ev.kpi_entry_to_interview_rate || 60) / 100)).toFixed(1) }}
+                        </span>
+                        <span v-else class="text-gray-400">-</span>
+                      </p>
+                    </div>
+                    <div>
+                      <p class="text-[9px] font-bold text-gray-400 uppercase">達成率</p>
+                      <span class="px-2 py-1 rounded-lg text-xs font-black" :class="rateBgColor(ev.achievementRate)">
+                        <span :class="rateColor(ev.achievementRate)">{{ ev.achievementRate }}%</span>
+                      </span>
+                    </div>
+                  </div>
+                  <!-- 目標値編集ボタン -->
+                  <button
+                    @click="openInlineTargetEdit(ev)"
+                    class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-lg text-[10px] font-bold hover:bg-blue-50 transition-all shadow-sm flex-shrink-0"
+                    title="この日程別イベントの目標数値を手動設定"
+                  >
+                    <Edit3 class="w-3 h-3" />
+                    目標設定
+                  </button>
                 </div>
               </div>
             </div>
