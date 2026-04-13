@@ -899,23 +899,23 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
             <div class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm">
               <div class="flex items-center justify-between mb-3">
                 <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase">Sales</span>
-                <span class="text-xs font-bold" :class="rateColor(monthly.sales.achievementRate)">
+                <span v-if="selectedMonth !== '2026-04'" class="text-xs font-bold" :class="rateColor(monthly.sales.achievementRate)">
                   {{ monthly.sales.achievementRate }}%
                 </span>
               </div>
               <p class="text-xs font-bold text-gray-400 mb-1">売上</p>
               <div class="flex items-baseline gap-2 mb-2">
                 <span class="text-2xl font-black text-gray-900">¥{{ formatCurrency(monthly.sales.actual) }}</span>
-                <span class="text-xs text-gray-400">/ ¥{{ formatCurrency(monthly.sales.target) }}</span>
+                <span v-if="selectedMonth !== '2026-04'" class="text-xs text-gray-400">/ ¥{{ formatCurrency(monthly.sales.target) }}</span>
               </div>
-              <div class="h-2 bg-gray-100 rounded-full overflow-hidden mb-1">
+              <div v-if="selectedMonth !== '2026-04'" class="h-2 bg-gray-100 rounded-full overflow-hidden mb-1">
                 <div
                   class="h-full rounded-full transition-all duration-700"
                   :class="monthly.sales.achievementRate >= 80 ? 'bg-emerald-500' : monthly.sales.achievementRate >= 50 ? 'bg-amber-500' : 'bg-rose-500'"
                   :style="{ width: `${Math.min(monthly.sales.achievementRate, 100)}%` }"
                 ></div>
               </div>
-              <p class="text-xs font-bold" :class="gapColor(monthly.sales.gap)">
+              <p v-if="selectedMonth !== '2026-04'" class="text-xs font-bold" :class="gapColor(monthly.sales.gap)">
                 差分: {{ monthly.sales.gap >= 0 ? '+' : '' }}¥{{ formatCurrency(monthly.sales.gap) }}
               </p>
             </div>
