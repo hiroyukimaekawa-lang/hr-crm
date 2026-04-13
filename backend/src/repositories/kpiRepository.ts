@@ -656,8 +656,8 @@ export const getSalesActuals = async (filters: KpiFilters) => {
             e.id AS event_id,
             e.title AS event_title,
             COALESCE(e.unit_price, 0)::int AS unit_price,
-            COUNT(se.*) FILTER (WHERE se.status = 'attended')::int AS attended_count,
-            (COALESCE(e.unit_price, 0) * COUNT(se.*) FILTER (WHERE se.status = 'attended'))::bigint AS sales
+            COUNT(DISTINCT se.id) FILTER (WHERE se.status = 'attended')::int AS attended_count,
+            (COALESCE(e.unit_price, 0) * COUNT(DISTINCT se.id) FILTER (WHERE se.status = 'attended'))::bigint AS sales
         FROM events e
         LEFT JOIN student_events se ON se.event_id = e.id
         LEFT JOIN jsonb_array_elements(CASE WHEN e.event_slots IS NOT NULL AND jsonb_array_length(e.event_slots) > 0 THEN e.event_slots ELSE '[]'::jsonb END) AS slot ON true
