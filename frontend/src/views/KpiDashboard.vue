@@ -521,19 +521,39 @@ const activeEvents = computed(() =>
 
 // \u5bfe\u8c61\u6708\u306e\u30a2\u30af\u30c6\u30a3\u30d6\u30a4\u30d9\u30f3\u30c8\uff1a\u7dde\u65e5\u304c\u9078\u629e\u6708\u306b\u542b\u307e\u308c\u308b\u3082\u306e\u3092\u671f\u65e5\u9806\u306b\u30bd\u30fc\u30c8
 const activeEventsForMonth = computed(() => {
-  const m = selectedMonth.value; // 'YYYY-MM'
-  return eventKpi.value
+  const m = selectedMonth.value;
+  const base = eventKpi.value
     .filter(e => {
       if (!e.deadline) return false;
       return e.deadline.startsWith(m) || e.days_remaining >= 0;
     })
     .sort((a, b) => {
-      // \u671f\u65e5\u304c\u8fd1\u3044\u9806\u306b\u4e26\u3079\u308b
       const da = a.deadline || '9999-12-31';
       const db = b.deadline || '9999-12-31';
       return da.localeCompare(db);
     });
+
+  // eventAllocations (目標設定で保存した値) とマージして target_seats / target_entries を上書き
+  return base.map(e => {
+    const alloc = eventAllocations.value.find(ea => ea.event_id === e.event_id);
+    const targetSeats  = alloc ? alloc.target_seats       : e.target_seats;
+    const cvrRate      = alloc ? alloc.cvr_seat_to_entry  : e.kpi_seat_to_entry_rate;
+    // 目標エントリー = 目標着座 / (着座→エントリー率/100)
+    const targetEntries = targetSeats > 0 && cvrRate > 0
+      ? Math.round(targetSeats / (cvrRate / 100))
+      : e.target_entries;
+    return {
+      ...e,
+      target_seats:              targetSeats,
+      target_entries:            targetEntries,
+      kpi_seat_to_entry_rate:    cvrRate,
+      kpi_entry_to_interview_rate: alloc
+        ? alloc.entry_to_interview_rate
+        : e.kpi_entry_to_interview_rate,
+    };
+  });
 });
+
 const expiredEvents = computed(() =>
   eventKpi.value.filter(e => !e.deadline || e.days_remaining < -1)
 );
