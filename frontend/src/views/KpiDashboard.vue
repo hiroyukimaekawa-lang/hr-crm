@@ -1176,7 +1176,7 @@ const getEffectiveTargetEntriesForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
             </div>
 
             <!-- 日程別スロット -->
-            <div v-if="ev.slots && ev.slots.length > 0" class="overflow-x-auto">
+            <div v-if="ev.slots && ev.slots.filter(s => (s.date && s.date.startsWith(selectedMonth))).length > 0" class="overflow-x-auto">
               <table class="w-full text-sm">
                 <thead class="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -1190,7 +1190,7 @@ const getEffectiveTargetEntriesForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                   <tr
-                    v-for="slot in ev.slots"
+                    v-for="slot in ev.slots.filter(s => (s.date && s.date.startsWith(selectedMonth)))"
                     :key="slot.date"
                     class="hover:bg-indigo-50/20 transition-colors"
                   >
@@ -1252,7 +1252,7 @@ const getEffectiveTargetEntriesForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
             </div>
             <!-- スロットなしの場合 -->
             <div v-else class="px-5 py-6 text-center text-gray-400 text-xs">
-              開催日程データがありません。イベント設定でスロットを追加してください。
+              {{ selectedMonth.replace('-', '年') }}月の開催日程データが見つかりません。
             </div>
           </div>
 
