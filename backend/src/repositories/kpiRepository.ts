@@ -510,10 +510,10 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
     `);
 
     const slotStatusRes = await pool.query(`
-        SELECT event_id, to_char(selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as slot_date, status, COUNT(*)::int AS cnt
+        SELECT event_id, to_char(selected_event_date, 'YYYY-MM-DD"T"HH24:MI') as slot_date, status, COUNT(*)::int AS cnt
         FROM student_events
         WHERE selected_event_date IS NOT NULL
-        GROUP BY event_id, selected_event_date, status
+        GROUP BY event_id, slot_date, status
     `);
 
     const breakdownMap: Record<number, Record<string, number>> = {};
@@ -556,13 +556,25 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
         } catch { rawEventSlots = []; }
 
         // slotBreakdown に存在する日付も、event_slots に無い場合は追加できるようにする
-        const slotKeys = new Set([...rawEventSlots.map(s => s.datetime), ...Object.keys(slotBreakdown)]);
+        // 形式の揺れ（秒の有無など）を吸収するため、キーを YYYY-MM-DDTHH:mm に正規化する
+        const normalize = (dt: string) => dt ? dt.slice(0, 16) : dt;
+
+        const normalizedSlotBreakdown: Record<string, any> = {};
+        Object.entries(slotBreakdown).forEach(([k, v]) => {
+            normalizedSlotBreakdown[normalize(k)] = v;
+        });
+
+        const slotKeys = new Set([
+            ...rawEventSlots.map(s => normalize(s.datetime)), 
+            ...Object.keys(normalizedSlotBreakdown)
+        ]);
         
         const slots = Array.from(slotKeys).filter(Boolean).map(dateKey => {
-            const b = slotBreakdown[dateKey] || {};
-            const slotConfig = rawEventSlots.find(s => s.datetime === dateKey) || {};
+            const b = normalizedSlotBreakdown[dateKey] || {};
+            // rawEventSlots内も正規化して比較
+            const slotConfig = rawEventSlots.find(s => normalize(s.datetime) === dateKey) || {};
             return {
-                date: dateKey,
+                date: dateKey, // 正規化された YYYY-MM-DDTHH:mm
                 entries: (b['entry'] || 0) + (b['A_ENTRY'] || 0) + (b['attended'] || 0) + (b['reserved'] || 0),
                 seats: b['attended'] || 0,
                 status_breakdown: b,
