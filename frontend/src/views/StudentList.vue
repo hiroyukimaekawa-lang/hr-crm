@@ -115,7 +115,25 @@ const funnelKpi = ref({
   lost_reason_ranking: [] as Array<{ reason_name: string; count: number }>
 });
 const router = useRouter();
-const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
+const user = ref<any>(JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}'));
+
+// Sync user profile to ensure latest admin role is respected
+onMounted(async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const res = await api.get('/api/auth/me', {
+      headers: { Authorization: token }
+    });
+    if (res.data.user) {
+      user.value = res.data.user;
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+    }
+  } catch (err) {
+    console.error('Failed to sync user profile:', err);
+  }
+});
+
 const showAll = ref(true); // Default to showing all students for everyone as requested
 const selectedExportColumns = ref<ExportColumnKey[]>(exportColumnOptions.map(c => c.key));
 const toastMessage = ref('');
@@ -469,7 +487,7 @@ const createStudent = async () => {
     }
     showToast('学生登録を受け付けました。', 'success');
     const token = localStorage.getItem('token');
-    const assignedStaffId = user.role === 'admin'
+    const assignedStaffId = user.value.role === 'admin'
       ? (newStudent.value.staff_id ? Number(newStudent.value.staff_id) : null)
       : Number(user.id);
 
@@ -899,7 +917,7 @@ onMounted(() => {
   fetchSourceCategories();
   fetchGraduationYearCategories();
   fetchFunnelKpi();
-  if (user.role === 'admin') {
+  if (user.value.role === 'admin') {
     fetchStaffUsers();
   }
   window.addEventListener('resize', handleResize, { passive: true });

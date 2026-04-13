@@ -73,7 +73,25 @@ interface KgiProgress {
 const students = ref<Student[]>([]);
 const dashboardTab = ref<'MAIN' | 'REFERRAL'>('MAIN');
 const events = ref<EventItem[]>([]);
-const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}');
+const user = ref<any>(JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}'));
+
+// Sync user profile to ensure latest admin role is respected
+onMounted(async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const res = await api.get('/api/auth/me', {
+      headers: { Authorization: token }
+    });
+    if (res.data.user) {
+      user.value = res.data.user;
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+    }
+  } catch (err) {
+    console.error('Failed to sync user profile:', err);
+  }
+});
+
 const selectedYomiEvent = ref<EventItem | null>(null);
 const yomiParticipants = ref<EventParticipant[]>([]);
 const yomiLoading = ref(false);

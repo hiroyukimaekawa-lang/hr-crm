@@ -55,6 +55,8 @@ const overview = ref<KpiOverviewResponse | null>(null);
 const eventKpi = ref<EventKpiItem[]>([]);
 const staffOverview = ref<any[]>([]);
 const sourceOverview = ref<any[]>([]);
+const staffUsers = ref<any[]>([]);
+const user = ref<any>(JSON.parse(localStorage.getItem('user') || '{"role":"admin"}'));
 
 // Goal editing
 const showGoalEditor = ref(false);
@@ -446,11 +448,42 @@ watch(() => goalForm.value.sales_target, (newTarget) => {
     }
 });
 
+const fetchStaffUsers = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const res = await api.get('/api/auth/users', {
+      headers: { Authorization: token }
+    });
+    staffUsers.value = res.data;
+  } catch (err) {
+    console.error('Failed to fetch staff users:', err);
+  }
+};
+
+const getStaffName = (staffId: any) => {
+  if (!staffId) return '未割当';
+  const s = staffUsers.value.find(u => String(u.id) === String(staffId));
+  return s ? s.name : `ID: ${staffId}`;
+};
+
 const loadAll = async () => {
   loading.value = true;
   try {
+    // Sync user profile
+    const token = localStorage.getItem('token');
+    if (token) {
+      const resProfile = await api.get('/api/auth/me', {
+        headers: { Authorization: token }
+      });
+      if (resProfile.data.user) {
+        user.value = resProfile.data.user;
+        localStorage.setItem('user', JSON.stringify(resProfile.data.user));
+      }
+    }
+
     // Sequence important: Overview and Events first, then Goals which depends on event data
-    await Promise.all([fetchOverview(), fetchEvents()]);
+    await Promise.all([fetchOverview(), fetchEvents(), fetchStaffUsers()]);
     await fetchGoals();
   } catch (err) {
     console.error('Initial data load error:', err);
@@ -1655,7 +1688,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                   <tr v-for="row in staffOverview" :key="row.group_key" class="hover:bg-gray-50">
-                    <td class="px-4 py-3 font-bold text-gray-900">{{ row.group_key || '未割当' }}</td>
+                    <td class="px-4 py-3 font-bold text-gray-900">{{ getStaffName(row.group_key) }}</td>
                     <td class="px-4 py-3 text-right text-gray-700">{{ row.applications }}</td>
                     <td class="px-4 py-3 text-right text-gray-700">{{ row.reservations }}</td>
                     <td class="px-4 py-3 text-right text-gray-700">{{ row.interview_scheduled }}</td>
