@@ -262,15 +262,15 @@ export const getCanonicalFunnelCounts = async (
     let currentIdx = paramIndex;
 
     // Build sub-filters for specific stages that might have different date columns
-    // 1. Applications: COALESCE(a.applied_at, s.created_at)
-    // 2. Interviews: fi.scheduled_at / interviewed_at
+    // 1. Applications: cf.application_at
+    // 2. Interviews: cf.interview_scheduled_at
     
-    // We'll use buildDateFilter helper to generate the SQL fragments
-    const appDateFilter = buildDateFilter(`COALESCE(a.applied_at, m.applied_at, s.created_at)`, filters, params, currentIdx);
+    // We'll use buildDateFilter helper to generate the SQL fragments for the outer query
+    const appDateFilter = buildDateFilter(`cf.application_at`, filters, params, currentIdx);
     const appCond = appDateFilter.condition ? `AND ${appDateFilter.condition}` : '';
     currentIdx = appDateFilter.paramIndex;
 
-    const intDateFilter = buildDateFilter(`fi.scheduled_at`, filters, params, currentIdx);
+    const intDateFilter = buildDateFilter(`cf.interview_scheduled_at`, filters, params, currentIdx);
     const intCond = intDateFilter.condition ? `AND ${intDateFilter.condition}` : '';
     currentIdx = intDateFilter.paramIndex;
 
