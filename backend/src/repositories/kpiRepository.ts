@@ -607,7 +607,6 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
             kpi_reservation_to_application_rate: Number(e.kpi_reservation_to_application_rate),
             kpi_interview_to_inflow_rate: Number(e.kpi_interview_to_inflow_rate),
             kpi_custom_steps: customSteps,
-            event_slots: e.event_slots,
             status_breakdown: breakdown,
             slots
         };
