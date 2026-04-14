@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
+import { api } from '../lib/api';
 import Layout from '../components/Layout.vue';
 import {
   kpiApi,
