@@ -283,7 +283,7 @@ const grad28Counts = computed(() => {
 
 const fetchKgiProgress = async () => {
   const token = localStorage.getItem('token');
-  const res = await api.get('/api/events/kgi-progress', { headers: { Authorization: token } });
+  const res = await api.get('/api/projects/kgi-progress', { headers: { Authorization: token } });
   kgiProgress.value = Array.isArray(res.data) ? res.data : [];
 };
 
@@ -292,7 +292,7 @@ const fetchData = async () => {
     const token = localStorage.getItem('token');
     const [studentRes, eventRes] = await Promise.all([
       api.get('/api/students', { headers: { Authorization: token } }),
-      api.get('/api/events', { headers: { Authorization: token } })
+      api.get('/api/projects', { headers: { Authorization: token } })
     ]);
     students.value = studentRes.data;
     events.value = eventRes.data;
@@ -523,7 +523,7 @@ const openYomiEventDetail = async (eventId: number) => {
   yomiLoading.value = true;
   try {
     const token = localStorage.getItem('token');
-    const res = await api.get(`/api/events/${eventId}`, { headers: { Authorization: token } });
+    const res = await api.get(`/api/projects/${eventId}`, { headers: { Authorization: token } });
     console.log('API Response Participants:', res.data.participants);
     yomiParticipants.value = res.data.participants || [];
     console.log('yomiParticipants value:', yomiParticipants.value);
@@ -571,7 +571,7 @@ const openMonthlyAttendanceModal = async () => {
         singleDate = e.event_date;
       }
       
-      return api.get(`/api/events/${e.id}`, { headers: { Authorization: token } })
+      return api.get(`/api/projects/${e.id}`, { headers: { Authorization: token } })
          .then(res => {
            return (res.data.participants || []).map((p: any) => ({
              ...p,
@@ -703,7 +703,7 @@ const markAttended = async (participant: EventParticipant) => {
 
     const token = localStorage.getItem('token');
     await api.put(
-      `/api/events/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
+      `/api/projects/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
       { status: 'attended' },
       { headers: { Authorization: token } }
     );
@@ -729,7 +729,7 @@ const markNoShow = async (participant: EventParticipant) => {
     if (target) target.status = 'E_FAIL';
     const token = localStorage.getItem('token');
     await api.put(
-      `/api/events/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
+      `/api/projects/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
       { status: 'E_FAIL' },
       { headers: { Authorization: token } }
     );
@@ -763,7 +763,7 @@ const confirmReschedule = async () => {
 
     const token = localStorage.getItem('token');
     await api.put(
-      `/api/events/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
+      `/api/projects/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
       {
         status: 'B_WAITING',
         selected_event_date: rescheduleSelectedDate.value || null
@@ -843,7 +843,7 @@ const onDrop = async (e: DragEvent, newStatusKey: string) => {
     }
     if (studentEventId) {
       await api.put(
-        `/api/events/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
+        `/api/projects/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
         { status: newStatus },
         { headers: { Authorization: token } }
       );
@@ -864,7 +864,7 @@ const updateYomiParticipantStatus = async (
   try {
     const token = localStorage.getItem('token');
     await api.put(
-      `/api/events/${eventId}/participants/${studentEventId}`,
+      `/api/projects/${eventId}/participants/${studentEventId}`,
       { status },
       { headers: { Authorization: token } }
     );
@@ -1026,7 +1026,7 @@ const monthlyAttendanceCount = computed(() =>
 );
 
 const exportMonthlyParticipantsCsv = () => {
-  const headers = ['イベント名', '学生名', '大学', '担当', '申込日', '参加日程', 'ステータス'];
+  const headers = ['案件名', '学生名', '大学', '担当', '申込日', '参加日程', 'ステータス'];
   const rows = filteredMonthlyParticipants.value.map(p => [
     p.event_title || '',
     p.name || '',
@@ -1316,7 +1316,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
           <table class="w-full text-sm min-w-[1000px]">
             <thead class="bg-slate-50 border-b border-slate-100">
               <tr>
-                <th class="px-3 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">イベント名</th>
+                <th class="px-3 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">案件名</th>
                 <th class="px-3 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">締日</th>
                 <th class="px-3 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">残日数</th>
                 <th class="px-3 py-4 text-right text-xs font-bold text-blue-600 uppercase tracking-wider">目標着座</th>
@@ -1373,7 +1373,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
           <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
             <span class="w-1.5 h-6 bg-emerald-600 rounded-full"></span>
-            イベント別ヨミ表 (A/B/C)
+            案件別ヨミ表 (A/B/C)
           </h2>
             <div v-if="selectedYomiEvent" class="flex flex-wrap gap-4 text-xs font-bold text-slate-500 mb-2 md:mb-0">
               <span class="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg border border-emerald-100">
@@ -1437,7 +1437,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">開催日</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">イベント名</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">案件名</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-blue-700 uppercase">A</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-amber-700 uppercase">B</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-purple-700 uppercase">C</th>
@@ -1456,7 +1456,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
                 <td class="px-3 py-2 text-right text-gray-900 font-semibold">{{ row.total }}</td>
               </tr>
               <tr v-if="monthlyYomiByEvent.length === 0">
-                <td colSpan="7" class="px-3 py-8 text-center text-gray-400">対象月のイベントデータはありません。</td>
+                <td colSpan="7" class="px-3 py-8 text-center text-gray-400">対象月の案件データはありません。</td>
               </tr>
             </tbody>
           </table>
@@ -1547,7 +1547,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
         <div class="absolute right-0 top-0 h-full w-full md:w-[90vw] md:max-w-6xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto">
           <div class="flex items-center justify-between mb-4">
           <div>
-            <h2 class="text-xl font-bold text-gray-900">イベント参加詳細</h2>
+            <h2 class="text-xl font-bold text-gray-900">案件参加詳細</h2>
             <p class="text-sm text-gray-500">{{ selectedYomiEvent.title }}</p>
           </div>
           <button class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50" @click="closeYomiEventDetail">閉じる</button>
@@ -1878,8 +1878,8 @@ watch(selectedGraduationYear, fetchFunnelKpi);
       <div class="absolute right-0 top-0 h-full w-full md:w-[80vw] md:max-w-5xl bg-white shadow-2xl border-l border-gray-200 p-4 md:p-6 overflow-y-auto flex flex-col">
         <div class="flex items-center justify-between mb-6 shrink-0">
           <div>
-            <h2 class="text-xl font-bold text-gray-900">{{ calendarBaseMonth.getMonth() + 1 }}月の全イベント参加者一覧</h2>
-            <p class="text-sm text-gray-500 mt-1">対象月のすべてのイベント参加者（合計: {{ filteredMonthlyParticipants.length }}名）</p>
+            <h2 class="text-xl font-bold text-gray-900">{{ calendarBaseMonth.getMonth() + 1 }}月の全案件参加者一覧</h2>
+            <p class="text-sm text-gray-500 mt-1">対象月のすべての案件参加者（合計: {{ filteredMonthlyParticipants.length }}名）</p>
           </div>
           <div class="flex items-center gap-2">
             <button
@@ -1905,7 +1905,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
                         class="uppercase flex items-center gap-0.5 hover:text-gray-900 mb-1"
                         @click="toggleSort('event_title')"
                       >
-                        イベント名
+                        案件名
                         <span v-if="monthlySortField === 'event_title' && monthlySortOrder === 'asc'">▲</span>
                         <span v-else-if="monthlySortField === 'event_title' && monthlySortOrder === 'desc'">▼</span>
                         <span v-else class="opacity-30">▲</span>

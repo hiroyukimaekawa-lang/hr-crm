@@ -1023,7 +1023,7 @@ watch(filteredStudents, () => {
           <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.counts.no_show_students }}</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
-          <p class="text-xs text-gray-500">面談→イベント提案率</p>
+          <p class="text-xs text-gray-500">面談→案件提案率</p>
           <p class="text-lg font-semibold text-gray-900">{{ funnelKpi.interview_to_proposal_rate.toFixed(2) }}%</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3">

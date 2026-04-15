@@ -32,7 +32,7 @@ const update = async () => {
   try {
     const token = localStorage.getItem('token')
     await api.put(
-      `/api/events/${props.eventId}/participants/${props.studentEventId}`,
+      `/api/projects/${props.eventId}/participants/${props.studentEventId}`,
       { status: selectedStatus.value },
       { headers: { Authorization: token } }
     )

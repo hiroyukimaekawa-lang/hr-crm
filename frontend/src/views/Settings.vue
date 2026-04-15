@@ -300,7 +300,7 @@ const fetchEvents = async () => {
   loading.value = true;
   try {
     const token = localStorage.getItem('token');
-    const res = await api.get('/api/events', { headers: { Authorization: token } });
+    const res = await api.get('/api/projects', { headers: { Authorization: token } });
     events.value = Array.isArray(res.data) ? res.data : [];
     if (!selectedEventId.value && events.value.length > 0) {
       const first = events.value[0];
@@ -382,7 +382,7 @@ const saveKpi = async () => {
     };
 
     const token = localStorage.getItem('token');
-    await api.put(`/api/events/${selectedEvent.value.id}/kpi`, payload, {
+    await api.put(`/api/projects/${selectedEvent.value.id}/kpi`, payload, {
       headers: { Authorization: token }
     });
     
@@ -408,11 +408,11 @@ const saveEventStatuses = async () => {
   const event = events.value.find(e => e.id === selectedStatusEventId.value);
   if (!event) return;
   await api.put(
-    `/api/events/${selectedStatusEventId.value}`,
+    `/api/projects/${selectedStatusEventId.value}`,
     { title: event.title, yomi_statuses: eventStatuses.value },
     { headers: { Authorization: token } }
   );
-  statusSaveMessage.value = 'イベントステータスを保存しました。';
+  statusSaveMessage.value = '案件ステータスを保存しました。';
   await fetchEvents();
 };
 
@@ -433,8 +433,8 @@ onMounted(async () => {
         <div class="flex flex-wrap gap-2">
           <button class="px-4 py-2 rounded-lg border text-base md:text-sm min-h-[44px]" :class="activeSection === 'categories' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'categories'">流入経路カテゴリ登録</button>
           <button class="px-4 py-2 rounded-lg border text-base md:text-sm min-h-[44px]" :class="activeSection === 'invite' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'invite'">担当者招待URL</button>
-          <button class="px-4 py-2 rounded-lg border text-base md:text-sm min-h-[44px]" :class="activeSection === 'event-kpi' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'event-kpi'">イベントKPI</button>
-          <button class="px-4 py-2 rounded-lg border text-base md:text-sm min-h-[44px]" :class="activeSection === 'event-status' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'event-status'">イベントステータス登録</button>
+          <button class="px-4 py-2 rounded-lg border text-base md:text-sm min-h-[44px]" :class="activeSection === 'event-kpi' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'event-kpi'">案件KPI</button>
+          <button class="px-4 py-2 rounded-lg border text-base md:text-sm min-h-[44px]" :class="activeSection === 'event-status' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-700'" @click="activeSection = 'event-status'">案件ステータス登録</button>
         </div>
       </div>
 
@@ -567,12 +567,12 @@ onMounted(async () => {
 
       <div v-else-if="activeSection === 'event-kpi'" class="space-y-4">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-          <h2 class="text-lg font-semibold text-gray-900 mb-1">イベントKPI</h2>
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">案件KPI</h2>
           <p class="text-base md:text-sm text-gray-500 mb-4">目標着座数から逆算して、必要なエントリー/面談/流入数を自動計算します。</p>
 
-          <!-- ── 対象イベント選択（最上部に移動） ── -->
+          <!-- ── 対象案件選択（最上部に移動） ── -->
           <div class="mb-6 pb-6 border-b border-gray-200">
-            <label class="block text-base md:text-sm font-bold text-gray-700 mb-1">対象イベント</label>
+            <label class="block text-base md:text-sm font-bold text-gray-700 mb-1">対象案件</label>
             <select v-model.number="selectedEventId" class="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" @change="onSelectEvent">
               <option v-for="e in events" :key="e.id" :value="e.id">{{ e.title }}</option>
             </select>
@@ -693,7 +693,7 @@ onMounted(async () => {
             <div class="ml-6 border-l-2 border-gray-300 pl-4 py-3 space-y-3">
               <!-- 割合入力 -->
               <div class="flex items-center gap-2 mb-2">
-                <span class="text-xs text-gray-500 font-medium">エントリー→イベント出席率</span>
+                <span class="text-xs text-gray-500 font-medium">エントリー→案件出席率</span>
                 <input
                   v-model="form.seat_to_entry_rate"
                   type="number" min="1" max="100"
@@ -916,16 +916,16 @@ onMounted(async () => {
 
       <div v-else class="space-y-4">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
-          <h2 class="text-lg font-semibold text-gray-900 mb-1">イベントステータス登録</h2>
-          <p class="text-base md:text-sm text-gray-500 mb-4">イベントごとに表示・使用するステータスを管理します。</p>
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">案件ステータス登録</h2>
+          <p class="text-base md:text-sm text-gray-500 mb-4">案件ごとに表示・使用するステータスを管理します。</p>
           <div class="mb-4">
-            <label class="block text-base md:text-sm text-gray-600 mb-1">対象イベント</label>
+            <label class="block text-base md:text-sm text-gray-600 mb-1">対象案件</label>
             <select
               v-model.number="selectedStatusEventId"
               class="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg"
               @change="() => { const ev = events.find(e => e.id === selectedStatusEventId); loadEventStatuses(ev || null); statusSaveMessage = ''; }"
             >
-              <option :value="null">-- イベントを選択 --</option>
+              <option :value="null">-- 案件を選択 --</option>
               <option v-for="e in events" :key="e.id" :value="e.id">{{ e.title }}</option>
             </select>
           </div>

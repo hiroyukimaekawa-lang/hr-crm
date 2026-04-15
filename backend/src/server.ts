@@ -6,7 +6,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import studentRoutes from './routes/studentRoutes';
-import eventRoutes from './routes/eventRoutes';
+import projectRoutes from './routes/projectRoutes';
 import kpiRoutes from './routes/kpiRoutes';
 import { applyPerformanceOptimizations } from './config/performance';
 
@@ -60,7 +60,9 @@ app.use(express.json());
 // これにより、例えば /api/auth/login や /api/students などに分岐されます
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
-app.use('/api/events', eventRoutes);
+app.use('/api/projects', projectRoutes);
+// Legacy routes compat
+app.use('/api/events', projectRoutes);
 app.use('/api/kpi', kpiRoutes);
 
 // 旧APIとの互換性のためのエイリアス（必要に応じて）

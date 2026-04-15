@@ -243,7 +243,7 @@ const fetchEventsData = async () => {
   isEventsLoading.value = true;
   try {
     const token = localStorage.getItem('token');
-    const res = await api.get('/api/events', { headers: { Authorization: token } });
+    const res = await api.get('/api/projects', { headers: { Authorization: token } });
     allEvents.value = res.data;
   } catch (err) {
     console.error('Error fetching events:', err);

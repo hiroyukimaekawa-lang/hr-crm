@@ -16,6 +16,8 @@ import {
 interface EventItem {
   id: number;
   title: string;
+  type?: string;
+  graduation_year?: number;
   description?: string;
   event_date?: string;
   event_dates?: string[];
@@ -35,6 +37,8 @@ interface EventItem {
 const events = ref<EventItem[]>([]);
 const newEvent = ref({
   title: '',
+  type: 'event',
+  graduation_year: '',
   description: '',
   event_dates: [''],
   location: '',
@@ -79,12 +83,12 @@ interface Participant {
 
 const fetchEvents = async () => {
   const token = localStorage.getItem('token');
-  const res = await api.get('/api/events', { headers: { Authorization: token } });
+  const res = await api.get('/api/projects', { headers: { Authorization: token } });
   events.value = res.data;
   const detailResults = await Promise.all(
     events.value.map(async (e) => {
       try {
-        const detail = await api.get(`/api/events/${e.id}`, { headers: { Authorization: token } });
+        const detail = await api.get(`/api/projects/${e.id}`, { headers: { Authorization: token } });
         const participants: Participant[] = Array.isArray(detail.data?.participants)
           ? detail.data.participants.map((p: any) => ({
               id: p.id,
@@ -115,19 +119,19 @@ const fetchEvents = async () => {
 
 const createEvent = async () => {
   const token = localStorage.getItem('token');
-  await api.post('/api/events', {
+  await api.post('/api/projects', {
     ...newEvent.value,
     event_dates: newEvent.value.event_dates.filter(v => String(v || '').trim())
   }, { headers: { Authorization: token } });
-  newEvent.value = { title: '', description: '', event_dates: [''], location: '', lp_url: '' };
+  newEvent.value = { title: '', type: 'event', graduation_year: '', description: '', event_dates: [''], location: '', lp_url: '' };
   showCreate.value = false;
   fetchEvents();
 };
 
 const deleteEvent = async (eventId: number) => {
-  if (!confirm('このイベントを削除しますか？')) return;
+  if (!confirm('この案件を削除しますか？')) return;
   const token = localStorage.getItem('token');
-  await api.delete(`/api/events/${eventId}`, { headers: { Authorization: token } });
+  await api.delete(`/api/projects/${eventId}`, { headers: { Authorization: token } });
   fetchEvents();
 };
 
@@ -252,7 +256,7 @@ const openEventDetailPanel = async (event: EventItem, dateKey?: string) => {
   isLoadingParticipants.value = true;
   try {
     const token = localStorage.getItem('token');
-    const res = await api.get(`/api/events/${event.id}`, { headers: { Authorization: token } });
+    const res = await api.get(`/api/projects/${event.id}`, { headers: { Authorization: token } });
     if (res.data && Array.isArray(res.data.participants)) {
       selectedEventParticipants.value = res.data.participants;
     }
@@ -312,21 +316,21 @@ onMounted(fetchEvents);
     <div class="p-4 md:p-6 lg:p-8">
       <div class="flex flex-col gap-4 md:flex-row md:justify-between md:items-center mb-8">
         <div>
-          <h1 class="text-3xl font-bold text-gray-900">イベント一覧</h1>
-          <p class="text-gray-500 mt-2">開催予定および過去のイベントを一覧で確認できます。</p>
+          <h1 class="text-3xl font-bold text-gray-900">案件一覧</h1>
+          <p class="text-gray-500 mt-2">開催予定および過去の案件を一覧で確認できます。</p>
         </div>
         <button
           @click="showCreate = true"
           class="bg-blue-600 text-white px-4 py-2 text-base md:text-sm min-h-[44px] rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
         >
           <Plus class="w-4 h-4" />
-          <span>イベント作成</span>
+          <span>案件作成</span>
         </button>
       </div>
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-bold text-gray-900">イベント開催カレンダー（今月）</h2>
+          <h2 class="text-lg font-bold text-gray-900">案件開催カレンダー（今月）</h2>
           <div class="flex items-center gap-2">
             <button @click="prevMonth" class="p-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
               <ChevronLeft class="w-4 h-4" />
@@ -378,14 +382,14 @@ onMounted(fetchEvents);
                   </span>
                 </div>
 
-                <!-- イベント一覧：タイトル + 参加ありボタン -->
+                <!-- 案件一覧：タイトル + 参加ありボタン -->
                 <div class="p-1 space-y-0.5">
                   <div
                     v-for="ev in getEventsForDate(cell.key).slice(0, 4)"
                     :key="ev.id"
                     class="rounded overflow-hidden"
                   >
-                    <!-- イベント名 -->
+                    <!-- 案件名 -->
                     <div class="px-1.5 py-0.5 bg-blue-600 text-white text-[10px] font-semibold truncate leading-tight" :title="ev.title">
                       {{ ev.title }}{{ ev.dateCount > 1 ? `（${ev.dateCount}日程）` : '' }}
                     </div>
@@ -430,6 +434,19 @@ onMounted(fetchEvents);
                 </button>
               </div>
             </div>
+            
+            <div class="flex items-center gap-2 mb-2">
+              <span v-if="e.type === 'agent_interview'" class="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded">
+                エージェント面談
+              </span>
+              <span v-else class="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded">
+                案件
+              </span>
+              <span v-if="e.graduation_year" class="px-2 py-0.5 border border-indigo-200 text-indigo-600 text-xs font-bold rounded">
+                {{ e.graduation_year }}卒
+              </span>
+            </div>
+            
             <h3 class="text-lg font-bold text-gray-900 mb-2">{{ e.title }}</h3>
             <details class="text-sm text-gray-600 mb-4 rounded-lg border border-gray-200 bg-gray-50">
               <summary class="cursor-pointer px-3 py-2 font-medium text-gray-700">概要を表示</summary>
@@ -502,7 +519,7 @@ onMounted(fetchEvents);
             </div>
             <button
               class="w-full text-blue-600 hover:text-blue-800 text-sm font-semibold flex items-center justify-center gap-2 py-2 border border-blue-100 rounded-lg bg-white"
-              @click="router.push(`/events/${e.id}`)"
+              @click="router.push(`/projects/${e.id}`)"
             >
               詳細・参加者管理
               <ChevronRight class="w-4 h-4" />
@@ -515,12 +532,25 @@ onMounted(fetchEvents);
     <div v-if="showCreate" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-3 md:p-4 z-50">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div class="px-4 md:px-6 pt-4 md:pt-6 pb-3 border-b border-gray-100">
-          <h2 class="text-xl font-bold text-gray-900">新規イベント作成</h2>
+          <h2 class="text-xl font-bold text-gray-900">新規案件作成</h2>
         </div>
         <div class="px-4 md:px-6 py-4 overflow-y-auto space-y-4">
           <div>
-            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">イベント名</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">案件名</label>
             <input v-model="newEvent.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div class="flex gap-4">
+            <div class="flex-1">
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">案件種別</label>
+              <select v-model="newEvent.type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                <option value="event">案件</option>
+                <option value="agent_interview">エージェント面談</option>
+              </select>
+            </div>
+            <div class="flex-1">
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">対象卒年（任意）</label>
+              <input v-model="newEvent.graduation_year" type="number" placeholder="例: 2026" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
           </div>
           <div>
             <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">概要</label>

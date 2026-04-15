@@ -32,6 +32,8 @@ interface Participant {
 interface EventDetail {
   id: number;
   title: string;
+  type?: string;
+  graduation_year?: number;
   description?: string;
   event_date?: string;
   event_dates?: string[];
@@ -92,6 +94,8 @@ const STATUS_ORDER: Record<string, number> = {
 };
 const form = ref({
   title: '',
+  type: 'event',
+  graduation_year: '',
   description: '',
   event_slots: [] as EventSlot[],
   entry_deadline: '',
@@ -149,11 +153,13 @@ const toDateTimeLocalValue = (value?: string) => {
 
 const fetchDetail = async () => {
   const token = localStorage.getItem('token');
-  const res = await api.get(`/api/events/${eventId}`, { headers: { Authorization: token } });
+  const res = await api.get(`/api/projects/${eventId}`, { headers: { Authorization: token } });
   event.value = res.data.event;
   participants.value = res.data.participants;
   form.value = {
     title: event.value?.title || '',
+    type: event.value?.type || 'event',
+    graduation_year: event.value?.graduation_year !== null && event.value?.graduation_year !== undefined ? String(event.value.graduation_year) : '',
     description: event.value?.description || '',
     event_slots: Array.isArray(event.value?.event_slots) && event.value!.event_slots!.length > 0
       ? event.value!.event_slots!.map((s: any) => ({
@@ -180,7 +186,7 @@ const fetchDetail = async () => {
   try {
     kgiLoading.value = true;
     const token = localStorage.getItem('token');
-    const kgiRes = await api.get('/api/events/kgi-progress', { headers: { Authorization: token } });
+    const kgiRes = await api.get('/api/projects/kgi-progress', { headers: { Authorization: token } });
     if (Array.isArray(kgiRes.data)) {
       kgiData.value = kgiRes.data.find((k: any) => k.event_id === Number(eventId)) || null;
     }
@@ -193,7 +199,7 @@ const fetchDetail = async () => {
 
 const updateStatus = async (studentEventId: number, status: string) => {
   const token = localStorage.getItem('token');
-  await api.put(`/api/events/${eventId}/participants/${studentEventId}`,
+  await api.put(`/api/projects/${eventId}/participants/${studentEventId}`,
     { status },
     { headers: { Authorization: token } }
   );
@@ -203,15 +209,17 @@ const updateStatus = async (studentEventId: number, status: string) => {
 const updateEvent = async () => {
   const token = localStorage.getItem('token');
   saveMessage.value = '';
-  await api.put(`/api/events/${eventId}`, {
+  await api.put(`/api/projects/${eventId}`, {
     title: form.value.title,
+    type: form.value.type,
+    graduation_year: form.value.graduation_year ? Number(form.value.graduation_year) : null,
     description: form.value.description,
     event_slots: form.value.event_slots.filter(s => s.datetime),
     location: form.value.location || null,
     lp_url: form.value.lp_url || null,
   }, { headers: { Authorization: token } });
   isEditing.value = false;
-  saveMessage.value = 'イベント情報を更新しました。';
+  saveMessage.value = '案件情報を更新しました。';
   fetchDetail();
 };
 
@@ -356,25 +364,38 @@ onMounted(fetchDetail);
   <Layout>
     <div class="p-4 md:p-6 lg:p-8">
       <div class="flex items-center justify-between mb-6">
-        <button @click="router.push('/events')" class="text-gray-600 hover:text-gray-900 flex items-center gap-2">
+        <button @click="router.push('/projects')" class="text-gray-600 hover:text-gray-900 flex items-center gap-2">
           <ArrowLeft class="w-4 h-4" />
           一覧に戻る
         </button>
       </div>
 
-      <div v-if="!event" class="text-gray-500">イベントが見つかりませんでした。</div>
+      <div v-if="!event" class="text-gray-500">案件が見つかりませんでした。</div>
 
       <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div class="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center justify-between mb-2">
             <h1 class="text-2xl font-bold text-gray-900">{{ event.title }}</h1>
             <button
-              class="px-4 py-2 text-base md:text-sm min-h-[44px] border border-gray-200 rounded-lg hover:bg-gray-50"
+              class="px-4 py-2 text-base md:text-sm min-h-[44px] border border-gray-200 rounded-lg hover:bg-gray-50 flex-shrink-0 ml-4"
               @click="isEditing = !isEditing"
             >
-              {{ isEditing ? '編集を閉じる' : 'イベント編集' }}
+              {{ isEditing ? '編集を閉じる' : '案件編集' }}
             </button>
           </div>
+          
+          <div class="flex items-center gap-2 mb-4">
+            <span v-if="event.type === 'agent_interview'" class="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded">
+              エージェント面談
+            </span>
+            <span v-else class="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded">
+              案件
+            </span>
+            <span v-if="event.graduation_year" class="px-2 py-0.5 border border-indigo-200 text-indigo-600 text-xs font-bold rounded">
+              {{ event.graduation_year }}卒
+            </span>
+          </div>
+
           <div class="space-y-3 mb-4">
             <div class="flex items-center gap-2 text-sm text-gray-600">
               <Calendar class="w-4 h-4" />
@@ -420,8 +441,21 @@ onMounted(fetchDetail);
 
           <div v-if="isEditing" class="border-t border-gray-100 pt-4 space-y-3">
             <div>
-              <label class="block text-xs text-gray-500 mb-1">イベント名</label>
+              <label class="block text-xs text-gray-500 mb-1">案件名</label>
               <input v-model="form.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+            </div>
+            <div class="flex gap-4">
+              <div class="flex-1">
+                <label class="block text-xs text-gray-500 mb-1">案件種別</label>
+                <select v-model="form.type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
+                  <option value="event">案件</option>
+                  <option value="agent_interview">エージェント面談</option>
+                </select>
+              </div>
+              <div class="flex-1">
+                <label class="block text-xs text-gray-500 mb-1">対象卒年（任意）</label>
+                <input v-model="form.graduation_year" type="number" placeholder="例: 2026" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
+              </div>
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">開催日時・場所・備考</label>

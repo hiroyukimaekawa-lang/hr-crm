@@ -774,7 +774,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
           <div class="flex items-center justify-between mb-4">
             <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
               <Calendar class="w-3.5 h-3.5" />
-              イベント別内訳 (月間担保設定)
+              案件別内訳 (月間担保設定)
             </h4>
             <div class="flex items-center gap-4">
               <div class="text-[10px] font-bold text-gray-400 uppercase">確約合計: <span class="text-gray-900 text-sm ml-1">¥{{ (totalEventGuaranteedSales || 0).toLocaleString() }}</span></div>
@@ -788,7 +788,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
             <table class="w-full text-left border-separate border-spacing-y-2">
               <thead>
                 <tr class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                  <th class="px-3 pb-2">イベント名</th>
+                  <th class="px-3 pb-2">案件名</th>
                   <th class="px-3 pb-2 w-20 text-center">配分 (%)</th>
                   <th class="px-3 pb-2 text-center">単価</th>
                   <th class="px-3 pb-2 w-24">目標座席数</th>
@@ -841,7 +841,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                     />
                   </td>
                   <td class="px-3 py-3">
-                    <!-- 目標出席率：イベントKPIマスタ値を初期値として表示・編集可能 -->
+                    <!-- 目標出席率：案件KPIマスタ値を初期値として表示・編集可能 -->
                     <div class="flex items-center gap-1.5">
                       <input
                         v-model.number="ea.cvr_seat_to_entry"
@@ -898,7 +898,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
               { id: 'monthly', label: '月間KPI' },
               { id: 'weekly', label: '日程別KPI' },
               { id: 'daily', label: 'デイリー' },
-              { id: 'event', label: '全イベント' },
+              { id: 'event', label: '全案件' },
               { id: 'staff', label: '担当者別' },
               { id: 'source', label: '流入元別' },
             ]"
@@ -926,7 +926,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
               class="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-200"
             >
               <Settings2 class="w-4 h-4" />
-              月間・イベント目標設定
+              月間・案件目標設定
             </button>
           </div>
         </div>
@@ -970,7 +970,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                   {{ ev.target_seats > 0 ? Math.round((ev.current_seats / ev.target_seats) * 100) : 0 }}%
                 </span>
               </div>
-              <p class="text-xs font-bold text-gray-400 mb-1">イベント目標振込</p>
+              <p class="text-xs font-bold text-gray-400 mb-1">案件目標振込</p>
               <div class="flex items-baseline gap-2 mb-2">
                 <span class="text-2xl font-black text-gray-900">¥{{ formatCurrency((ev.current_seats || 0) * (ev.unit_price || 0)) }}</span>
                 <span class="text-xs text-gray-400">/ ¥{{ formatCurrency((ev.target_seats || 0) * (ev.unit_price || 0)) }}</span>
@@ -1033,7 +1033,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
               <table class="w-full text-sm">
                 <thead class="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th class="px-4 py-3 text-left text-xs font-bold text-gray-500">イベント名</th>
+                    <th class="px-4 py-3 text-left text-xs font-bold text-gray-500">案件名</th>
                     <th class="px-4 py-3 text-center text-xs font-bold text-gray-500">締日</th>
                     <th class="px-4 py-3 text-center text-xs font-bold text-gray-500">残日数</th>
                     <th class="px-4 py-3 text-center text-xs font-bold text-blue-600">目標着座</th>
@@ -1097,7 +1097,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                   </tr>
                   <tr v-if="activeEventsForMonth.length === 0">
                     <td colspan="9" class="px-4 py-12 text-center text-gray-400">
-                      対象月のイベントがありません。まず「目標設定」でイベントに確約金額を設定してください。
+                      対象月の案件がありません。まず「目標設定」で案件に確約金額を設定してください。
                     </td>
                   </tr>
                 </tbody>
@@ -1108,13 +1108,13 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
 
         <!-- ═══════ 日程別KPIタブ ═══════ -->
         <div v-if="activeTab === 'weekly'" class="space-y-6">
-          <!-- 各イベントを日程ごとに展開 -->
+          <!-- 各案件を日程ごとに展開 -->
           <div
             v-for="ev in activeEventsForMonth"
             :key="ev.event_id"
             class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
           >
-            <!-- イベントヘッダー -->
+            <!-- 案件ヘッダー -->
             <div class="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
               <div class="flex items-center gap-3">
                 <div class="w-1 h-5 bg-indigo-600 rounded-full flex-shrink-0"></div>
@@ -1217,7 +1217,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                   <button
                     @click="openInlineTargetEdit(ev)"
                     class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-lg text-[10px] font-bold hover:bg-blue-50 transition-all shadow-sm flex-shrink-0"
-                    title="この日程別イベントの目標数値を手動設定"
+                    title="この日程別案件の目標数値を手動設定"
                   >
                     <Edit3 class="w-3 h-3" />
                     目標設定
@@ -1308,9 +1308,9 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
             </div>
           </div>
 
-          <!-- イベントなし -->
+          <!-- 案件なし -->
           <div v-if="activeEventsForMonth.length === 0" class="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center text-gray-400">
-            対象月のイベントがありません
+            対象月の案件がありません
           </div>
         </div>
 
@@ -1387,11 +1387,11 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
           <div class="flex items-center justify-between mb-4 px-2">
             <h2 class="text-sm font-bold text-gray-800 flex items-center gap-2">
               <Calendar class="w-4 h-4 text-blue-600" />
-              イベント別進捗
+              案件別進捗
             </h2>
             <label class="flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" v-model="showExpired" class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-              <span class="text-xs font-bold text-gray-500">過去のイベントを表示</span>
+              <span class="text-xs font-bold text-gray-500">過去の案件を表示</span>
             </label>
           </div>
 
@@ -1403,7 +1403,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                   <tr>
                     <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 w-10"></th>
                     <th class="px-3 py-3 text-left text-xs font-bold text-gray-500">アクション</th>
-                    <th class="px-3 py-3 text-left text-xs font-bold text-gray-500">イベント名</th>
+                    <th class="px-3 py-3 text-left text-xs font-bold text-gray-500">案件名</th>
                     <th class="px-3 py-3 text-right text-xs font-bold text-gray-500">締日</th>
                     <th class="px-3 py-3 text-center text-xs font-bold text-gray-400 bg-gray-100/30">申込 (週/日)</th>
                     <th class="px-3 py-3 text-center text-xs font-bold text-gray-400 bg-gray-100/30">予約 (週/日)</th>
@@ -1553,7 +1553,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                             </div>
                           </div>
                           <div v-if="(!e.schedule_breakdown || e.schedule_breakdown.length === 0) && (!e.slots || e.slots.length === 0)" class="col-span-full text-center py-4 text-xs text-gray-400 italic">
-                            このイベントに紐づく個別の日程実績はありません。
+                            この案件に紐づく個別の日程実績はありません。
                           </div>
                         </div>
                       </td>
@@ -1575,7 +1575,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
             <div class="p-6 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <h2 class="text-xl font-black text-gray-900">KPI設定: {{ editingEvent?.event_title }}</h2>
-                <p class="text-xs text-gray-500 mt-1">イベント別の目標値とカスタムフローを設定します。</p>
+                <p class="text-xs text-gray-500 mt-1">案件別の目標値とカスタムフローを設定します。</p>
               </div>
               <button @click="showEventEditor = false" class="p-2 hover:bg-gray-100 rounded-full text-gray-400">
                 <X class="w-6 h-6" />

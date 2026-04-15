@@ -36,7 +36,7 @@ const login = async () => {
         学生CRM
       </h2>
       <p class="mt-2 text-sm text-gray-600">
-        イベント送客・学生管理システム
+        案件送客・学生管理システム
       </p>
     </div>
 

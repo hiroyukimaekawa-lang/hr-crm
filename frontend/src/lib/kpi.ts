@@ -208,7 +208,7 @@ export const kpiApi = {
    * Update specific event KPI settings.
    */
   updateEventKpi: (id: number, data: any) =>
-    api.put(`/api/events/${id}/kpi`, data, authHeaders()),
+    api.put(`/api/projects/${id}/kpi`, data, authHeaders()),
 };
 
 // ─── Display Helpers (front-end formatting only, NO computation) ───

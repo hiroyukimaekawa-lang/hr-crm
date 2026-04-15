@@ -368,7 +368,7 @@ const registerMatcherInterview = async () => {
 
 const fetchAllEvents = async () => {
   const token = localStorage.getItem('token');
-  const res = await api.get('/api/events', { headers: { Authorization: token } });
+  const res = await api.get('/api/projects', { headers: { Authorization: token } });
   availableEvents.value = res.data;
 };
 
@@ -591,7 +591,7 @@ const updateEventParticipationStatus = async (
   try {
     const token = localStorage.getItem('token');
     await api.put(
-      `/api/events/${eventId}/participants/${studentEventId}`,
+      `/api/projects/${eventId}/participants/${studentEventId}`,
       { status },
       { headers: { Authorization: token } }
     );
@@ -611,7 +611,7 @@ const updateEventParticipationDate = async (
   try {
     const token = localStorage.getItem('token');
     await api.put(
-      `/api/events/${eventId}/participants/${studentEventId}`,
+      `/api/projects/${eventId}/participants/${studentEventId}`,
       { status: currentStatus || 'A_ENTRY', selected_event_date: date || null },
       { headers: { Authorization: token } }
     );
@@ -639,7 +639,7 @@ const selectedLinkEventDates = computed(() => {
   return [] as string[];
 });
 
-// イベント参加回数（全参加）
+// 案件参加回数（全参加）
 const totalEventCount = computed(() =>
   (studentEvents.value ?? []).length
 );
@@ -649,7 +649,7 @@ const attendedEventCount = computed(() =>
   (studentEvents.value ?? []).filter((e: any) => e.participation_status === 'attended').length
 );
 
-// LTV: 着座済みイベントのunit_priceの合計
+// LTV: 着座済み案件のunit_priceの合計
 const ltv = computed(() =>
   (studentEvents.value ?? [])
     .filter((e: any) => e.participation_status === 'attended')
@@ -993,7 +993,7 @@ watch(selectedEventId, () => {
       <!-- モバイルのみタブ表示 -->
       <div class="flex md:hidden border-b border-gray-200 mb-6 bg-white sticky top-0 z-10 -mx-4 px-4">
         <button
-          v-for="tab in ['基本情報', 'ログ', 'イベント', 'その他']"
+          v-for="tab in ['基本情報', 'ログ', '案件', 'その他']"
           :key="tab"
           @click="activeTab = tab"
           class="flex-1 py-3 text-sm font-bold border-b-2 transition-colors"
@@ -1022,7 +1022,7 @@ watch(selectedEventId, () => {
             class="px-3 py-2 text-sm border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
             @click="showEventOverviewPanel = true"
           >
-            イベント概要を開く
+            案件概要を開く
           </button>
           <button
             v-if="!isPinned"
@@ -1337,8 +1337,8 @@ watch(selectedEventId, () => {
           </div>
 
 
-          <div :class="activeTab === 'イベント' ? 'block' : 'hidden md:block'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="text-lg font-bold text-gray-900 mb-4">イベント提案管理（複数登録）</h2>
+          <div :class="activeTab === '案件' ? 'block' : 'hidden md:block'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4">案件提案管理（複数登録）</h2>
             <div class="space-y-2 mb-4">
               <div v-for="p in eventProposals" :key="`proposal-${p.id}`" class="rounded-lg border border-gray-200 p-3 text-base md:text-sm">
                 <div class="flex flex-wrap items-center gap-2">
@@ -1354,7 +1354,7 @@ watch(selectedEventId, () => {
             </div>
             <div class="pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-2">
               <select v-model="proposalForm.event_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
-                <option value="">イベントを選択</option>
+                <option value="">案件を選択</option>
                 <option v-for="e in proposalEvents" :key="`proposal-event-${e.id}`" :value="String(e.id)">
                   {{ e.event_name || e.title }}（{{ e.event_date ? formatDateTime(e.event_date) : '-' }}）
                 </option>
@@ -1375,14 +1375,14 @@ watch(selectedEventId, () => {
               <input v-model="proposalForm.memo" type="text" placeholder="メモ（任意）" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
             </div>
             <button class="mt-3 bg-blue-600 text-white px-4 py-2 min-h-[44px] rounded-lg text-base md:text-sm hover:bg-blue-700" @click="submitEventProposal">
-              イベント提案を追加
+              案件提案を追加
             </button>
           </div>
 
-          <div :class="activeTab === 'イベント' ? 'block' : 'hidden md:block'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div :class="activeTab === '案件' ? 'block' : 'hidden md:block'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Calendar class="w-5 h-5 text-blue-600" />
-              参加・エントリーイベント
+              参加・エントリー案件
             </h2>
             <div class="space-y-3 mb-6">
               <div v-for="e in studentEvents" :key="e.student_event_id || e.id" class="p-3 bg-gray-50 rounded-lg">
@@ -1415,16 +1415,16 @@ watch(selectedEventId, () => {
                 </div>
               </div>
               <div v-if="studentEvents.length === 0" class="text-base md:text-sm text-gray-400 text-center py-4">
-                イベントへの参加はありません
+                案件への参加はありません
               </div>
             </div>
 
             <div class="pt-5 border-t border-gray-100">
-              <label class="block text-base md:text-sm font-bold text-gray-600 mb-3 ml-1">新しいイベントに紐付ける</label>
+              <label class="block text-base md:text-sm font-bold text-gray-600 mb-3 ml-1">新しい案件に紐付ける</label>
               <div class="flex flex-col gap-2">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <select v-model="selectedEventId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                    <option disabled value="">イベントを選択</option>
+                    <option disabled value="">案件を選択</option>
                     <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
                   </select>
                   <select
@@ -1546,7 +1546,7 @@ watch(selectedEventId, () => {
                   v-model="newLogEventId"
                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  <option disabled value="">エントリーしたイベントを選択</option>
+                  <option disabled value="">エントリーした案件を選択</option>
                   <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
                 </select>
               </div>
@@ -1714,9 +1714,9 @@ watch(selectedEventId, () => {
           <div class="mt-6 pt-5 border-t border-gray-100">
             <p class="text-sm font-bold text-gray-700 mb-3">📊 LTV・参加実績</p>
             <div class="grid grid-cols-3 gap-3">
-              <!-- イベント参加回数 -->
+              <!-- 案件参加回数 -->
               <div class="bg-gray-50 rounded-xl p-3 text-center">
-                <p class="text-xs text-gray-500 mb-1">イベント参加回数</p>
+                <p class="text-xs text-gray-500 mb-1">案件参加回数</p>
                 <p class="text-lg font-extrabold text-gray-900">{{ totalEventCount }}<span class="text-xs font-normal ml-1">回</span></p>
               </div>
               <!-- 着座回数 -->
@@ -1731,10 +1731,10 @@ watch(selectedEventId, () => {
               </div>
             </div>
 
-            <!-- 参加イベント一覧（折りたたみ） -->
+            <!-- 参加案件一覧（折りたたみ） -->
             <details class="mt-3">
               <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none">
-                参加イベント一覧を見る（{{ totalEventCount }}件）
+                参加案件一覧を見る（{{ totalEventCount }}件）
               </summary>
               <div class="mt-2 space-y-1">
                 <div
@@ -1761,7 +1761,7 @@ watch(selectedEventId, () => {
                   </div>
                 </div>
                 <div v-if="!(studentEvents ?? []).length" class="text-xs text-gray-400 text-center py-2">
-                  参加イベントなし
+                  参加案件なし
                 </div>
               </div>
             </details>
@@ -1777,8 +1777,8 @@ watch(selectedEventId, () => {
       >
         <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
-            <h3 class="text-lg font-bold text-gray-900">開催中・未終了イベント概要</h3>
-            <p class="text-base md:text-sm text-gray-500">イベント名を開いて詳細を確認</p>
+            <h3 class="text-lg font-bold text-gray-900">開催中・未終了案件概要</h3>
+            <p class="text-base md:text-sm text-gray-500">案件名を開いて詳細を確認</p>
           </div>
           <button class="px-3 py-1.5 text-base md:text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="showEventOverviewPanel = false">閉じる</button>
         </div>
@@ -1824,7 +1824,7 @@ watch(selectedEventId, () => {
             </div>
           </div>
           <div v-if="upcomingEvents.length === 0" class="text-base md:text-sm text-gray-400 text-center py-8">
-            提案候補イベントはありません
+            提案候補案件はありません
           </div>
         </div>
       </aside>
