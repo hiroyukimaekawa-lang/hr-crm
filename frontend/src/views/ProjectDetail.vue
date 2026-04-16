@@ -373,6 +373,7 @@ onMounted(fetchDetail);
       <div v-if="!event" class="text-gray-500">イベントが見つかりませんでした。</div>
 
       <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Sidebar - Event Info -->
         <div class="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div class="flex items-center justify-between mb-2">
             <h1 class="text-2xl font-bold text-gray-900">{{ event.title }}</h1>
@@ -421,7 +422,8 @@ onMounted(fetchDetail);
               <span>着座目標人数: {{ event.target_seats || '-' }}名</span>
             </div>
             <div class="flex items-center gap-2 text-sm text-gray-600">
-              <span>単価: {{ (event.unit_price || 0).toLocaleString() }}円</span>
+              <span class="font-medium">単価:</span>
+              <span>{{ (event.unit_price || 0).toLocaleString() }}円</span>
             </div>
             <div class="flex items-center gap-2 text-sm text-gray-600">
               <span class="font-medium">LP:</span>
@@ -438,14 +440,16 @@ onMounted(fetchDetail);
             </div>
           </div>
 
+          <!-- Description Section -->
           <div v-if="event.description" class="mt-6 pt-6 border-t border-gray-100">
             <h3 class="text-sm font-bold text-gray-900 mb-2">イベント概要</h3>
             <p class="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{{ event.description }}</p>
           </div>
-        </div>
-          <div v-if="saveMessage" class="text-xs text-green-600 mb-3">{{ saveMessage }}</div>
 
-          <div v-if="isEditing" class="border-t border-gray-100 pt-4 space-y-3">
+          <div v-if="saveMessage" class="text-xs text-green-600 mt-4 mb-2">{{ saveMessage }}</div>
+
+          <!-- Edit Form -->
+          <div v-if="isEditing" class="mt-6 pt-6 border-t border-gray-100 space-y-3">
             <div>
               <label class="block text-xs text-gray-500 mb-1">イベント名</label>
               <input v-model="form.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
@@ -499,8 +503,9 @@ onMounted(fetchDetail);
           </div>
         </div>
 
+        <!-- Main Content -->
         <div class="lg:col-span-2 space-y-6">
-          <!-- KPIサマリーカード -->
+          <!-- KPI Summary Card -->
           <div v-if="kgiData" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div class="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between">
               <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">KPIサマリー</span>
@@ -509,7 +514,7 @@ onMounted(fetchDetail);
               </button>
             </div>
             <div class="p-4 sm:p-6 flex flex-col md:flex-row gap-6 items-center">
-              <!-- ミニファネル -->
+              <!-- Mini Funnel -->
               <div class="flex items-center gap-1 sm:gap-2">
                 <div class="flex flex-col items-center">
                   <div class="w-16 h-12 bg-indigo-50 border border-indigo-100 rounded flex flex-col items-center justify-center">
@@ -526,7 +531,7 @@ onMounted(fetchDetail);
                 </div>
               </div>
 
-              <!-- 数値サマリー -->
+              <!-- Metrics Summary -->
               <div class="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 w-full">
                 <div class="text-center md:text-left">
                   <p class="text-[10px] font-bold text-gray-400 mb-0.5">残日数</p>
@@ -554,87 +559,78 @@ onMounted(fetchDetail);
             </div>
           </div>
 
+          <!-- Participants List -->
           <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-            <h2 class="text-lg font-bold text-gray-900">参加学生一覧</h2>
-            <div class="flex items-center gap-3 w-full sm:w-auto">
-              <div class="relative flex-1 sm:w-64">
-                <Search class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  v-model="searchTerm"
-                  type="text"
-                  placeholder="学生名で検索..."
-                  class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                />
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+              <h2 class="text-lg font-bold text-gray-900">参加学生一覧</h2>
+              <div class="flex items-center gap-3 w-full sm:w-auto">
+                <div class="relative flex-1 sm:w-64">
+                  <Search class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    v-model="searchTerm"
+                    type="text"
+                    placeholder="学生名で検索..."
+                    class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <button
+                  @click="downloadCSV"
+                  class="flex items-center gap-1.5 px-4 py-2 min-h-[44px] bg-gray-50 border border-gray-200 rounded-lg text-base md:text-sm font-medium text-gray-700 hover:bg-gray-100 whitespace-nowrap"
+                  title="CSVダウンロード"
+                >
+                  <Download class="w-4 h-4" />
+                  <span>CSV</span>
+                </button>
               </div>
-              <button
-                @click="downloadCSV"
-                class="flex items-center gap-1.5 px-4 py-2 min-h-[44px] bg-gray-50 border border-gray-200 rounded-lg text-base md:text-sm font-medium text-gray-700 hover:bg-gray-100 whitespace-nowrap"
-                title="CSVダウンロード"
-              >
-                <Download class="w-4 h-4" />
-                <span>CSV</span>
-              </button>
             </div>
-          </div>
-          <div class="flex flex-wrap items-center gap-2 mb-4">
-            <span class="text-xs text-gray-500">ステータス操作: 氏名の右側のステータスをクリックして変更できます</span>
-          </div>
+            
+            <div class="flex flex-wrap items-center gap-2 mb-4">
+              <span class="text-xs text-gray-500">ステータス操作: 氏名の右側のステータスをクリックして変更できます</span>
+            </div>
 
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm table-fixed">
-              <thead class="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-32">氏名</th>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">大学</th>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-12">担当</th>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-16">申込日</th>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-36">参加日程</th>
-                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">
-                    <button
-                      class="flex items-center gap-1 hover:text-gray-800"
-                      @click="() => { if (sortField === 'status') { if (sortOrder === 'asc') { sortOrder = 'desc'; } else { sortField = null; sortOrder = 'asc'; } } else { sortField = 'status'; sortOrder = 'asc'; } }"
-                    >
-                      ステータス
-                      <span v-if="sortField === 'status' && sortOrder === 'asc'">▲</span>
-                      <span v-else-if="sortField === 'status' && sortOrder === 'desc'">▼</span>
-                      <span v-else class="opacity-30">▲</span>
-                    </button>
-                  </th>
-                  <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase w-40">操作</th>
-                </tr>
-              </thead>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm table-fixed">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-32">氏名</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">大学</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-12">担当</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-16">申込日</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-36">参加日程</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">ステータス</th>
+                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase w-20">操作</th>
+                  </tr>
+                </thead>
                 <tbody class="divide-y divide-gray-200">
-                <tr v-for="p in filteredParticipants" :key="p.id || p.student_id" class="hover:bg-gray-50">
-                  <td class="px-4 py-3 truncate">
-                    <button class="text-blue-600 hover:text-blue-800" @click="router.push(`/students/${p.student_id}`)">
-                      {{ p.name }}
-                    </button>
-                  </td>
-                  <td class="px-4 py-3 text-gray-600 truncate">{{ p.university || '-' }}</td>
-                  <td class="px-4 py-3 text-gray-600 truncate">{{ p.staff_name || '-' }}</td>
-                  <td class="px-4 py-3 text-gray-600 truncate">{{ formatDateKey(p.created_at) }}</td>
-                  <td class="px-4 py-3 text-gray-900 font-medium">{{ formatDateKey(p.selected_event_date) }}</td>
-                  <td class="px-4 py-3">
-                    <span
-                      class="text-xs font-bold px-2 py-1 rounded-full border"
-                      :class="getStatusBadgeClass(p.status)"
-                    >{{ getStatusLabel(p.status) }}</span>
-                  </td>
-                  <td class="px-4 py-3 text-right">
-                    <button @click="router.push(`/students/${p.student_id}`)" class="text-xs text-blue-600 hover:underline">詳細</button>
-                  </td>
-                </tr>
-                <tr v-if="filteredParticipants.length === 0">
-                  <td colspan="7" class="px-4 py-10 text-center text-gray-400">参加者は見つかりませんでした。</td>
-                </tr>
-              </tbody>
-            </table>
+                  <tr v-for="p in filteredParticipants" :key="p.id || p.student_id" class="hover:bg-gray-50">
+                    <td class="px-4 py-3 truncate">
+                      <button class="text-blue-600 hover:text-blue-800" @click="router.push(`/students/${p.student_id}`)">
+                        {{ p.name }}
+                      </button>
+                    </td>
+                    <td class="px-4 py-3 text-gray-600 truncate">{{ p.university || '-' }}</td>
+                    <td class="px-4 py-3 text-gray-600 truncate">{{ p.staff_name || '-' }}</td>
+                    <td class="px-4 py-3 text-gray-600 truncate">{{ formatDateKey(p.created_at) }}</td>
+                    <td class="px-4 py-3 text-gray-900 font-medium">{{ formatDateKey(p.selected_event_date) }}</td>
+                    <td class="px-4 py-3">
+                      <span
+                        class="text-xs font-bold px-2 py-1 rounded-full border"
+                        :class="getStatusBadgeClass(p.status)"
+                      >{{ getStatusLabel(p.status) }}</span>
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                      <button @click="router.push(`/students/${p.student_id}`)" class="text-xs text-blue-600 hover:underline">詳細</button>
+                    </td>
+                  </tr>
+                  <tr v-if="filteredParticipants.length === 0">
+                    <td colspan="7" class="px-4 py-10 text-center text-gray-400">参加者は見つかりませんでした。</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       </div>
     </div>
-    <!-- StatusChangeModal removed from EventDetail to unify status changes -->
   </Layout>
 </template>
