@@ -8,6 +8,7 @@ import authRoutes from './routes/authRoutes';
 import studentRoutes from './routes/studentRoutes';
 import projectRoutes from './routes/projectRoutes';
 import kpiRoutes from './routes/kpiRoutes';
+import legacyRoutes from './routes/legacyRoutes';
 import { applyPerformanceOptimizations } from './config/performance';
 
 dotenv.config();
@@ -61,6 +62,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/legacy-events', legacyRoutes);
 // Legacy routes compat
 app.use('/api/events', projectRoutes);
 app.use('/api/kpi', kpiRoutes);

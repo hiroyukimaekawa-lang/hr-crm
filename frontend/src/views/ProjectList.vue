@@ -81,10 +81,22 @@ interface Participant {
 }
 
 
+const legacyEvents = ref<any[]>([]);
+const activeTab = ref<'projects' | 'legacy'>('projects');
+
 const fetchEvents = async () => {
   const token = localStorage.getItem('token');
   const res = await api.get('/api/projects', { headers: { Authorization: token } });
   events.value = res.data;
+  
+  // Also fetch legacy events
+  try {
+    const legacyRes = await api.get('/api/legacy-events', { headers: { Authorization: token } });
+    legacyEvents.value = legacyRes.data;
+  } catch (err) {
+    console.error('Failed to fetch legacy events', err);
+  }
+
   const detailResults = await Promise.all(
     events.value.map(async (e) => {
       try {
@@ -115,6 +127,20 @@ const fetchEvents = async () => {
   });
   eventParticipantNames.value = nameMap;
   eventParticipantsMap.value = participantMap;
+};
+
+const migrateLegacyEvent = async (legacyId: number) => {
+  if (!confirm('この旧イベントを新規プロジェクトとしてコピーしますか？')) return;
+  try {
+    const token = localStorage.getItem('token');
+    await api.post(`/api/legacy-events/${legacyId}/migrate`, {}, { headers: { Authorization: token } });
+    alert('プロジェクトとしてコピーしました。');
+    fetchEvents();
+    activeTab.value = 'projects';
+  } catch (err) {
+    console.error('Migration failed', err);
+    alert('コピーに失敗しました。');
+  }
 };
 
 const createEvent = async () => {
@@ -170,8 +196,15 @@ const formatDateKey = (value: string | Date) => {
 const currentMonthBase = computed(() => new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth(), 1));
 
 const eventsByDate = computed(() => {
-  const map: Record<string, (EventItem & { dateCount: number })[]> = {};
-  events.value.forEach(e => {
+  const map: Record<string, (EventItem & { dateCount: number; isLegacy?: boolean })[]> = {};
+  
+  // Merge active and legacy
+  const all = [
+    ...events.value.map(e => ({ ...e, isLegacy: false })),
+    ...legacyEvents.value.map(e => ({ ...e, isLegacy: true }))
+  ];
+
+  all.forEach(e => {
     const dateList = Array.isArray(e.event_dates) && e.event_dates.length > 0
       ? e.event_dates
       : (e.event_date ? [e.event_date] : []);
@@ -299,8 +332,9 @@ const participantStatusCounts = computed(() => {
 });
 
 // カレンダーセル用: 日付一致+A_ENTRYの参加者数を返す
-const getCalendarEntryCount = (eventId: number, dateKey: string): number => {
-  const ps = eventParticipantsMap.value[eventId] || [];
+const getCalendarEntryCount = (eventId: number | string, dateKey: string, isLegacy?: boolean): number => {
+  if (isLegacy) return 0; // Legacy events don't have participant stats here
+  const ps = eventParticipantsMap.value[Number(eventId)] || [];
   return ps.filter(p =>
     p.status === 'A_ENTRY' &&
     p.selected_event_date &&
@@ -390,17 +424,29 @@ onMounted(fetchEvents);
                     class="rounded overflow-hidden"
                   >
                     <!-- イベント名 -->
-                    <div class="px-1.5 py-0.5 bg-blue-600 text-white text-[10px] font-semibold truncate leading-tight" :title="ev.title">
-                      {{ ev.title }}{{ ev.dateCount > 1 ? `（${ev.dateCount}日程）` : '' }}
+                    <div 
+                      class="px-1.5 py-0.5 text-white text-[10px] font-semibold truncate leading-tight" 
+                      :class="ev.isLegacy ? 'bg-amber-600' : 'bg-blue-600'"
+                      :title="ev.title"
+                    >
+                      <span v-if="ev.isLegacy">[旧] </span>{{ ev.title }}{{ ev.dateCount > 1 ? `（${ev.dateCount}日程）` : '' }}
                     </div>
                     <!-- 参加ありボタン: 日付一致+A_ENTRYのみカウント -->
                     <button
-                      v-if="getCalendarEntryCount(ev.id, cell.key) > 0"
+                      v-if="!ev.isLegacy && getCalendarEntryCount(ev.id, cell.key) > 0"
                       class="w-full text-left px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[9px] font-semibold hover:bg-emerald-100 transition-colors border-t border-emerald-100 flex items-center gap-1"
                       @click.stop="openEventDetailPanel(ev, cell.key)"
                     >
                       <svg class="w-2.5 h-2.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg>
                       {{ getCalendarEntryCount(ev.id, cell.key) }}名参加
+                    </button>
+                    <!-- 旧イベント用ボタン: 参加者データはないが詳細（移行）へ誘導可能 -->
+                    <button
+                      v-if="ev.isLegacy"
+                      class="w-full text-left px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[9px] font-semibold hover:bg-amber-100 transition-colors border-t border-amber-100"
+                      @click.stop="activeTab = 'legacy'"
+                    >
+                      旧データ（移行可能）
                     </button>
                   </div>
                   <div v-if="getEventsForDate(cell.key).length > 4" class="text-[9px] text-blue-500 font-semibold px-1">
@@ -413,7 +459,55 @@ onMounted(fetchEvents);
         </section>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <!-- Tabs and List -->
+      <div class="mb-6 border-b border-gray-200">
+        <nav class="flex gap-8">
+          <button 
+            @click="activeTab = 'projects'"
+            class="pb-4 text-sm font-bold border-b-2 transition-colors"
+            :class="activeTab === 'projects' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+          >
+            アクティブ案件 ({{ events.length }})
+          </button>
+          <button 
+            @click="activeTab = 'legacy'"
+            class="pb-4 text-sm font-bold border-b-2 transition-colors"
+            :class="activeTab === 'legacy' ? 'border-amber-600 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+          >
+            旧イベント可視化 ({{ legacyEvents.length }})
+          </button>
+        </nav>
+      </div>
+
+      <div v-if="activeTab === 'legacy'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+        <div v-for="e in legacyEvents" :key="'legacy-' + e.id" class="bg-amber-50 rounded-xl shadow-sm border border-amber-200 overflow-hidden flex flex-col">
+          <div class="p-6">
+            <div class="flex justify-between items-start mb-4">
+              <span class="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full flex items-center gap-1">
+                <Calendar class="w-3.5 h-3.5" />
+                {{ displayEventDates(e)[0] || '日程未定' }}
+              </span>
+              <span class="px-2 py-1 bg-white border border-amber-200 text-amber-600 text-[10px] font-bold rounded">旧データ</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900 mb-2">[旧] {{ e.name || e.title }}</h3>
+            <p class="text-sm text-gray-600 line-clamp-2 mb-4">{{ e.description || '説明なし' }}</p>
+            <div class="space-y-1">
+               <div class="flex items-center gap-2 text-xs text-gray-500"><MapPin class="w-3.5 h-3.5" /> {{ e.location || '-' }}</div>
+               <div class="flex items-center gap-2 text-xs text-gray-500"><UsersIcon class="w-3.5 h-3.5" /> 目標: {{ e.capacity || '-' }}名</div>
+            </div>
+          </div>
+          <div class="px-6 py-4 bg-white border-t border-amber-100 flex gap-2">
+            <button
+               class="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700 transition-colors"
+               @click="migrateLegacyEvent(e.id)"
+            >
+              プロジェクトとして再登録
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'projects'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         <div v-for="e in events" :key="e.id" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
           <div class="p-6">
             <div class="flex justify-between items-start mb-4">
