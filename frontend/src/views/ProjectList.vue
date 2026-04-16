@@ -316,21 +316,21 @@ onMounted(fetchEvents);
     <div class="p-4 md:p-6 lg:p-8">
       <div class="flex flex-col gap-4 md:flex-row md:justify-between md:items-center mb-8">
         <div>
-          <h1 class="text-3xl font-bold text-gray-900">案件一覧</h1>
-          <p class="text-gray-500 mt-2">開催予定および過去の案件を一覧で確認できます。</p>
+          <h1 class="text-3xl font-bold text-gray-900">イベント一覧</h1>
+          <p class="text-gray-500 mt-2">開催予定および過去のイベントを一覧で確認できます。</p>
         </div>
         <button
           @click="showCreate = true"
           class="bg-blue-600 text-white px-4 py-2 text-base md:text-sm min-h-[44px] rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
         >
           <Plus class="w-4 h-4" />
-          <span>案件作成</span>
+          <span>イベント作成</span>
         </button>
       </div>
 
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-bold text-gray-900">案件開催カレンダー（今月）</h2>
+          <h2 class="text-lg font-bold text-gray-900">イベント開催カレンダー（今月）</h2>
           <div class="flex items-center gap-2">
             <button @click="prevMonth" class="p-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
               <ChevronLeft class="w-4 h-4" />
@@ -440,7 +440,7 @@ onMounted(fetchEvents);
                 エージェント面談
               </span>
               <span v-else class="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded">
-                案件
+                イベント
               </span>
               <span v-if="e.graduation_year" class="px-2 py-0.5 border border-indigo-200 text-indigo-600 text-xs font-bold rounded">
                 {{ e.graduation_year }}卒
@@ -521,7 +521,7 @@ onMounted(fetchEvents);
               class="w-full text-blue-600 hover:text-blue-800 text-sm font-semibold flex items-center justify-center gap-2 py-2 border border-blue-100 rounded-lg bg-white"
               @click="router.push(`/projects/${e.id}`)"
             >
-              詳細・参加者管理
+              イベント詳細・参加者管理
               <ChevronRight class="w-4 h-4" />
             </button>
           </div>
@@ -532,18 +532,18 @@ onMounted(fetchEvents);
     <div v-if="showCreate" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-3 md:p-4 z-50">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div class="px-4 md:px-6 pt-4 md:pt-6 pb-3 border-b border-gray-100">
-          <h2 class="text-xl font-bold text-gray-900">新規案件作成</h2>
+          <h2 class="text-xl font-bold text-gray-900">新規イベント作成</h2>
         </div>
         <div class="px-4 md:px-6 py-4 overflow-y-auto space-y-4">
           <div>
-            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">案件名</label>
+            <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">イベント名</label>
             <input v-model="newEvent.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
           </div>
           <div class="flex gap-4">
             <div class="flex-1">
-              <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">案件種別</label>
+              <label class="block text-base md:text-sm font-medium text-gray-700 mb-1">イベント種別</label>
               <select v-model="newEvent.type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                <option value="event">案件</option>
+                <option value="event">イベント</option>
                 <option value="agent_interview">エージェント面談</option>
               </select>
             </div>

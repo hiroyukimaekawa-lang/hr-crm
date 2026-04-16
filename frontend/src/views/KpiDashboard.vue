@@ -788,7 +788,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
             <table class="w-full text-left border-separate border-spacing-y-2">
               <thead>
                 <tr class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                  <th class="px-3 pb-2">案件名</th>
+                  <th class="px-3 pb-2">イベント名</th>
                   <th class="px-3 pb-2 w-20 text-center">配分 (%)</th>
                   <th class="px-3 pb-2 text-center">単価</th>
                   <th class="px-3 pb-2 w-24">目標座席数</th>
@@ -898,7 +898,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
               { id: 'monthly', label: '月間KPI' },
               { id: 'weekly', label: '日程別KPI' },
               { id: 'daily', label: 'デイリー' },
-              { id: 'event', label: '全案件' },
+              { id: 'event', label: '全イベント' },
               { id: 'staff', label: '担当者別' },
               { id: 'source', label: '流入元別' },
             ]"
@@ -926,7 +926,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
               class="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-200"
             >
               <Settings2 class="w-4 h-4" />
-              月間・案件目標設定
+              月間・イベント目標設定
             </button>
           </div>
         </div>
@@ -970,7 +970,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                   {{ ev.target_seats > 0 ? Math.round((ev.current_seats / ev.target_seats) * 100) : 0 }}%
                 </span>
               </div>
-              <p class="text-xs font-bold text-gray-400 mb-1">案件目標振込</p>
+              <p class="text-xs font-bold text-gray-400 mb-1">イベント目標振込</p>
               <div class="flex items-baseline gap-2 mb-2">
                 <span class="text-2xl font-black text-gray-900">¥{{ formatCurrency((ev.current_seats || 0) * (ev.unit_price || 0)) }}</span>
                 <span class="text-xs text-gray-400">/ ¥{{ formatCurrency((ev.target_seats || 0) * (ev.unit_price || 0)) }}</span>

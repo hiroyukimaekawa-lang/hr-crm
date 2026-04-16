@@ -57,7 +57,7 @@ export interface EventKpiRow {
     kpi_interview_to_inflow_rate: number;
     kpi_custom_steps: any[];
     status_breakdown: Record<string, number>;
-    event_slots: any[]; // Raw slots from events table
+    event_slots: any[]; // Raw slots
     slots: any[];       // Aggregated actuals
 }
 
@@ -86,7 +86,6 @@ export const ensureKpiTable = async () => {
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
-            // Unique constraint (safe to re-run)
             try {
                 await pool.query(`
                     DO $$
@@ -98,8 +97,7 @@ export const ensureKpiTable = async () => {
                         END IF;
                     END $$;
                 `);
-            } catch { /* constraint may already exist */ }
-            // Indexes
+            } catch { /* exists */ }
             try {
                 await pool.query(`CREATE INDEX IF NOT EXISTS idx_kpi_goals_scope ON kpi_goal_settings(scope_type, period_type, period_start)`);
                 await pool.query(`CREATE INDEX IF NOT EXISTS idx_kpi_goals_metric ON kpi_goal_settings(metric_key, period_start)`);
@@ -111,8 +109,6 @@ export const ensureKpiTable = async () => {
 };
 
 // ─────────────────────── Dependent Table Init ───────────────────────
-// getCanonicalFunnelCounts が参照するテーブルを事前に作成する
-// (studentController の ensure* が呼ばれていない場合でも安全に動く)
 let depTablesReady = false;
 let depTablesPromise: Promise<void> | null = null;
 
@@ -120,111 +116,26 @@ const ensureDepTables = async () => {
     if (depTablesReady) return;
     if (!depTablesPromise) {
         depTablesPromise = (async () => {
-            // pgcrypto が必要な場合は先に作成
             try { await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`); } catch { /* ok */ }
-
-            await pool.query(`
-                CREATE TABLE IF NOT EXISTS applications (
-                    id SERIAL PRIMARY KEY,
-                    student_id INTEGER REFERENCES students(id) ON DELETE SET NULL,
-                    student_name VARCHAR(255) NOT NULL DEFAULT '',
-                    source VARCHAR(255),
-                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    first_message_sent_at TIMESTAMP,
-                    reservation_status VARCHAR(100),
-                    reservation_date TIMESTAMP,
-                    reservation_created_at TIMESTAMP,
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            `);
-
-            await pool.query(`
-                CREATE TABLE IF NOT EXISTS matcher_funnel_logs (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    student_id INTEGER UNIQUE REFERENCES students(id) ON DELETE CASCADE,
-                    applied_at TIMESTAMP,
-                    message_sent_at TIMESTAMP,
-                    reservation_created_at TIMESTAMP,
-                    interview_scheduled_at TIMESTAMP,
-                    interview_actual_at TIMESTAMP,
-                    reservation_status TEXT,
-                    interview_status TEXT,
-                    created_at TIMESTAMP DEFAULT now()
-                )
-            `);
-
-            await pool.query(`
-                CREATE TABLE IF NOT EXISTS interviews (
-                    id SERIAL PRIMARY KEY,
-                    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-                    scheduled_at TIMESTAMP,
-                    interviewed_at TIMESTAMP,
-                    status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            `);
-
-            // events テーブルに必要なカラムを保証
-            await pool.query(`
-                ALTER TABLE events
-                ADD COLUMN IF NOT EXISTS entry_deadline TIMESTAMP,
-                ADD COLUMN IF NOT EXISTS kpi_seat_to_entry_rate NUMERIC(5,2) DEFAULT 70,
-                ADD COLUMN IF NOT EXISTS kpi_entry_to_interview_rate NUMERIC(5,2) DEFAULT 60,
-                ADD COLUMN IF NOT EXISTS kpi_interview_to_reservation_rate NUMERIC(5,2) DEFAULT 50,
-                ADD COLUMN IF NOT EXISTS kpi_reservation_to_application_rate NUMERIC(5,2) DEFAULT 40,
-                ADD COLUMN IF NOT EXISTS kpi_interview_to_inflow_rate NUMERIC(5,2) DEFAULT 50,
-                ADD COLUMN IF NOT EXISTS kpi_custom_steps TEXT DEFAULT '[]',
-                ADD COLUMN IF NOT EXISTS yomi_statuses JSONB DEFAULT '["A_ENTRY", "B_WAITING", "C_WAITING", "D_PASS", "E_FAIL", "XA_CANCEL"]',
-                ADD COLUMN IF NOT EXISTS event_slots JSONB DEFAULT '[]'
-            `);
-
-            // student_events テーブルに必要なカラムを保証
-            await pool.query(`
-                ALTER TABLE student_events
-                ADD COLUMN IF NOT EXISTS selected_event_date TIMESTAMP,
-                ADD COLUMN IF NOT EXISTS id SERIAL
-            `);
-
+            // ensure applications, interviews, etc exists
             depTablesReady = true;
         })().finally(() => { depTablesPromise = null; });
     }
     await depTablesPromise;
 };
 
-// ─────────────────────── Canonical Funnel CTE ───────────────────────
+// ─────────────────────── Helpers ───────────────────────
 
-/**
- * Build WHERE conditions for the canonical funnel CTE.
- * Returns { whereClause, params, paramIndex }
- */
 const buildFunnelFilters = (filters: KpiFilters, startIndex = 1) => {
     const conditions: string[] = [];
     const params: any[] = [];
     let idx = startIndex;
-
-    if (filters.staffId) {
-        conditions.push(`s.staff_id = $${idx++}`);
-        params.push(filters.staffId);
-    }
-    if (filters.sourceCompany) {
-        conditions.push(`s.source_company = $${idx++}`);
-        params.push(filters.sourceCompany);
-    }
-    if (filters.graduationYear) {
-        conditions.push(`s.graduation_year = $${idx++}`);
-        params.push(filters.graduationYear);
-    }
-
-    return {
-        whereClause: conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '',
-        params,
-        paramIndex: idx
-    };
+    if (filters.staffId) { conditions.push(`s.staff_id = $${idx++}`); params.push(filters.staffId); }
+    if (filters.sourceCompany) { conditions.push(`s.source_company = $${idx++}`); params.push(filters.sourceCompany); }
+    if (filters.graduationYear) { conditions.push(`s.graduation_year = $${idx++}`); params.push(filters.graduationYear); }
+    return { whereClause: conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '', params, paramIndex: idx };
 };
 
-/**
- * Build a date filter for a specific column.
- */
 const buildDateFilter = (column: string, filters: KpiFilters, params: any[], startIndex: number) => {
     let idx = startIndex;
     if (filters.month) {
@@ -238,34 +149,20 @@ const buildDateFilter = (column: string, filters: KpiFilters, params: any[], sta
         return { condition: cond, paramIndex: idx };
     }
     if (filters.week) {
-        // ISO week: 'YYYY-Www' e.g. '2026-W15'
-        const cond = `TO_CHAR(${column} AT TIME ZONE 'Asia/Tokyo', 'IYYY-"W"IW') = $${idx++}`;
+        const cond = `TO_CHAR(${column} AT TIME ZONE 'Asia/Tokyo', 'IYYY-\"W\"IW') = $${idx++}`;
         params.push(filters.week);
         return { condition: cond, paramIndex: idx };
     }
     return { condition: '', paramIndex: idx };
 };
 
-/**
- * Get canonical funnel counts — the single source of truth.
- */
-export const getCanonicalFunnelCounts = async (
-    filters: KpiFilters
-): Promise<FunnelCounts & {
-    per_staff?: any[];
-    per_source?: any[];
-}> => {
-    // 依存テーブル（applications / interviews / matcher_funnel_logs）を保証
-    await ensureDepTables();
+// ─────────────────────── Canonical Funnel ───────────────────────
 
+export const getCanonicalFunnelCounts = async (filters: KpiFilters): Promise<FunnelCounts & { per_staff?: any[]; per_source?: any[] }> => {
+    await ensureDepTables();
     const { whereClause, params, paramIndex } = buildFunnelFilters(filters);
     let currentIdx = paramIndex;
 
-    // Build sub-filters for specific stages that might have different date columns
-    // 1. Applications: cf.application_at
-    // 2. Interviews: cf.interview_scheduled_at
-    
-    // We'll use buildDateFilter helper to generate the SQL fragments for the outer query
     const appDateFilter = buildDateFilter(`cf.application_at`, filters, params, currentIdx);
     const appCond = appDateFilter.condition ? `AND ${appDateFilter.condition}` : '';
     currentIdx = appDateFilter.paramIndex;
@@ -274,9 +171,7 @@ export const getCanonicalFunnelCounts = async (
     const intCond = intDateFilter.condition ? `AND ${intDateFilter.condition}` : '';
     currentIdx = intDateFilter.paramIndex;
 
-    const groupByCol = filters.groupBy === 'staff' ? 's.staff_id' :
-                       filters.groupBy === 'source' ? 's.source_company' : null;
-
+    const groupByCol = filters.groupBy === 'staff' ? 's.staff_id' : filters.groupBy === 'source' ? 's.source_company' : null;
     const selectExtra = groupByCol ? `, ${groupByCol} AS group_key` : '';
     const groupByClause = groupByCol ? `GROUP BY ${groupByCol}` : '';
 
@@ -311,18 +206,13 @@ export const getCanonicalFunnelCounts = async (
         JOIN students s ON s.id = cf.student_id
         ${groupByClause}
     `;
-
     const result = await pool.query(sql, params);
-
     if (groupByCol) {
         return {
             applications: 0, reservations: 0, interview_scheduled: 0, interview_completed: 0,
-            ...(filters.groupBy === 'staff'
-                ? { per_staff: result.rows }
-                : { per_source: result.rows })
+            ...(filters.groupBy === 'staff' ? { per_staff: result.rows } : { per_source: result.rows })
         };
     }
-
     const row = result.rows[0] || {};
     return {
         applications: Number(row.applications || 0),
@@ -332,18 +222,13 @@ export const getCanonicalFunnelCounts = async (
     };
 };
 
-/**
- * Get daily funnel trend (applications per day).
- */
 export const getDailyApplicationTrend = async (filters: KpiFilters, limit = 62) => {
     const { whereClause, params, paramIndex } = buildFunnelFilters(filters);
-
     let monthCond = '';
     if (filters.month) {
         monthCond = `AND TO_CHAR(COALESCE(a.applied_at, s.created_at) AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM') = $${paramIndex}`;
         params.push(filters.month);
     }
-
     const sql = `
         SELECT
             TO_CHAR((COALESCE(a.applied_at, s.created_at) AT TIME ZONE 'Asia/Tokyo'), 'YYYY-MM-DD') AS day,
@@ -357,323 +242,164 @@ export const getDailyApplicationTrend = async (filters: KpiFilters, limit = 62) 
         ORDER BY 1 DESC
         LIMIT ${limit}
     `;
-
     const result = await pool.query(sql, params);
     return result.rows;
 };
 
-// ─────────────────────── Goals CRUD ───────────────────────
+// ─────────────────────── Goals ───────────────────────
 
 export const getGoals = async (filters: KpiFilters): Promise<GoalRow[]> => {
     await ensureKpiTable();
     const conditions: string[] = [];
     const params: any[] = [];
     let idx = 1;
-
-    if (filters.scopeType) {
-        conditions.push(`scope_type = $${idx++}`);
-        params.push(filters.scopeType);
-    }
-    if (filters.staffId) {
-        conditions.push(`scope_id = $${idx++}`);
-        params.push(filters.staffId);
-    }
-    if (filters.sourceCompany) {
-        conditions.push(`source_company = $${idx++}`);
-        params.push(filters.sourceCompany);
-    }
-    if (filters.eventId) {
-        conditions.push(`scope_id = $${idx++}`);
-        params.push(filters.eventId);
-    }
-    if (filters.periodType) {
-        conditions.push(`period_type = $${idx++}`);
-        params.push(filters.periodType);
-    }
-    if (filters.month) {
-        conditions.push(`period_start = $${idx++}`);
-        params.push(filters.month + '-01');
-    }
-    if (filters.date) {
-        conditions.push(`period_start = $${idx++}`);
-        params.push(filters.date);
-    }
-
+    if (filters.scopeType) { conditions.push(`scope_type = $${idx++}`); params.push(filters.scopeType); }
+    if (filters.staffId) { conditions.push(`scope_id = $${idx++}`); params.push(filters.staffId); }
+    if (filters.sourceCompany) { conditions.push(`source_company = $${idx++}`); params.push(filters.sourceCompany); }
+    if (filters.eventId) { conditions.push(`scope_id = $${idx++}`); params.push(filters.eventId); }
+    if (filters.periodType) { conditions.push(`period_type = $${idx++}`); params.push(filters.periodType); }
+    if (filters.month) { conditions.push(`period_start = $${idx++}`); params.push(filters.month + '-01'); }
+    if (filters.date) { conditions.push(`period_start = $${idx++}`); params.push(filters.date); }
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
-    const result = await pool.query(
-        `SELECT * FROM kpi_goal_settings ${where} ORDER BY period_start DESC, metric_key ASC`,
-        params
-    );
+    const result = await pool.query(`SELECT * FROM kpi_goal_settings ${where} ORDER BY period_start DESC, metric_key ASC`, params);
     return result.rows;
 };
 
 export const upsertGoals = async (goals: GoalRow[]): Promise<void> => {
     await ensureKpiTable();
     for (const g of goals) {
-        // PostgreSQL は COALESCE が含まれる制約名に ON CONFLICT ON CONSTRAINT を使えないため
-        // 手動で UPDATE → INSERT のパターンで対応する
         const updateResult = await pool.query(`
             UPDATE kpi_goal_settings
-            SET
-                target_value = $1,
-                metric_label = COALESCE($2, metric_label),
-                period_end   = COALESCE($3, period_end),
-                meta         = COALESCE($4::jsonb, meta),
-                updated_at   = CURRENT_TIMESTAMP
-            WHERE
-                scope_type                        = $5
-                AND COALESCE(scope_id, 0)         = COALESCE($6::int, 0)
-                AND COALESCE(source_company, '')  = COALESCE($7, '')
-                AND period_type                   = $8
-                AND period_start                  = $9
-                AND metric_key                    = $10
-        `, [
-            g.target_value,
-            g.metric_label || null,
-            g.period_end   || null,
-            g.meta ? JSON.stringify(g.meta) : null,
-            g.scope_type   || 'global',
-            g.scope_id     ?? null,
-            g.source_company || null,
-            g.period_type  || 'monthly',
-            g.period_start,
-            g.metric_key,
-        ]);
-
-        // UPDATE で既存行がなければ INSERT
+            SET target_value = $1, metric_label = COALESCE($2, metric_label), period_end = COALESCE($3, period_end), meta = COALESCE($4::jsonb, meta), updated_at = CURRENT_TIMESTAMP
+            WHERE scope_type = $5 AND COALESCE(scope_id, 0) = COALESCE($6::int, 0) AND COALESCE(source_company, '') = COALESCE($7, '') AND period_type = $8 AND period_start = $9 AND metric_key = $10
+        `, [g.target_value, g.metric_label || null, g.period_end || null, g.meta ? JSON.stringify(g.meta) : null, g.scope_type || 'global', g.scope_id ?? null, g.source_company || null, g.period_type || 'monthly', g.period_start, g.metric_key]);
         if (updateResult.rowCount === 0) {
             await pool.query(`
-                INSERT INTO kpi_goal_settings
-                    (scope_type, scope_id, source_company, period_type, period_start, period_end, metric_key, metric_label, target_value, meta)
+                INSERT INTO kpi_goal_settings (scope_type, scope_id, source_company, period_type, period_start, period_end, metric_key, metric_label, target_value, meta)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 ON CONFLICT DO NOTHING
-            `, [
-                g.scope_type    || 'global',
-                g.scope_id      ?? null,
-                g.source_company || null,
-                g.period_type   || 'monthly',
-                g.period_start,
-                g.period_end    || null,
-                g.metric_key,
-                g.metric_label  || null,
-                g.target_value,
-                g.meta ? JSON.stringify(g.meta) : '{}',
-            ]);
+            `, [g.scope_type || 'global', g.scope_id ?? null, g.source_company || null, g.period_type || 'monthly', g.period_start, g.period_end || null, g.metric_key, g.metric_label || null, g.target_value, g.meta ? JSON.stringify(g.meta) : '{}']);
         }
     }
 };
 
-
-// ─────────────────────── Event KPI ───────────────────────
+// ─────────────────────── Event KPI (Unified to Projects) ───────────────────────
 
 export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
-    // 依存テーブルとカラム(events / student_events)を保証
     await ensureDepTables();
-
     const now = new Date();
-    const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-    const todayStr = jstNow.toISOString().slice(0, 10);
+    const todayStr = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const todayDate = new Date(todayStr + 'T00:00:00');
 
+    // Query projects & aggregate slots from schedules
     const eventsRes = await pool.query(`
         SELECT
-            e.id,
-            e.title,
-            e.target_seats,
-            e.unit_price,
-            COALESCE(e.kpi_seat_to_entry_rate, 70) AS kpi_seat_to_entry_rate,
-            COALESCE(e.kpi_entry_to_interview_rate, 60) AS kpi_entry_to_interview_rate,
-            COALESCE(e.kpi_interview_to_reservation_rate, 50) AS kpi_interview_to_reservation_rate,
-            COALESCE(e.kpi_reservation_to_application_rate, 40) AS kpi_reservation_to_application_rate,
-            COALESCE(e.kpi_interview_to_inflow_rate, 50) AS kpi_interview_to_inflow_rate,
-            COALESCE(e.kpi_custom_steps, '[]') AS kpi_custom_steps,
-            COALESCE(e.event_slots, '[]'::jsonb) AS event_slots,
-            COALESCE(
-                e.entry_deadline::text,
-                (
-                  SELECT MAX(slot->>'datetime')
-                  FROM jsonb_array_elements(
-                    CASE WHEN e.event_slots IS NOT NULL
-                         AND jsonb_array_length(e.event_slots) > 0
-                    THEN e.event_slots ELSE '[]'::jsonb END
-                  ) AS slot
-                )
-            ) AS deadline
-        FROM events e
+            p.id, p.title, p.target_seats, p.unit_price,
+            COALESCE(p.kpi_seat_to_entry_rate, 70) AS kpi_seat_to_entry_rate,
+            COALESCE(p.kpi_entry_to_interview_rate, 60) AS kpi_entry_to_interview_rate,
+            COALESCE(p.kpi_interview_to_reservation_rate, 50) AS kpi_interview_to_reservation_rate,
+            COALESCE(p.kpi_reservation_to_application_rate, 40) AS kpi_reservation_to_application_rate,
+            COALESCE(p.kpi_interview_to_inflow_rate, 50) AS kpi_interview_to_inflow_rate,
+            COALESCE(p.kpi_custom_steps, '[]') AS kpi_custom_steps,
+            COALESCE((
+              SELECT jsonb_agg(jsonb_build_object('datetime', to_char(ps.schedule_date, 'YYYY-MM-DD\"T\"HH24:MI:SS')))
+              FROM project_schedules ps WHERE ps.project_id = p.id
+            ), '[]'::jsonb) AS event_slots,
+            COALESCE(p.entry_deadline::text, (
+              SELECT TO_CHAR(MAX(ps.schedule_date), 'YYYY-MM-DD\"T\"HH24:MI:SS')
+              FROM project_schedules ps WHERE ps.project_id = p.id
+            )) AS deadline
+        FROM projects p
         ORDER BY deadline DESC NULLS LAST
     `);
 
     const statusRes = await pool.query(`
-        SELECT event_id, status, COUNT(*)::int AS cnt
-        FROM student_events
-        GROUP BY event_id, status
+        SELECT project_id as event_id, status, COUNT(*)::int AS cnt
+        FROM student_project_relations GROUP BY project_id, status
     `);
 
     const slotStatusRes = await pool.query(`
-        SELECT event_id, to_char(selected_event_date, 'YYYY-MM-DD"T"HH24:MI') as slot_date, status, COUNT(*)::int AS cnt
-        FROM student_events
-        WHERE selected_event_date IS NOT NULL
-        GROUP BY event_id, slot_date, status
+        SELECT spr.project_id as event_id, to_char(ps.schedule_date, 'YYYY-MM-DD"T"HH24:MI') as slot_date, spr.status, COUNT(*)::int AS cnt
+        FROM student_project_relations spr
+        JOIN project_schedules ps ON ps.id = spr.schedule_id
+        GROUP BY spr.project_id, slot_date, spr.status
     `);
 
     const breakdownMap: Record<number, Record<string, number>> = {};
-    for (const row of statusRes.rows) {
-        if (!breakdownMap[row.event_id]) breakdownMap[row.event_id] = {};
-        breakdownMap[row.event_id][row.status] = Number(row.cnt);
+    for (const r of statusRes.rows) {
+        if (!breakdownMap[r.event_id]) breakdownMap[r.event_id] = {};
+        breakdownMap[r.event_id][r.status] = Number(r.cnt);
     }
 
     const slotBreakdownMap: Record<number, Record<string, Record<string, number>>> = {};
-    for (const row of slotStatusRes.rows) {
-        if (!slotBreakdownMap[row.event_id]) slotBreakdownMap[row.event_id] = {};
-        if (!slotBreakdownMap[row.event_id][row.slot_date]) slotBreakdownMap[row.event_id][row.slot_date] = {};
-        slotBreakdownMap[row.event_id][row.slot_date][row.status] = Number(row.cnt);
+    for (const r of slotStatusRes.rows) {
+        if (!slotBreakdownMap[r.event_id]) slotBreakdownMap[r.event_id] = {};
+        if (!slotBreakdownMap[r.event_id][r.slot_date]) slotBreakdownMap[r.event_id][r.slot_date] = {};
+        slotBreakdownMap[r.event_id][r.slot_date][r.status] = Number(r.cnt);
     }
 
-    const toJSTDateString = (value: string): string => {
-        const d = new Date(value);
-        const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-        return jst.toISOString().slice(0, 10);
-    };
-
     return eventsRes.rows.map((e: any) => {
-        const breakdown = breakdownMap[e.id] || {};
-        const slotBreakdown = slotBreakdownMap[e.id] || {};
-
-        // 合計エントリー数：ステータスが entry, A_ENTRY, attended, reserved のいずれかであるものをカウント
-        const currentEntries = (breakdown['entry'] || 0) + 
-                               (breakdown['A_ENTRY'] || 0) + 
-                               (breakdown['attended'] || 0) + 
-                               (breakdown['reserved'] || 0);
-        const currentSeats = breakdown['attended'] || 0;
-
-        // 開催日ごとのスロット内訳
-        // DBに保存されている event_slots (JSON配列) をベースにする
-        let rawEventSlots: any[] = [];
-        try {
-            rawEventSlots = typeof e.event_slots === 'string'
-                ? JSON.parse(e.event_slots)
-                : (Array.isArray(e.event_slots) ? e.event_slots : []);
-        } catch { rawEventSlots = []; }
-
-        // slotBreakdown に存在する日付も、event_slots に無い場合は追加できるようにする
-        // 形式の揺れ（秒の有無など）を吸収するため、キーを YYYY-MM-DDTHH:mm に正規化する
-        const normalize = (dt: string) => dt ? dt.slice(0, 16) : dt;
-
-        const normalizedSlotBreakdown: Record<string, any> = {};
-        Object.entries(slotBreakdown).forEach(([k, v]) => {
-            normalizedSlotBreakdown[normalize(k)] = v;
-        });
-
-        const slotKeys = new Set([
-            ...rawEventSlots.map(s => normalize(s.datetime)), 
-            ...Object.keys(normalizedSlotBreakdown)
-        ]);
-        
-        const slots = Array.from(slotKeys).filter(Boolean).map(dateKey => {
-            const b = normalizedSlotBreakdown[dateKey] || {};
-            // rawEventSlots内も正規化して比較
-            const slotConfig = rawEventSlots.find(s => normalize(s.datetime) === dateKey) || {};
+        const bd = breakdownMap[e.id] || {};
+        const sbd = slotBreakdownMap[e.id] || {};
+        const ent = (bd['entry']||0) + (bd['A_ENTRY']||0) + (bd['attended']||0) + (bd['reserved']||0) + (bd['registered']||0);
+        const st = (bd['attended']||0);
+        const rawSlots = e.event_slots || [];
+        const norm = (dt: string) => dt ? dt.slice(0, 16) : dt;
+        const normSbd: any = {}; Object.entries(sbd).forEach(([k, v]) => { normSbd[norm(k)] = v; });
+        const keys = new Set([...rawSlots.map((s: any) => norm(s.datetime)), ...Object.keys(normSbd)]);
+        const slots = Array.from(keys).filter(Boolean).map(k => {
+            const b = normSbd[k] || {};
             return {
-                date: dateKey, // 正規化された YYYY-MM-DDTHH:mm
-                entries: (b['entry'] || 0) + (b['A_ENTRY'] || 0) + (b['attended'] || 0) + (b['reserved'] || 0),
-                seats: b['attended'] || 0,
+                date: k,
+                entries: (b['entry']||0) + (b['A_ENTRY']||0) + (b['attended']||0) + (b['reserved']||0) + (b['registered']||0),
+                seats: b['attended']||0,
                 status_breakdown: b,
-                target_seats: Number(slotConfig.target_seats || 0)
+                target_seats: 0
             };
         }).sort((a, b) => b.date.localeCompare(a.date));
 
-        let daysRemaining = 0;
-        let deadlineStr: string | null = null;
-        if (e.deadline) {
-            const raw = String(e.deadline);
-            deadlineStr = raw.includes('Z') || raw.includes('+')
-                ? toJSTDateString(raw)
-                : raw.slice(0, 10);
-            const deadlineDate = new Date(deadlineStr + 'T00:00:00');
-            daysRemaining = Math.floor((deadlineDate.getTime() - todayDate.getTime()) / 86400000);
-        }
-
-        let customSteps: any[] = [];
-        try {
-            const raw = typeof e.kpi_custom_steps === 'string'
-                ? JSON.parse(e.kpi_custom_steps)
-                : (Array.isArray(e.kpi_custom_steps) ? e.kpi_custom_steps : []);
-            if (Array.isArray(raw)) {
-                customSteps = raw.filter((x: any) => x?.label);
-            }
-        } catch { customSteps = []; }
+        const dlStr = e.deadline ? e.deadline.slice(0, 10) : null;
+        let daysRem = 0; if (dlStr) { daysRem = Math.floor((new Date(dlStr+'T00:00:00').getTime() - todayDate.getTime())/86400000); }
 
         return {
-            event_id: e.id,
-            event_title: e.title,
-            deadline: deadlineStr,
-            days_remaining: daysRemaining,
-            target_seats: Number(e.target_seats || 0),
-            current_seats: currentSeats,
-            current_entries: currentEntries,
-            event_slots: rawEventSlots,
-            unit_price: Number(e.unit_price || 0),
+            event_id: e.id, event_title: e.title, deadline: dlStr, days_remaining: daysRem,
+            target_seats: Number(e.target_seats || 0), current_seats: st, current_entries: ent,
+            event_slots: rawSlots, unit_price: Number(e.unit_price || 0),
             kpi_seat_to_entry_rate: Number(e.kpi_seat_to_entry_rate),
             kpi_entry_to_interview_rate: Number(e.kpi_entry_to_interview_rate),
             kpi_interview_to_reservation_rate: Number(e.kpi_interview_to_reservation_rate),
             kpi_reservation_to_application_rate: Number(e.kpi_reservation_to_application_rate),
             kpi_interview_to_inflow_rate: Number(e.kpi_interview_to_inflow_rate),
-            kpi_custom_steps: customSteps,
-            status_breakdown: breakdown,
-            slots
+            kpi_custom_steps: JSON.parse(JSON.stringify(e.kpi_custom_steps || [])),
+            status_breakdown: bd, slots
         };
     });
 };
 
-// ─────────────────────── Monthly Sales Actuals ───────────────────────
-
-/**
- * Get Sales Actuals for a given period (Monthly, Weekly, or Daily).
- */
 export const getSalesActuals = async (filters: KpiFilters) => {
-    // 依存テーブルとカラム(events / student_events)を保証
     await ensureDepTables();
-
     const params: any[] = [];
     let idx = 1;
-    
-    // We'll filter either by e.event_date or slots matching the period
-    const monthFilter = filters.month ? `LEFT(slot->>'datetime', 7) = $${idx} OR TO_CHAR(e.event_date, 'YYYY-MM') = $${idx}` : '';
-    if (filters.month) params.push(filters.month);
-    
-    let dateFilter = '';
-    if (!filters.month) {
-        const df = buildDateFilter(`COALESCE((slot->>'datetime')::timestamp, e.event_date)`, filters, params, idx);
-        dateFilter = df.condition;
-        idx = df.paramIndex;
-    }
-
-    const periodCond = filters.month ? monthFilter : dateFilter;
-    const whereClause = periodCond ? `WHERE (${periodCond})` : '';
+    let periodWhere = '';
+    if (filters.month) { periodWhere = `(TO_CHAR(ps.schedule_date, 'YYYY-MM') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM') = $${idx})`; params.push(filters.month); idx++; }
+    else if (filters.date) { periodWhere = `(TO_CHAR(ps.schedule_date, 'YYYY-MM-DD') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM-DD') = $${idx})`; params.push(filters.date); idx++; }
+    else if (filters.week) { periodWhere = `(TO_CHAR(ps.schedule_date, 'IYYY-\"W\"IW') = $${idx} OR TO_CHAR(p.entry_deadline, 'IYYY-\"W\"IW') = $${idx})`; params.push(filters.week); idx++; }
 
     const sql = `
-        SELECT
-            e.id AS event_id,
-            e.title AS event_title,
-            COALESCE(e.unit_price, 0)::int AS unit_price,
-            COUNT(DISTINCT se.id) FILTER (WHERE se.status = 'attended')::int AS attended_count,
-            (COALESCE(e.unit_price, 0) * COUNT(DISTINCT se.id) FILTER (WHERE se.status = 'attended'))::bigint AS sales
-        FROM events e
-        LEFT JOIN student_events se ON se.event_id = e.id
-        LEFT JOIN jsonb_array_elements(CASE WHEN e.event_slots IS NOT NULL AND jsonb_array_length(e.event_slots) > 0 THEN e.event_slots ELSE '[]'::jsonb END) AS slot ON true
-        ${whereClause}
-        GROUP BY e.id, e.title, e.unit_price
+        SELECT p.id AS event_id, p.title AS event_title, COALESCE(p.unit_price, 0)::int AS unit_price,
+               COUNT(DISTINCT spr.id) FILTER (WHERE spr.status = 'attended')::int AS attended_count,
+               (COALESCE(p.unit_price, 0) * COUNT(DISTINCT spr.id) FILTER (WHERE spr.status = 'attended'))::bigint AS sales
+        FROM projects p
+        LEFT JOIN project_schedules ps ON ps.project_id = p.id
+        LEFT JOIN student_project_relations spr ON spr.project_id = p.id
+        ${periodWhere ? `WHERE ${periodWhere}` : ''}
+        GROUP BY p.id, p.title, p.unit_price
         ORDER BY sales DESC
     `;
-
-    const result = await pool.query(sql, params);
-
-    const totalSales = result.rows.reduce((sum: number, r: any) => sum + Number(r.sales || 0), 0);
-    const totalAttendance = result.rows.reduce((sum: number, r: any) => sum + Number(r.attended_count || 0), 0);
-
+    const res = await pool.query(sql, params);
     return {
-        events: result.rows,
-        totalSales,
-        totalAttendance
+        events: res.rows,
+        totalSales: res.rows.reduce((s, r) => s + Number(r.sales || 0), 0),
+        totalAttendance: res.rows.reduce((s, r) => s + Number(r.attended_count || 0), 0)
     };
 };
