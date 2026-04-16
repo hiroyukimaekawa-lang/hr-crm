@@ -282,16 +282,27 @@ const nextMonth = () => {
   calendarBaseMonth.value = new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth() + 1, 1);
 };
 
-const openEventDetailPanel = async (event: EventItem, dateKey?: string) => {
+const openEventDetailPanel = async (event: any, dateKey?: string) => {
   selectedCalendarEvent.value = event;
   selectedEventDate.value = dateKey || '';
   selectedEventParticipants.value = [];
   isLoadingParticipants.value = true;
   try {
     const token = localStorage.getItem('token');
-    const res = await api.get(`/api/projects/${event.id}`, { headers: { Authorization: token } });
-    if (res.data && Array.isArray(res.data.participants)) {
-      selectedEventParticipants.value = res.data.participants;
+    const endpoint = event.isLegacy 
+      ? `/api/legacy-events/${event.id}/participants`
+      : `/api/projects/${event.id}`;
+    
+    const res = await api.get(endpoint, { headers: { Authorization: token } });
+    const rawData = event.isLegacy ? res.data : (res.data?.participants || []);
+    
+    if (Array.isArray(rawData)) {
+      selectedEventParticipants.value = rawData.map((p: any) => ({
+        ...p,
+        // For legacy, statuses might not be codes (A_ENTRY), so we keep them as is
+        // but we ensure status exists
+        status: p.status || 'unknown'
+      }));
     }
   } catch (error) {
     console.error('Failed to load participants', error);
@@ -311,7 +322,12 @@ const selectedEventParticipants = ref<Participant[]>([]);
 const isLoadingParticipants = ref(false);
 
 const filteredParticipants = computed(() => {
-  // カレンダーからクリックした場合: 日付一致 + A_ENTRYのみ
+  // カレンダーからクリックした場合: 日付一致 + A_ENTRYのみ (新プロジェクトの場合)
+  // 旧イベントの場合: 日付フィルタは難しい場合が多い（データ不整合）ので全員表示
+  if (selectedCalendarEvent.value?.isLegacy) {
+    return selectedEventParticipants.value;
+  }
+
   const base = selectedEventDate.value
     ? selectedEventParticipants.value.filter(p => {
         if (!p.selected_event_date) return false;
@@ -332,9 +348,9 @@ const participantStatusCounts = computed(() => {
 });
 
 // カレンダーセル用: 日付一致+A_ENTRYの参加者数を返す
-const getCalendarEntryCount = (eventId: number | string, dateKey: string, isLegacy?: boolean): number => {
-  if (isLegacy) return 0; // Legacy events don't have participant stats here
-  const ps = eventParticipantsMap.value[Number(eventId)] || [];
+const getCalendarEntryCount = (ev: any, dateKey: string): number => {
+  if (ev.isLegacy) return Number(ev.participant_count || 0);
+  const ps = eventParticipantsMap.value[Number(ev.id)] || [];
   return ps.filter(p =>
     p.status === 'A_ENTRY' &&
     p.selected_event_date &&
@@ -431,22 +447,25 @@ onMounted(fetchEvents);
                     >
                       <span v-if="ev.isLegacy">[旧] </span>{{ ev.title }}{{ ev.dateCount > 1 ? `（${ev.dateCount}日程）` : '' }}
                     </div>
-                    <!-- 参加ありボタン: 日付一致+A_ENTRYのみカウント -->
+                    <!-- 参加ありボタン -->
                     <button
-                      v-if="!ev.isLegacy && getCalendarEntryCount(ev.id, cell.key) > 0"
-                      class="w-full text-left px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[9px] font-semibold hover:bg-emerald-100 transition-colors border-t border-emerald-100 flex items-center gap-1"
+                      v-if="getCalendarEntryCount(ev, cell.key) > 0"
+                      class="w-full text-left px-1.5 py-0.5 text-[9px] font-semibold transition-colors border-t flex items-center gap-1"
+                      :class="ev.isLegacy ? 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100'"
                       @click.stop="openEventDetailPanel(ev, cell.key)"
                     >
                       <svg class="w-2.5 h-2.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg>
-                      {{ getCalendarEntryCount(ev.id, cell.key) }}名参加
+                      {{ getCalendarEntryCount(ev, cell.key) }}名
+                      <span v-if="ev.isLegacy">（旧データ）</span>
+                      <span v-else>参加</span>
                     </button>
                     <!-- 旧イベント用ボタン: 参加者データはないが詳細（移行）へ誘導可能 -->
                     <button
-                      v-if="ev.isLegacy"
+                      v-if="ev.isLegacy && getCalendarEntryCount(ev, cell.key) === 0"
                       class="w-full text-left px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[9px] font-semibold hover:bg-amber-100 transition-colors border-t border-amber-100"
                       @click.stop="activeTab = 'legacy'"
                     >
-                      旧データ（移行可能）
+                      詳細（移行可能）
                     </button>
                   </div>
                   <div v-if="getEventsForDate(cell.key).length > 4" class="text-[9px] text-blue-500 font-semibold px-1">
@@ -682,8 +701,9 @@ onMounted(fetchEvents);
         <!-- ヘッダー -->
         <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700">
           <div>
-            <h2 class="text-base font-bold text-white">{{ selectedCalendarEvent.title }}</h2>
-            <p class="text-xs text-blue-200 mt-0.5">{{ selectedEventDate }} の参加者（A:エントリーのみ）</p>
+            <h2 class="text-base font-bold text-white">{{ selectedCalendarEvent.title || selectedCalendarEvent.name }}</h2>
+            <p v-if="selectedCalendarEvent.isLegacy" class="text-xs text-blue-200 mt-0.5">旧イベントの全参加者（移行前確認用）</p>
+            <p v-else class="text-xs text-blue-200 mt-0.5">{{ selectedEventDate }} の参加者（A:エントリーのみ）</p>
           </div>
           <button class="text-blue-200 hover:text-white p-1 transition-colors" @click="closeEventDetailPanel">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -727,12 +747,15 @@ onMounted(fetchEvents);
                   <td class="px-4 py-3 text-gray-600 text-xs">{{ p.university || '-' }}</td>
                   <td class="px-4 py-3 text-gray-600 text-xs">{{ p.staff_name || '-' }}</td>
                   <td class="px-4 py-3">
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
-                      A:エントリー
+                    <span 
+                      class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
+                      :class="p.status === 'A_ENTRY' || p.status === 'エントリー' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'"
+                    >
+                      {{ p.status }}
                     </span>
                   </td>
                   <td class="px-4 py-3 text-gray-500 text-xs font-medium">
-                    {{ p.selected_event_date ? formatDateKey(p.selected_event_date) : '-' }}
+                    {{ p.selected_event_date ? (parseLocalDate(p.selected_event_date)?.toLocaleString('ja-JP') || '-') : '-' }}
                   </td>
                 </tr>
               </tbody>

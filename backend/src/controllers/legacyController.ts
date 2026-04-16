@@ -17,7 +17,8 @@ export const getLegacyEvents = async (req: Request, res: Response) => {
                 e.capacity,
                 e.target_seats,
                 e.unit_price,
-                e.type as legacy_type
+                e.type as legacy_type,
+                (SELECT COUNT(*) FROM student_events se WHERE se.event_id = e.id) as participant_count
             FROM events e
             LEFT JOIN event_dates ed ON ed.event_id = e.id
             ORDER BY COALESCE(ed.event_date, e.event_date) DESC
@@ -85,3 +86,30 @@ export const migrateLegacyEvent = async (req: Request, res: Response) => {
         res.status(500).json({ error: err.message });
     }
 };
+
+export const getLegacyEventParticipants = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query(`
+            SELECT 
+                se.student_id,
+                se.status,
+                s.name as name,
+                s.university as university,
+                u.name as staff_name,
+                -- Try to get selected_event_date if it exists in DB, otherwise fallback
+                se.created_at as selected_event_date
+            FROM student_events se
+            JOIN students s ON se.student_id = s.id
+            LEFT JOIN users u ON s.staff_id = u.id
+            WHERE se.event_id = $1
+            ORDER BY se.created_at DESC
+        `, [id]);
+        
+        res.json(result.rows);
+    } catch (err: any) {
+        console.error('getLegacyEventParticipants error:', err);
+        res.status(500).json({ error: err.message });
+    }
+};
+
