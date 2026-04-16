@@ -382,14 +382,14 @@ onMounted(fetchEvents);
                   </span>
                 </div>
 
-                <!-- 案件一覧：タイトル + 参加ありボタン -->
+                <!-- イベント一覧：タイトル + 参加ありボタン -->
                 <div class="p-1 space-y-0.5">
                   <div
                     v-for="ev in getEventsForDate(cell.key).slice(0, 4)"
                     :key="ev.id"
                     class="rounded overflow-hidden"
                   >
-                    <!-- 案件名 -->
+                    <!-- イベント名 -->
                     <div class="px-1.5 py-0.5 bg-blue-600 text-white text-[10px] font-semibold truncate leading-tight" :title="ev.title">
                       {{ ev.title }}{{ ev.dateCount > 1 ? `（${ev.dateCount}日程）` : '' }}
                     </div>

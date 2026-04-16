@@ -219,7 +219,7 @@ const updateEvent = async () => {
     lp_url: form.value.lp_url || null,
   }, { headers: { Authorization: token } });
   isEditing.value = false;
-  saveMessage.value = '案件情報を更新しました。';
+  saveMessage.value = 'イベント情報を更新しました。';
   fetchDetail();
 };
 
@@ -370,18 +370,18 @@ onMounted(fetchDetail);
         </button>
       </div>
 
-      <div v-if="!event" class="text-gray-500">案件が見つかりませんでした。</div>
+      <div v-if="!event" class="text-gray-500">イベントが見つかりませんでした。</div>
 
       <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div class="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div class="flex items-center justify-between mb-2">
             <h1 class="text-2xl font-bold text-gray-900">{{ event.title }}</h1>
             <button
-              class="px-4 py-2 text-base md:text-sm min-h-[44px] border border-gray-200 rounded-lg hover:bg-gray-50 flex-shrink-0 ml-4"
-              @click="isEditing = !isEditing"
-            >
-              {{ isEditing ? '編集を閉じる' : '案件編集' }}
-            </button>
+               class="px-4 py-2 text-base md:text-sm min-h-[44px] border border-gray-200 rounded-lg hover:bg-gray-50 flex-shrink-0 ml-4"
+               @click="isEditing = !isEditing"
+             >
+               {{ isEditing ? '編集を閉じる' : 'イベント編集' }}
+             </button>
           </div>
           
           <div class="flex items-center gap-2 mb-4">
@@ -389,7 +389,7 @@ onMounted(fetchDetail);
               エージェント面談
             </span>
             <span v-else class="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded">
-              案件
+              イベント
             </span>
             <span v-if="event.graduation_year" class="px-2 py-0.5 border border-indigo-200 text-indigo-600 text-xs font-bold rounded">
               {{ event.graduation_year }}卒
@@ -437,18 +437,24 @@ onMounted(fetchDetail);
               <span v-else>-</span>
             </div>
           </div>
+
+          <div v-if="event.description" class="mt-6 pt-6 border-t border-gray-100">
+            <h3 class="text-sm font-bold text-gray-900 mb-2">イベント概要</h3>
+            <p class="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{{ event.description }}</p>
+          </div>
+        </div>
           <div v-if="saveMessage" class="text-xs text-green-600 mb-3">{{ saveMessage }}</div>
 
           <div v-if="isEditing" class="border-t border-gray-100 pt-4 space-y-3">
             <div>
-              <label class="block text-xs text-gray-500 mb-1">案件名</label>
+              <label class="block text-xs text-gray-500 mb-1">イベント名</label>
               <input v-model="form.title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
             </div>
             <div class="flex gap-4">
               <div class="flex-1">
-                <label class="block text-xs text-gray-500 mb-1">案件種別</label>
+                <label class="block text-xs text-gray-500 mb-1">イベント種別</label>
                 <select v-model="form.type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
-                  <option value="event">案件</option>
+                  <option value="event">イベント</option>
                   <option value="agent_interview">エージェント面談</option>
                 </select>
               </div>
