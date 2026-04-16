@@ -16,6 +16,9 @@ import {
 interface EventItem {
   id: number;
   title: string;
+  name?: string; // Legacy field
+  isLegacy?: boolean; // Legacy flag
+  participant_count?: number; // Legacy field
   type?: string;
   graduation_year?: number;
   description?: string;
@@ -210,7 +213,7 @@ const eventsByDate = computed(() => {
       : (e.event_date ? [e.event_date] : []);
     
     const countMap: Record<string, number> = {};
-    dateList.forEach((d) => {
+    dateList.forEach((d: string) => {
       const key = formatDateKey(d);
       if (!key) return;
       countMap[key] = (countMap[key] || 0) + 1;
@@ -282,7 +285,7 @@ const nextMonth = () => {
   calendarBaseMonth.value = new Date(calendarBaseMonth.value.getFullYear(), calendarBaseMonth.value.getMonth() + 1, 1);
 };
 
-const openEventDetailPanel = async (event: any, dateKey?: string) => {
+const openEventDetailPanel = async (event: EventItem, dateKey?: string) => {
   selectedCalendarEvent.value = event;
   selectedEventDate.value = dateKey || '';
   selectedEventParticipants.value = [];
@@ -348,7 +351,7 @@ const participantStatusCounts = computed(() => {
 });
 
 // カレンダーセル用: 日付一致+A_ENTRYの参加者数を返す
-const getCalendarEntryCount = (ev: any, dateKey: string): number => {
+const getCalendarEntryCount = (ev: EventItem, dateKey: string): number => {
   if (ev.isLegacy) return Number(ev.participant_count || 0);
   const ps = eventParticipantsMap.value[Number(ev.id)] || [];
   return ps.filter(p =>
