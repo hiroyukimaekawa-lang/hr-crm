@@ -368,8 +368,18 @@ const registerMatcherInterview = async () => {
 
 const fetchAllEvents = async () => {
   const token = localStorage.getItem('token');
-  const res = await api.get('/api/projects', { headers: { Authorization: token } });
-  availableEvents.value = res.data;
+  try {
+    const [eventsRes, projectsRes] = await Promise.all([
+      api.get('/api/events', { headers: { Authorization: token } }),
+      api.get('/api/projects', { headers: { Authorization: token } })
+    ]);
+    availableEvents.value = [
+      ...eventsRes.data.map((e: any) => ({ ...e, source: 'event' })),
+      ...projectsRes.data.map((p: any) => ({ ...p, source: 'project' }))
+    ];
+  } catch (err) {
+    console.error('Failed to fetch events:', err);
+  }
 };
 
 const fetchProposalMaster = async () => {
@@ -570,7 +580,8 @@ const linkEvent = async () => {
     await api.post(`/api/students/${studentId}/events`, {
       event_id: selectedEventId.value,
       selected_event_date: selectedEventDate.value || null,
-      status: selectedEventStatus.value
+      status: selectedEventStatus.value,
+      source: selectedLinkEvent.value?.source
     }, { headers: { Authorization: token } });
     selectedEventId.value = '';
     selectedEventDate.value = '';
@@ -586,12 +597,14 @@ const linkEvent = async () => {
 const updateEventParticipationStatus = async (
   eventId: number,
   studentEventId: number,
-  status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'D_PASS' | 'E_FAIL' | 'XA_CANCEL'
+  status: 'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'D_PASS' | 'E_FAIL' | 'XA_CANCEL',
+  source?: string
 ) => {
   try {
     const token = localStorage.getItem('token');
+    const endpoint = source === 'project' ? 'projects' : 'events';
     await api.put(
-      `/api/projects/${eventId}/participants/${studentEventId}`,
+      `/api/${endpoint}/${eventId}/participants/${studentEventId}`,
       { status },
       { headers: { Authorization: token } }
     );
@@ -606,12 +619,14 @@ const updateEventParticipationDate = async (
   eventId: number,
   studentEventId: number,
   currentStatus: string,
-  date: string
+  date: string,
+  source?: string
 ) => {
   try {
     const token = localStorage.getItem('token');
+    const endpoint = source === 'project' ? 'projects' : 'events';
     await api.put(
-      `/api/projects/${eventId}/participants/${studentEventId}`,
+      `/api/${endpoint}/${eventId}/participants/${studentEventId}`,
       { status: currentStatus || 'A_ENTRY', selected_event_date: date || null },
       { headers: { Authorization: token } }
     );
@@ -639,7 +654,7 @@ const selectedLinkEventDates = computed(() => {
   return [] as string[];
 });
 
-// 案件参加回数（全参加）
+// イベント参加回数（全参加）
 const totalEventCount = computed(() =>
   (studentEvents.value ?? []).length
 );
@@ -649,7 +664,7 @@ const attendedEventCount = computed(() =>
   (studentEvents.value ?? []).filter((e: any) => e.participation_status === 'attended').length
 );
 
-// LTV: 着座済み案件のunit_priceの合計
+// LTV: 着座済みイベントのunit_priceの合計
 const ltv = computed(() =>
   (studentEvents.value ?? [])
     .filter((e: any) => e.participation_status === 'attended')
@@ -1396,7 +1411,7 @@ watch(selectedEventId, () => {
                       v-if="eventDateOptions(e).length > 1"
                       class="px-2 py-1.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-[140px]"
                       :value="e.selected_event_date || ''"
-                      @change="updateEventParticipationDate(e.id, e.student_event_id, e.participation_status, ($event.target as HTMLSelectElement).value)"
+                      @change="updateEventParticipationDate(e.id, e.student_event_id, e.participation_status, ($event.target as HTMLSelectElement).value, e.source)"
                     >
                       <option disabled value="">参加日を選択</option>
                       <option v-for="d in eventDateOptions(e)" :key="`student-event-date-${e.id}-${d}`" :value="d">
@@ -1415,16 +1430,16 @@ watch(selectedEventId, () => {
                 </div>
               </div>
               <div v-if="studentEvents.length === 0" class="text-base md:text-sm text-gray-400 text-center py-4">
-                案件への参加はありません
+                イベントへの参加はありません
               </div>
             </div>
 
             <div class="pt-5 border-t border-gray-100">
-              <label class="block text-base md:text-sm font-bold text-gray-600 mb-3 ml-1">新しい案件に紐付ける</label>
+              <label class="block text-base md:text-sm font-bold text-gray-600 mb-3 ml-1">新しいイベントに紐付ける</label>
               <div class="flex flex-col gap-2">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <select v-model="selectedEventId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                    <option disabled value="">案件を選択</option>
+                    <option disabled value="">イベントを選択</option>
                     <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
                   </select>
                   <select
@@ -1546,7 +1561,7 @@ watch(selectedEventId, () => {
                   v-model="newLogEventId"
                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  <option disabled value="">エントリーした案件を選択</option>
+                  <option disabled value="">エントリーしたイベントを選択</option>
                   <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
                 </select>
               </div>
@@ -1716,7 +1731,7 @@ watch(selectedEventId, () => {
             <div class="grid grid-cols-3 gap-3">
               <!-- 案件参加回数 -->
               <div class="bg-gray-50 rounded-xl p-3 text-center">
-                <p class="text-xs text-gray-500 mb-1">案件参加回数</p>
+                <p class="text-xs text-gray-500 mb-1">イベント参加回数</p>
                 <p class="text-lg font-extrabold text-gray-900">{{ totalEventCount }}<span class="text-xs font-normal ml-1">回</span></p>
               </div>
               <!-- 着座回数 -->
@@ -1734,7 +1749,7 @@ watch(selectedEventId, () => {
             <!-- 参加案件一覧（折りたたみ） -->
             <details class="mt-3">
               <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none">
-                参加案件一覧を見る（{{ totalEventCount }}件）
+                参加イベント一覧を見る（{{ totalEventCount }}件）
               </summary>
               <div class="mt-2 space-y-1">
                 <div
@@ -1761,7 +1776,7 @@ watch(selectedEventId, () => {
                   </div>
                 </div>
                 <div v-if="!(studentEvents ?? []).length" class="text-xs text-gray-400 text-center py-2">
-                  参加案件なし
+                  参加イベントなし
                 </div>
               </div>
             </details>
@@ -1777,8 +1792,8 @@ watch(selectedEventId, () => {
       >
         <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
-            <h3 class="text-lg font-bold text-gray-900">開催中・未終了案件概要</h3>
-            <p class="text-base md:text-sm text-gray-500">案件名を開いて詳細を確認</p>
+            <h3 class="text-lg font-bold text-gray-900">開催中・未終了イベント概要</h3>
+            <p class="text-base md:text-sm text-gray-500">イベント名を開いて詳細を確認</p>
           </div>
           <button class="px-3 py-1.5 text-base md:text-sm border border-gray-300 rounded-lg hover:bg-gray-50" @click="showEventOverviewPanel = false">閉じる</button>
         </div>
@@ -1824,7 +1839,7 @@ watch(selectedEventId, () => {
             </div>
           </div>
           <div v-if="upcomingEvents.length === 0" class="text-base md:text-sm text-gray-400 text-center py-8">
-            提案候補案件はありません
+            提案候補イベントはありません
           </div>
         </div>
       </aside>
@@ -1947,6 +1962,7 @@ watch(selectedEventId, () => {
       :eventId="statusModalTarget?.id || 0"
       :studentEventId="statusModalTarget?.student_event_id || 0"
       :currentStatus="statusModalTarget?.participation_status || 'A_ENTRY'"
+      :source="statusModalTarget?.source"
       @updated="fetchDetail"
     />
   </Layout>

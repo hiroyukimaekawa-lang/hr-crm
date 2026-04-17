@@ -11,6 +11,7 @@ const props = defineProps<{
   eventId: number
   studentEventId: number
   currentStatus: string
+  source?: string
 }>()
 
 const emit = defineEmits<{
@@ -31,8 +32,9 @@ const update = async () => {
   saving.value = true
   try {
     const token = localStorage.getItem('token')
+    const endpoint = props.source === 'project' ? 'projects' : 'events'
     await api.put(
-      `/api/projects/${props.eventId}/participants/${props.studentEventId}`,
+      `/api/${endpoint}/${props.eventId}/participants/${props.studentEventId}`,
       { status: selectedStatus.value },
       { headers: { Authorization: token } }
     )

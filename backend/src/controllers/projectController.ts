@@ -69,6 +69,7 @@ export const getProjects = async (req: Request, res: Response) => {
         // map backward compatibility
         const projects = result.rows.map(r => ({
            ...r,
+           source: 'project',
            event_dates: (r.project_schedules || []).map((s:any) => s.date)
         }));
         res.json(projects);
@@ -410,6 +411,7 @@ export const getProjectDetail = async (req: Request, res: Response) => {
         res.json({
             event: {
                 ...p,
+                source: 'project',
                 project_schedules: scheduleRes.rows,
                 // fallback for compat
                 event_dates: scheduleRes.rows.map((r:any) => r.schedule_date)

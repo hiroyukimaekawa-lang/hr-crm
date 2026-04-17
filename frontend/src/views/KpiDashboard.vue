@@ -774,7 +774,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
           <div class="flex items-center justify-between mb-4">
             <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
               <Calendar class="w-3.5 h-3.5" />
-              案件別内訳 (月間担保設定)
+              イベント別内訳 (月間担保設定)
             </h4>
             <div class="flex items-center gap-4">
               <div class="text-[10px] font-bold text-gray-400 uppercase">確約合計: <span class="text-gray-900 text-sm ml-1">¥{{ (totalEventGuaranteedSales || 0).toLocaleString() }}</span></div>

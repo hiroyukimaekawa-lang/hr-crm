@@ -189,7 +189,8 @@ export const getEvents = async (req: Request, res: Response) => {
             ) part_stats ON true
             ORDER BY e.event_date DESC
         `);
-        res.json(result.rows);
+        const events = result.rows.map(r => ({ ...r, source: 'event' }));
+        res.json(events);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
@@ -434,6 +435,7 @@ export const getEventDetail = async (req: Request, res: Response) => {
         res.json({
             event: {
                 ...eventRes.rows[0],
+                source: 'event',
                 event_dates: eventDatesRes.rows.map((r: any) => r.event_date)
             },
             participants: participantsRes.rows

@@ -2,8 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router';
 import Dashboard from '../views/Dashboard.vue';
 import StudentList from '../views/StudentList.vue';
 import StudentDetail from '../views/StudentDetail.vue';
-import ProjectList from '../views/ProjectList.vue';
-import ProjectDetail from '../views/ProjectDetail.vue';
+import EventList from '../views/EventList.vue';
+import EventDetail from '../views/EventDetail.vue';
 import Login from '../views/Login.vue';
 import RegisterInvite from '../views/RegisterInvite.vue';
 import LeadTime from '../views/LeadTime.vue';
@@ -19,10 +19,10 @@ const routes = [
   { path: '/dashboard', component: Dashboard },
   { path: '/students', component: StudentList },
   { path: '/students/:id', component: StudentDetail },
-  { path: '/projects', component: ProjectList },
-  { path: '/projects/:id', component: ProjectDetail },
-  { path: '/events', redirect: '/projects' },
-  { path: '/events/:id', redirect: (to: { params: { id: string } }) => `/projects/${to.params.id}` },
+  { path: '/events', component: EventList },
+  { path: '/events/:id', component: EventDetail },
+  { path: '/projects', redirect: '/events' },
+  { path: '/projects/:id', redirect: (to: { params: { id: string } }) => `/events/${to.params.id}` },
   { path: '/lead-time', name: '初回ファネル登録', component: LeadTime },
   { path: '/kpi', component: KpiDashboard },
   { path: '/event-kpi', redirect: '/kpi' },

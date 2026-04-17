@@ -89,66 +89,87 @@ const activeTab = ref<'projects' | 'legacy'>('projects');
 
 const fetchEvents = async () => {
   const token = localStorage.getItem('token');
-  const res = await api.get('/api/projects', { headers: { Authorization: token } });
-  events.value = res.data;
-  
-  // Also fetch legacy events
   try {
-    const legacyRes = await api.get('/api/legacy-events', { headers: { Authorization: token } });
-    legacyEvents.value = legacyRes.data;
-  } catch (err) {
-    console.error('Failed to fetch legacy events', err);
-  }
+    const [eventsRes, projectsRes, legacyRes] = await Promise.all([
+      api.get('/api/events', { headers: { Authorization: token } }),
+      api.get('/api/projects', { headers: { Authorization: token } }),
+      api.get('/api/legacy-events', { headers: { Authorization: token } })
+    ]);
 
-  const detailResults = await Promise.all(
-    events.value.map(async (e) => {
-      try {
-        const detail = await api.get(`/api/projects/${e.id}`, { headers: { Authorization: token } });
-        const participants: Participant[] = Array.isArray(detail.data?.participants)
-          ? detail.data.participants.map((p: any) => ({
-              id: p.id,
-              student_id: p.student_id,
-              status: String(p.status || ''),
-              selected_event_date: p.selected_event_date || null,
-              name: String(p.name || ''),
-              university: String(p.university || ''),
-              staff_name: String(p.staff_name || '')
-            }))
-          : [];
-        const names = participants.map(p => p.name).filter(Boolean);
-        return { eventId: e.id, names: Array.from(new Set<string>(names)), participants };
-      } catch {
-        return { eventId: e.id, names: [] as string[], participants: [] as Participant[] };
-      }
-    })
-  );
-  const nameMap: Record<number, string[]> = {};
-  const participantMap: Record<number, Participant[]> = {};
-  detailResults.forEach((r) => {
-    nameMap[r.eventId] = r.names;
-    participantMap[r.eventId] = r.participants;
-  });
-  eventParticipantNames.value = nameMap;
-  eventParticipantsMap.value = participantMap;
+    // Unify active events and projects
+    const allActive = [
+      ...eventsRes.data.map((e: any) => ({ ...e, source: 'event' })),
+      ...projectsRes.data.map((p: any) => ({ ...p, source: 'project' }))
+    ];
+    
+    // Sort by date descending
+    allActive.sort((a, b) => {
+      const dateA = a.event_date || (a.event_dates && a.event_dates[0]) || '';
+      const dateB = b.event_date || (b.event_dates && b.event_dates[0]) || '';
+      return dateB.localeCompare(dateA);
+    });
+
+    events.value = allActive;
+    legacyEvents.value = legacyRes.data;
+
+    const detailResults = await Promise.all(
+      events.value.map(async (e) => {
+        try {
+          const endpoint = e.source === 'project' ? `/api/projects/${e.id}` : `/api/events/${e.id}`;
+          const detail = await api.get(endpoint, { headers: { Authorization: token } });
+          const participants: Participant[] = Array.isArray(detail.data?.participants)
+            ? detail.data.participants.map((p: any) => ({
+                id: p.id,
+                student_id: p.student_id,
+                status: String(p.status || ''),
+                selected_event_date: p.selected_event_date || null,
+                name: String(p.name || ''),
+                university: String(p.university || ''),
+                staff_name: String(p.staff_name || '')
+              }))
+            : [];
+          const names = participants.map(p => p.name).filter(Boolean);
+          return { eventId: e.id, source: e.source, names: Array.from(new Set<string>(names)), participants };
+        } catch {
+          return { eventId: e.id, source: e.source, names: [] as string[], participants: [] as Participant[] };
+        }
+      })
+    );
+    const nameMap: Record<string, string[]> = {};
+    const participantMap: Record<string, Participant[]> = {};
+    detailResults.forEach((r) => {
+      const key = `${r.source}-${r.eventId}`;
+      nameMap[key as any] = r.names;
+      participantMap[key as any] = r.participants;
+    });
+    // Adjust logic for nameMap and participantMap to use source-id key
+    (eventParticipantNames as any).value = nameMap;
+    (eventParticipantsMap as any).value = participantMap;
+  } catch (err) {
+    console.error('Failed to fetch events', err);
+  }
 };
 
 const migrateLegacyEvent = async (legacyId: number) => {
-  if (!confirm('この旧イベントを新規プロジェクトとしてコピーしますか？')) return;
+  if (!confirm('この旧イベントを現在のイベント管理に移行しますか？')) return;
   try {
     const token = localStorage.getItem('token');
+    // Note: This still migrates to 'projects' as per original logic, 
+    // but the UI will show it in 'active' unified list.
     await api.post(`/api/legacy-events/${legacyId}/migrate`, {}, { headers: { Authorization: token } });
-    alert('プロジェクトとしてコピーしました。');
+    alert('移行しました。');
     fetchEvents();
     activeTab.value = 'projects';
   } catch (err) {
     console.error('Migration failed', err);
-    alert('コピーに失敗しました。');
+    alert('移行に失敗しました。');
   }
 };
 
 const createEvent = async () => {
   const token = localStorage.getItem('token');
-  await api.post('/api/projects', {
+  // Reverted to original events table
+  await api.post('/api/events', {
     ...newEvent.value,
     event_dates: newEvent.value.event_dates.filter(v => String(v || '').trim())
   }, { headers: { Authorization: token } });
@@ -157,10 +178,11 @@ const createEvent = async () => {
   fetchEvents();
 };
 
-const deleteEvent = async (eventId: number) => {
-  if (!confirm('この案件を削除しますか？')) return;
+const deleteEvent = async (event: EventItem) => {
+  if (!confirm('このイベントを削除しますか？')) return;
   const token = localStorage.getItem('token');
-  await api.delete(`/api/projects/${eventId}`, { headers: { Authorization: token } });
+  const endpoint = (event as any).source === 'project' ? `/api/projects/${event.id}` : `/api/events/${event.id}`;
+  await api.delete(endpoint, { headers: { Authorization: token } });
   fetchEvents();
 };
 
@@ -294,7 +316,7 @@ const openEventDetailPanel = async (event: EventItem, dateKey?: string) => {
     const token = localStorage.getItem('token');
     const endpoint = event.isLegacy 
       ? `/api/legacy-events/${event.id}/participants`
-      : `/api/projects/${event.id}`;
+      : ((event as any).source === 'project' ? `/api/projects/${event.id}` : `/api/events/${event.id}`);
     
     const res = await api.get(endpoint, { headers: { Authorization: token } });
     const rawData = event.isLegacy ? res.data : (res.data?.participants || []);
@@ -302,8 +324,6 @@ const openEventDetailPanel = async (event: EventItem, dateKey?: string) => {
     if (Array.isArray(rawData)) {
       selectedEventParticipants.value = rawData.map((p: any) => ({
         ...p,
-        // For legacy, statuses might not be codes (A_ENTRY), so we keep them as is
-        // but we ensure status exists
         status: p.status || 'unknown'
       }));
     }
@@ -353,7 +373,8 @@ const participantStatusCounts = computed(() => {
 // カレンダーセル用: 日付一致+A_ENTRYの参加者数を返す
 const getCalendarEntryCount = (ev: EventItem, dateKey: string): number => {
   if (ev.isLegacy) return Number(ev.participant_count || 0);
-  const ps = eventParticipantsMap.value[Number(ev.id)] || [];
+  const key = `${(ev as any).source}-${ev.id}`;
+  const ps = eventParticipantsMap.value[key as any] || [];
   return ps.filter(p =>
     p.status === 'A_ENTRY' &&
     p.selected_event_date &&
@@ -489,14 +510,14 @@ onMounted(fetchEvents);
             class="pb-4 text-sm font-bold border-b-2 transition-colors"
             :class="activeTab === 'projects' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
           >
-            アクティブ案件 ({{ events.length }})
+            アクティブイベント ({{ events.length }})
           </button>
           <button 
             @click="activeTab = 'legacy'"
             class="pb-4 text-sm font-bold border-b-2 transition-colors"
             :class="activeTab === 'legacy' ? 'border-amber-600 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
           >
-            旧イベント可視化 ({{ legacyEvents.length }})
+            旧データ参照 ({{ legacyEvents.length }})
           </button>
         </nav>
       </div>
@@ -523,7 +544,7 @@ onMounted(fetchEvents);
                class="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700 transition-colors"
                @click="migrateLegacyEvent(e.id)"
             >
-              プロジェクトとして再登録
+              イベントとして移行
             </button>
           </div>
         </div>
@@ -543,7 +564,7 @@ onMounted(fetchEvents);
                 </span>
                 <button
                   class="text-gray-400 hover:text-red-600"
-                  @click="deleteEvent(e.id)"
+                  @click="deleteEvent(e)"
                   title="削除"
                 >
                   <Trash2 class="w-4 h-4" />
@@ -635,7 +656,7 @@ onMounted(fetchEvents);
             </div>
             <button
               class="w-full text-blue-600 hover:text-blue-800 text-sm font-semibold flex items-center justify-center gap-2 py-2 border border-blue-100 rounded-lg bg-white"
-              @click="router.push(`/projects/${e.id}`)"
+              @click="router.push(`/events/${e.id}${e.source==='project'?'?source=project':''}`)"
             >
               イベント詳細・参加者管理
               <ChevronRight class="w-4 h-4" />

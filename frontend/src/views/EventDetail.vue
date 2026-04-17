@@ -13,6 +13,7 @@ import {
   XCircle,
   Download
 } from 'lucide-vue-next';
+import StatusChangeModal from '../components/StatusChangeModal.vue';
 import { getStatusLabel, getStatusBadgeClass } from '../lib/statusConfig'
 
 interface Participant {
@@ -79,6 +80,19 @@ const sortField = ref<'status' | null>(null);
 const sortOrder = ref<'asc' | 'desc'>('asc');
 const kgiData = ref<EventKgi | null>(null);
 const kgiLoading = ref(false);
+const source = ref<'event' | 'project'>((route.query.source as 'event' | 'project') || 'event');
+
+const showStatusModal = ref(false);
+const statusModalTarget = ref<any>(null);
+
+const openStatusModal = (participant: any) => {
+  statusModalTarget.value = {
+    ...participant,
+    eventId: Number(eventId),
+    source: source.value
+  };
+  showStatusModal.value = true;
+};
 
 // statusModal related state removed as per refactor plan
 
@@ -153,9 +167,11 @@ const toDateTimeLocalValue = (value?: string) => {
 
 const fetchDetail = async () => {
   const token = localStorage.getItem('token');
-  const res = await api.get(`/api/projects/${eventId}`, { headers: { Authorization: token } });
-  event.value = res.data.event;
-  participants.value = res.data.participants;
+  try {
+    const endpoint = source.value === 'project' ? `/api/projects/${eventId}` : `/api/events/${eventId}`;
+    const res = await api.get(endpoint, { headers: { Authorization: token } });
+    event.value = res.data.event;
+    participants.value = res.data.participants;
   form.value = {
     title: event.value?.title || '',
     type: event.value?.type || 'event',
@@ -183,23 +199,29 @@ const fetchDetail = async () => {
   };
 
   // KPI進捗の取得
-  try {
-    kgiLoading.value = true;
-    const token = localStorage.getItem('token');
-    const kgiRes = await api.get('/api/projects/kgi-progress', { headers: { Authorization: token } });
-    if (Array.isArray(kgiRes.data)) {
-      kgiData.value = kgiRes.data.find((k: any) => k.event_id === Number(eventId)) || null;
+    try {
+      kgiLoading.value = true;
+      const kgiEndpoint = source.value === 'project' ? '/api/projects/kgi-progress' : '/api/events/kgi-progress';
+      const kgiRes = await api.get(kgiEndpoint, { headers: { Authorization: token } });
+      if (Array.isArray(kgiRes.data)) {
+        kgiData.value = kgiRes.data.find((k: any) => k.event_id === Number(eventId)) || null;
+      }
+    } catch (err) {
+      console.error('KGI fetch error', err);
+    } finally {
+      kgiLoading.value = false;
     }
   } catch (err) {
-    console.error('KGI fetch error', err);
-  } finally {
-    kgiLoading.value = false;
+    console.error('Fetch detail error', err);
   }
 };
 
-const updateStatus = async (studentEventId: number, status: string) => {
+const updateParticipantStatus = async (studentEventId: number, status: string) => {
   const token = localStorage.getItem('token');
-  await api.put(`/api/projects/${eventId}/participants/${studentEventId}`,
+  const endpoint = source.value === 'project' 
+    ? `/api/projects/${eventId}/participants/${studentEventId}`
+    : `/api/events/${eventId}/participants/${studentEventId}`;
+  await api.put(endpoint,
     { status },
     { headers: { Authorization: token } }
   );
@@ -208,8 +230,8 @@ const updateStatus = async (studentEventId: number, status: string) => {
 
 const updateEvent = async () => {
   const token = localStorage.getItem('token');
-  saveMessage.value = '';
-  await api.put(`/api/projects/${eventId}`, {
+  const endpoint = source.value === 'project' ? `/api/projects/${eventId}` : `/api/events/${eventId}`;
+  await api.put(endpoint, {
     title: form.value.title,
     type: form.value.type,
     graduation_year: form.value.graduation_year ? Number(form.value.graduation_year) : null,
@@ -263,55 +285,7 @@ const filteredParticipants = computed(() => {
   });
 });
 
-const statusBadge = (status: string) => {
-  switch (status) {
-    case 'A_ENTRY':
-      return 'bg-blue-100 text-blue-700';
-    case 'B_WAITING':
-      return 'bg-amber-100 text-amber-700';
-    case 'C_WAITING':
-      return 'bg-purple-100 text-purple-700';
-    case 'XA_CANCEL':
-      return 'bg-red-100 text-red-700';
-    case 'D_PASS':
-      return 'bg-green-100 text-green-700';
-    case 'E_FAIL':
-      return 'bg-red-100 text-red-700';
-    case 'attended':
-      return 'bg-green-100 text-green-700';
-    case 'registered':
-      return 'bg-blue-100 text-blue-700';
-    case 'canceled':
-      return 'bg-gray-100 text-gray-600';
-    default:
-      return 'bg-slate-100 text-slate-700';
-  }
-};
-
-const statusLabel = (status: string) => {
-  switch (status) {
-    case 'A_ENTRY':
-      return 'A:エントリー';
-    case 'B_WAITING':
-      return 'B:回答待ち';
-    case 'C_WAITING':
-      return 'C:回答待ち';
-    case 'XA_CANCEL':
-      return 'XA:エントリーキャンセル';
-    case 'D_PASS':
-      return 'D:合格';
-    case 'E_FAIL':
-      return 'E:不合格';
-    case 'attended':
-      return '出席';
-    case 'registered':
-      return '申込';
-    case 'canceled':
-      return 'キャンセル';
-    default:
-      return status || '-';
-  }
-};
+// Using imported getStatusLabel and getStatusBadgeClass from ../lib/statusConfig
 
 const formatDateKey = (value: string | Date | null | undefined) => {
   if (!value) return '-';
@@ -339,7 +313,7 @@ const downloadCSV = () => {
     p.staff_name || '-',
     formatDateKey(p.created_at),
     formatDateKey(p.selected_event_date),
-    statusLabel(p.status)
+    getStatusLabel(p.status)
   ]);
   
   const csvContent = [headers.join(',')]
@@ -364,7 +338,7 @@ onMounted(fetchDetail);
   <Layout>
     <div class="p-4 md:p-6 lg:p-8">
       <div class="flex items-center justify-between mb-6">
-        <button @click="router.push('/projects')" class="text-gray-600 hover:text-gray-900 flex items-center gap-2">
+        <button @click="router.push('/events')" class="text-gray-600 hover:text-gray-900 flex items-center gap-2">
           <ArrowLeft class="w-4 h-4" />
           一覧に戻る
         </button>
@@ -614,8 +588,9 @@ onMounted(fetchDetail);
                     <td class="px-4 py-3 text-gray-900 font-medium">{{ formatDateKey(p.selected_event_date) }}</td>
                     <td class="px-4 py-3">
                       <span
-                        class="text-xs font-bold px-2 py-1 rounded-full border"
+                        class="text-xs font-bold px-2 py-1 rounded-full border cursor-pointer hover:opacity-80 transition-opacity"
                         :class="getStatusBadgeClass(p.status)"
+                        @click="openStatusModal(p)"
                       >{{ getStatusLabel(p.status) }}</span>
                     </td>
                     <td class="px-4 py-3 text-right">
@@ -632,5 +607,16 @@ onMounted(fetchDetail);
         </div>
       </div>
     </div>
+    <StatusChangeModal
+      v-if="showStatusModal"
+      v-model="showStatusModal"
+      :studentName="statusModalTarget?.name || ''"
+      :eventTitle="event?.title || ''"
+      :eventId="statusModalTarget?.eventId || 0"
+      :studentEventId="statusModalTarget?.id || 0"
+      :currentStatus="statusModalTarget?.status || 'A_ENTRY'"
+      :source="statusModalTarget?.source"
+      @updated="fetchDetail"
+    />
   </Layout>
 </template>

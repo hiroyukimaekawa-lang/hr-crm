@@ -67,7 +67,7 @@ const menuItems = computed(() => [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard, path: '/dashboard' },
   { id: 'kpi', label: 'KPI', icon: TrendingUp, path: '/kpi' },
   { id: 'students', label: '学生管理', icon: Users, path: '/students' },
-  { id: 'events', label: '案件管理', icon: Calendar, path: '/projects' },
+  { id: 'events', label: 'イベント管理', icon: Calendar, path: '/events' },
   { id: 'lead-time', label: 'ファネル', icon: ChartColumn, path: '/lead-time' },
   { id: 'settings', label: '設定', icon: Settings, path: '/settings' }
 ]);
@@ -169,7 +169,7 @@ watch(
           <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">H</div>
           <div v-if="!sidebarCollapsed">
             <h1 class="font-semibold text-lg">HR CRM</h1>
-            <p class="text-xs text-slate-400">案件送客管理</p>
+            <p class="text-xs text-slate-400">イベント・送客管理</p>
           </div>
         </div>
       </div>

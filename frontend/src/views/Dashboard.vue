@@ -283,19 +283,37 @@ const grad28Counts = computed(() => {
 
 const fetchKgiProgress = async () => {
   const token = localStorage.getItem('token');
-  const res = await api.get('/api/projects/kgi-progress', { headers: { Authorization: token } });
-  kgiProgress.value = Array.isArray(res.data) ? res.data : [];
+  try {
+    const [eventKgi, projectKgi] = await Promise.all([
+      api.get('/api/events/kgi-progress', { headers: { Authorization: token } }),
+      api.get('/api/projects/kgi-progress', { headers: { Authorization: token } })
+    ]);
+    kgiProgress.value = [
+      ...(Array.isArray(eventKgi.data) ? eventKgi.data : []),
+      ...(Array.isArray(projectKgi.data) ? projectKgi.data : [])
+    ];
+  } catch (err) {
+    console.error('KGI fetch error', err);
+  }
 };
 
 const fetchData = async () => {
   try {
     const token = localStorage.getItem('token');
-    const [studentRes, eventRes] = await Promise.all([
+    const [studentRes, eventRes, projectRes] = await Promise.all([
       api.get('/api/students', { headers: { Authorization: token } }),
+      api.get('/api/events', { headers: { Authorization: token } }),
       api.get('/api/projects', { headers: { Authorization: token } })
     ]);
     students.value = studentRes.data;
-    events.value = eventRes.data;
+    
+    // Unify active events and projects
+    const allActive = [
+      ...eventRes.data.map((e: any) => ({ ...e, source: 'event' })),
+      ...projectRes.data.map((p: any) => ({ ...p, source: 'project' }))
+    ];
+    events.value = allActive;
+    
     fetchInterviewMetrics().catch((err) => console.error(err));
     fetchFunnelKpi().catch((err) => console.error(err));
     fetchKgiProgress().catch((err) => console.error(err));
@@ -523,7 +541,8 @@ const openYomiEventDetail = async (eventId: number) => {
   yomiLoading.value = true;
   try {
     const token = localStorage.getItem('token');
-    const res = await api.get(`/api/projects/${eventId}`, { headers: { Authorization: token } });
+    const source = (found as any)?.source === 'project' ? 'projects' : 'events';
+    const res = await api.get(`/api/${source}/${eventId}`, { headers: { Authorization: token } });
     console.log('API Response Participants:', res.data.participants);
     yomiParticipants.value = res.data.participants || [];
     console.log('yomiParticipants value:', yomiParticipants.value);
@@ -702,8 +721,9 @@ const markAttended = async (participant: EventParticipant) => {
     }
 
     const token = localStorage.getItem('token');
+    const source = (selectedYomiEvent.value as any).source === 'project' ? 'projects' : 'events';
     await api.put(
-      `/api/projects/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
+      `/api/${source}/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
       { status: 'attended' },
       { headers: { Authorization: token } }
     );
@@ -728,8 +748,9 @@ const markNoShow = async (participant: EventParticipant) => {
     );
     if (target) target.status = 'E_FAIL';
     const token = localStorage.getItem('token');
+    const source = (selectedYomiEvent.value as any).source === 'project' ? 'projects' : 'events';
     await api.put(
-      `/api/projects/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
+      `/api/${source}/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
       { status: 'E_FAIL' },
       { headers: { Authorization: token } }
     );
@@ -762,8 +783,9 @@ const confirmReschedule = async () => {
     }
 
     const token = localStorage.getItem('token');
+    const source = (selectedYomiEvent.value as any).source === 'project' ? 'projects' : 'events';
     await api.put(
-      `/api/projects/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
+      `/api/${source}/${selectedYomiEvent.value.id}/participants/${studentEventId}`,
       {
         status: 'B_WAITING',
         selected_event_date: rescheduleSelectedDate.value || null

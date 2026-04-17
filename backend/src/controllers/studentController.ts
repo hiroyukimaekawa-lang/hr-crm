@@ -737,33 +737,36 @@ export const getStudentDetail = async (req: Request, res: Response) => {
                 e.description,
                 e.location,
                 e.event_slots,
-                e.capacity,
-                e.target_seats,
                 e.unit_price,
-                e.target_sales,
-                e.current_sales,
-                e.kpi_seat_to_entry_rate,
-                e.kpi_entry_to_interview_rate,
-                e.kpi_interview_to_inflow_rate,
-                e.kpi_custom_steps,
-                e.yomi_statuses,
-                e.entry_deadline,
-                e.lp_url,
                 to_char(e.event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as event_date,
-                COALESCE(eds.event_dates, '[]'::json) as event_dates,
                 se.id as student_event_id,
                 se.status as participation_status,
                 se.created_at as participation_created_at,
-                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date
+                to_char(se.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
+                'event' as source
             FROM events e
             JOIN student_events se ON e.id = se.event_id
-            LEFT JOIN LATERAL (
-                SELECT json_agg(to_char(ed.event_date, 'YYYY-MM-DD"T"HH24:MI:SS') ORDER BY ed.event_date ASC) as event_dates
-                FROM event_dates ed
-                WHERE ed.event_id = e.id
-            ) eds ON true
             WHERE se.student_id = $1
-            ORDER BY se.created_at DESC
+            
+            UNION ALL
+            
+            SELECT
+                p.id,
+                p.title,
+                p.description,
+                NULL as location,
+                p.event_slots,
+                p.unit_price,
+                NULL as event_date,
+                pp.id as student_event_id,
+                pp.status as participation_status,
+                pp.created_at as participation_created_at,
+                to_char(pp.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
+                'project' as source
+            FROM projects p
+            JOIN student_project_relations pp ON p.id = pp.project_id
+            WHERE pp.student_id = $1
+            ORDER BY participation_created_at DESC
         `, [id]);
         const logsRes = await pool.query(`
             SELECT 
@@ -1202,18 +1205,31 @@ export const getInterviewMetrics = async (req: Request, res: Response) => {
 
 export const linkEvent = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { event_id, status, selected_event_date } = req.body;
+    const { event_id, status, selected_event_date, source } = req.body;
     try {
-        await ensureStudentEventsColumns();
         const safeStatus = ['A_ENTRY', 'B_WAITING', 'C_WAITING', 'D_PASS', 'E_FAIL', 'XA_CANCEL'].includes(status) ? status : 'A_ENTRY';
-        await pool.query(
-            `INSERT INTO student_events (student_id, event_id, status, selected_event_date)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (student_id, event_id, selected_event_date)
-             DO UPDATE SET
-                status = EXCLUDED.status`,
-            [id, event_id, safeStatus, normalizeToHour(selected_event_date)]
-        );
+        const normDate = normalizeToHour(selected_event_date);
+
+        if (source === 'project') {
+            await pool.query(
+                `INSERT INTO student_project_relations (student_id, project_id, status, selected_event_date)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (student_id, project_id, selected_event_date)
+                 DO UPDATE SET
+                    status = EXCLUDED.status`,
+                [id, event_id, safeStatus, normDate]
+            );
+        } else {
+            await ensureStudentEventsColumns();
+            await pool.query(
+                `INSERT INTO student_events (student_id, event_id, status, selected_event_date)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (student_id, event_id, selected_event_date)
+                 DO UPDATE SET
+                    status = EXCLUDED.status`,
+                [id, event_id, safeStatus, normDate]
+            );
+        }
         res.json({ success: true });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
