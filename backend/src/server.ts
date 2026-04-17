@@ -9,6 +9,7 @@ import studentRoutes from './routes/studentRoutes';
 import projectRoutes from './routes/projectRoutes';
 import kpiRoutes from './routes/kpiRoutes';
 import legacyRoutes from './routes/legacyRoutes';
+import eventRoutes from './routes/eventRoutes';
 import { applyPerformanceOptimizations } from './config/performance';
 
 dotenv.config();
@@ -64,7 +65,7 @@ app.use('/api/students', studentRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/legacy-events', legacyRoutes);
 // Legacy routes compat
-app.use('/api/events', projectRoutes);
+app.use('/api/events', eventRoutes);
 app.use('/api/kpi', kpiRoutes);
 
 // 旧APIとの互換性のためのエイリアス（必要に応じて）
