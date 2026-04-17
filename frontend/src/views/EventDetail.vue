@@ -237,6 +237,7 @@ const updateEvent = async () => {
     graduation_year: form.value.graduation_year ? Number(form.value.graduation_year) : null,
     description: form.value.description,
     event_slots: form.value.event_slots.filter(s => s.datetime),
+    event_dates: form.value.event_slots.map(s => s.datetime).filter(Boolean),
     location: form.value.location || null,
     lp_url: form.value.lp_url || null,
   }, { headers: { Authorization: token } });
@@ -613,7 +614,7 @@ onMounted(fetchDetail);
       :studentName="statusModalTarget?.name || ''"
       :eventTitle="event?.title || ''"
       :eventId="statusModalTarget?.eventId || 0"
-      :studentEventId="statusModalTarget?.id || 0"
+      :studentEventId="statusModalTarget?.student_event_id || statusModalTarget?.id || 0"
       :currentStatus="statusModalTarget?.status || 'A_ENTRY'"
       :source="statusModalTarget?.source"
       @updated="fetchDetail"

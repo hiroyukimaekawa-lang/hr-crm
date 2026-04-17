@@ -424,7 +424,7 @@ export const getProjectDetail = async (req: Request, res: Response) => {
 };
 
 export const updateParticipantStatus = async (req: Request, res: Response) => {
-    const { id, studentId } = req.params;
+    const { id, relationId } = req.params;
     const { status, selected_event_date, schedule_id, time_slot_id } = req.body;
     try {
         let setScheduleId = schedule_id;
@@ -442,9 +442,9 @@ export const updateParticipantStatus = async (req: Request, res: Response) => {
              SET status = $1,
                  schedule_id = COALESCE($2, schedule_id),
                  time_slot_id = COALESCE($3, time_slot_id)
-             WHERE student_id = $4 AND project_id = $5
+             WHERE id = $4 AND project_id = $5
              RETURNING *`,
-            [status, setScheduleId, time_slot_id || null, studentId, id]
+            [status, setScheduleId, time_slot_id || null, relationId, id]
         );
         res.json(result.rows[0]);
     } catch (err: any) {

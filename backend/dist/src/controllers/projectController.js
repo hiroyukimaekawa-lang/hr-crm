@@ -380,7 +380,7 @@ const getProjectDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.getProjectDetail = getProjectDetail;
 const updateParticipantStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { id, studentId } = req.params;
+    const { id, relationId } = req.params;
     const { status, selected_event_date, schedule_id, time_slot_id } = req.body;
     try {
         let setScheduleId = schedule_id;
@@ -396,8 +396,8 @@ const updateParticipantStatus = (req, res) => __awaiter(void 0, void 0, void 0, 
              SET status = $1,
                  schedule_id = COALESCE($2, schedule_id),
                  time_slot_id = COALESCE($3, time_slot_id)
-             WHERE student_id = $4 AND project_id = $5
-             RETURNING *`, [status, setScheduleId, time_slot_id || null, studentId, id]);
+             WHERE id = $4 AND project_id = $5
+             RETURNING *`, [status, setScheduleId, time_slot_id || null, relationId, id]);
         res.json(result.rows[0]);
     }
     catch (err) {

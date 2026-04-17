@@ -168,8 +168,8 @@ const migrateLegacyEvent = async (legacyId: number) => {
 
 const createEvent = async () => {
   const token = localStorage.getItem('token');
-  // Reverted to original events table
-  await api.post('/api/events', {
+  // Reverted to original projects table as new source of truth
+  await api.post('/api/projects', {
     ...newEvent.value,
     event_dates: newEvent.value.event_dates.filter(v => String(v || '').trim())
   }, { headers: { Authorization: token } });
@@ -559,8 +559,8 @@ onMounted(fetchEvents);
                 {{ displayEventDates(e)[0] || '日程未定' }}
               </span>
               <div class="flex items-center gap-2">
-                <span class="px-2 py-1 text-xs font-semibold rounded-full" :class="eventStatus(e.event_date) === '開催予定' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'">
-                  {{ eventStatus(e.event_date) }}
+                <span class="px-2 py-1 text-xs font-semibold rounded-full" :class="eventStatus(e.event_date || e.event_dates?.[0]) === '開催予定' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'">
+                  {{ eventStatus(e.event_date || e.event_dates?.[0]) }}
                 </span>
                 <button
                   class="text-gray-400 hover:text-red-600"

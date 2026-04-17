@@ -13,6 +13,6 @@ router.get('/kgi-progress', auth_1.authenticate, projectController_1.getKgiProgr
 router.get('/:id', auth_1.authenticate, projectController_1.getProjectDetail);
 router.put('/:id', auth_1.authenticate, projectController_1.updateProject);
 router.put('/:id/kpi', auth_1.authenticate, projectController_1.updateProjectKpi);
-router.put('/:id/participants/:studentId', auth_1.authenticate, projectController_1.updateParticipantStatus);
+router.put('/:id/participants/:relationId', auth_1.authenticate, projectController_1.updateParticipantStatus);
 router.delete('/:id', auth_1.authenticate, projectController_1.deleteProject);
 exports.default = router;

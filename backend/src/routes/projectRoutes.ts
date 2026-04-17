@@ -10,7 +10,7 @@ router.get('/kgi-progress', authenticate, getKgiProgress);
 router.get('/:id', authenticate, getProjectDetail);
 router.put('/:id', authenticate, updateProject);
 router.put('/:id/kpi', authenticate, updateProjectKpi);
-router.put('/:id/participants/:studentId', authenticate, updateParticipantStatus);
+router.put('/:id/participants/:relationId', authenticate, updateParticipantStatus);
 router.delete('/:id', authenticate, deleteProject);
 
 export default router;
