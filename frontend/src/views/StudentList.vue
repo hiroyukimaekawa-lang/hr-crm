@@ -594,9 +594,14 @@ const filteredStudents = computed(() => {
     const matchesUniversity =
       af.selectedUniversities.length === 0 ||
       af.selectedUniversities.includes(s.university || '');
+      
+    // Find the name of the selected staff to match against student's staff_name
+    const selectedStaffName = af.staffFilter === 'ALL' ? '' : staffUsers.value.find(u => String(u.id) === af.staffFilter)?.name;
     const matchesStaff =
       af.staffFilter === 'ALL' ||
+      s.staff_name === selectedStaffName ||
       String(s.staff_id || '') === af.staffFilter;
+      
     const matchesSourceCompany =
       af.selectedSourceCompanies.length === 0 ||
       af.selectedSourceCompanies.includes(normalizeSourceCompany(s.source_company));
@@ -1411,6 +1416,9 @@ watch(filteredStudents, () => {
                     class="w-full px-2 py-1 border border-gray-200 rounded-lg text-base md:text-sm"
                   >
                     <option value="">未割当</option>
+                    <option v-if="s.staff_id && !staffUsers.some(u => Number(u.id) === Number(s.staff_id))" :value="String(s.staff_id)">
+                      {{ s.staff_name || '不明な担当者' }}
+                    </option>
                     <option v-for="u in staffUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
                   </select>
                 </div>
