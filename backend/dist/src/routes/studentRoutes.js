@@ -1,0 +1,69 @@
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const db_1 = __importDefault(require("../config/db"));
+const studentController_1 = require("../controllers/studentController");
+const auth_1 = require("../middlewares/auth");
+const router = express_1.default.Router();
+router.get('/', auth_1.authenticate, studentController_1.getStudents);
+router.get('/metrics/interviews', auth_1.authenticate, studentController_1.getInterviewMetrics);
+router.get('/metrics/funnel', auth_1.authenticate, studentController_1.getFunnelKpi);
+router.get('/metrics/funnel-sources', auth_1.authenticate, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const result = yield db_1.default.query('SELECT name FROM source_categories ORDER BY created_at ASC');
+        res.json(result.rows.map((r) => r.name));
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+}));
+router.get('/funnel/master', auth_1.authenticate, studentController_1.getFunnelMasterData);
+router.get('/source-categories', auth_1.authenticate, studentController_1.getSourceCategories);
+router.post('/source-categories', auth_1.authenticate, studentController_1.createSourceCategory);
+router.delete('/source-categories/:id', auth_1.authenticate, studentController_1.deleteSourceCategory);
+router.get('/graduation-year-categories', auth_1.authenticate, studentController_1.getGraduationYearCategories);
+router.post('/graduation-year-categories', auth_1.authenticate, studentController_1.createGraduationYearCategory);
+router.delete('/graduation-year-categories/:id', auth_1.authenticate, studentController_1.deleteGraduationYearCategory);
+router.post('/', auth_1.authenticate, studentController_1.createStudent);
+router.post('/import', auth_1.authenticate, studentController_1.importStudents);
+router.get('/:id/matcher-funnel', auth_1.authenticate, studentController_1.getMatcherFunnelByStudent);
+router.post('/:id/matcher-funnel/apply', auth_1.authenticate, studentController_1.registerMatcherApply);
+router.post('/:id/matcher-funnel/message', auth_1.authenticate, studentController_1.registerMatcherMessage);
+router.post('/:id/matcher-funnel/reservation', auth_1.authenticate, studentController_1.registerMatcherReservation);
+router.post('/:id/matcher-funnel/interview', auth_1.authenticate, studentController_1.registerMatcherInterview);
+router.post('/:id/funnel/application', auth_1.authenticate, studentController_1.createApplication);
+router.put('/:id/funnel/reservation', auth_1.authenticate, studentController_1.updateApplicationReservation);
+router.post('/:id/funnel/interview', auth_1.authenticate, studentController_1.createInterviewRecord);
+router.get('/:id/funnel/event-proposals', auth_1.authenticate, studentController_1.getStudentEventProposals);
+router.post('/:id/funnel/event-proposal', auth_1.authenticate, studentController_1.createEventProposal);
+router.get('/:id', auth_1.authenticate, studentController_1.getStudentDetail);
+router.post('/:id/interview-schedules', auth_1.authenticate, studentController_1.createInterviewSchedule);
+router.put('/interview-schedules/:scheduleId', auth_1.authenticate, studentController_1.updateInterviewSchedule);
+router.delete('/interview-schedules/:scheduleId', auth_1.authenticate, studentController_1.deleteInterviewSchedule);
+router.post('/:id/events', auth_1.authenticate, studentController_1.linkEvent);
+router.post('/interview-logs', auth_1.authenticate, studentController_1.addInterviewLog);
+router.put('/interview-logs/:id', auth_1.authenticate, studentController_1.updateInterviewLog);
+router.delete('/interview-logs/:id', auth_1.authenticate, studentController_1.deleteInterviewLog);
+router.put('/:id', auth_1.authenticate, studentController_1.updateStudentBasic);
+router.put('/:id/status', auth_1.authenticate, studentController_1.updateStudentStatus);
+router.put('/:id/staff', auth_1.authenticate, studentController_1.updateStudentStaff);
+router.put('/:id/meta', auth_1.authenticate, studentController_1.updateStudentMeta);
+router.patch('/:id/favorite', auth_1.authenticate, studentController_1.updateStudentFavorite);
+router.patch('/:id/referral-status', auth_1.authenticate, studentController_1.updateStudentReferralStatus);
+router.post('/:id/tasks', auth_1.authenticate, studentController_1.addStudentTask);
+router.put('/tasks/:taskId/complete', auth_1.authenticate, studentController_1.completeStudentTask);
+router.delete('/tasks/:taskId', auth_1.authenticate, studentController_1.deleteStudentTask);
+router.delete('/:id', auth_1.authenticate, studentController_1.deleteStudent);
+exports.default = router;
