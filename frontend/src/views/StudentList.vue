@@ -271,8 +271,8 @@ const fetchStudents = async () => {
   try {
     const token = localStorage.getItem('token');
     let url = '/api/students';
-    if (!showAll.value && user.id) {
-      url += `?staffId=${user.id}`;
+    if (!showAll.value && user.value.id) {
+      url += `?staffId=${user.value.id}`;
     }
     const res = await api.get(url, { headers: { Authorization: token } });
     students.value = res.data;
@@ -489,7 +489,7 @@ const createStudent = async () => {
     const token = localStorage.getItem('token');
     const assignedStaffId = user.value.role === 'admin'
       ? (newStudent.value.staff_id ? Number(newStudent.value.staff_id) : null)
-      : Number(user.id);
+      : Number(user.value.id);
 
     await api.post('/api/students', {
       source_company: newStudent.value.source_company,
@@ -1406,12 +1406,12 @@ watch(filteredStudents, () => {
               <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
                 <div v-if="user.role === 'admin'" class="max-w-[180px]">
                   <select
-                    :value="s.staff_id || ''"
+                    :value="s.staff_id ? String(s.staff_id) : ''"
                     @change="updateStaff(s.id, ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
                     class="w-full px-2 py-1 border border-gray-200 rounded-lg text-base md:text-sm"
                   >
                     <option value="">未割当</option>
-                    <option v-for="u in staffUsers" :key="u.id" :value="u.id">{{ u.name }}</option>
+                    <option v-for="u in staffUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
                   </select>
                 </div>
                 <span v-else>{{ s.staff_name || '-' }}</span>

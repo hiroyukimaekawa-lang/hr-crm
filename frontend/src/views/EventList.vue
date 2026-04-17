@@ -34,6 +34,7 @@ interface EventItem {
   lp_url?: string;
   registered_count?: number;
   attended_count?: number;
+  source?: 'event' | 'project';
   total_count?: number;
 }
 
@@ -119,7 +120,7 @@ const fetchEvents = async () => {
           const detail = await api.get(endpoint, { headers: { Authorization: token } });
           const participants: Participant[] = Array.isArray(detail.data?.participants)
             ? detail.data.participants.map((p: any) => ({
-                id: p.id,
+                id: p.student_event_id || p.id,
                 student_id: p.student_id,
                 status: String(p.status || ''),
                 selected_event_date: p.selected_event_date || null,
