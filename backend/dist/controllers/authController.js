@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.registerByInvite = exports.createInvite = exports.getUsers = exports.login = exports.register = void 0;
+exports.getMe = exports.registerByInvite = exports.createInvite = exports.getUsers = exports.login = exports.register = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const crypto_1 = __importDefault(require("crypto"));
@@ -66,7 +66,6 @@ const getUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const result = yield db_1.default.query(`
             SELECT DISTINCT ON (name) id, name
             FROM users
-            WHERE role = 'staff'
             ORDER BY name, created_at DESC, id DESC
         `);
         res.json(result.rows);
@@ -121,3 +120,24 @@ const registerByInvite = (req, res) => __awaiter(void 0, void 0, void 0, functio
     }
 });
 exports.registerByInvite = registerByInvite;
+const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.sub;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+        const result = yield db_1.default.query('SELECT id, username, name, role FROM users WHERE id = $1', [userId]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        res.json({ user: result.rows[0] });
+    }
+    catch (err) {
+        console.error('getMe error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.getMe = getMe;
