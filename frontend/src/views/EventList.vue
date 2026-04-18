@@ -91,16 +91,30 @@ const activeTab = ref<'projects' | 'legacy'>('projects');
 const fetchEvents = async () => {
   const token = localStorage.getItem('token');
   try {
-    const [eventsRes, projectsRes, legacyRes] = await Promise.all([
-      api.get('/api/events', { headers: { Authorization: token } }),
-      api.get('/api/projects', { headers: { Authorization: token } }),
-      api.get('/api/legacy-events', { headers: { Authorization: token } })
-    ]);
+    // ── 各APIを独立して取得（一つが失敗しても他は影響なし）──
+    let eventsData: any[]   = [];
+    let projectsData: any[] = [];
+    let legacyData: any[]   = [];
+
+    try {
+      const res = await api.get('/api/events', { headers: { Authorization: token } });
+      eventsData = Array.isArray(res.data) ? res.data : [];
+    } catch (e) { console.warn('/api/events failed', e); }
+
+    try {
+      const res = await api.get('/api/projects', { headers: { Authorization: token } });
+      projectsData = Array.isArray(res.data) ? res.data : [];
+    } catch (e) { console.warn('/api/projects failed', e); }
+
+    try {
+      const res = await api.get('/api/legacy-events', { headers: { Authorization: token } });
+      legacyData = Array.isArray(res.data) ? res.data : [];
+    } catch (e) { console.warn('/api/legacy-events failed (non-critical)', e); }
 
     // Unify active events and projects
     const allActive = [
-      ...eventsRes.data.map((e: any) => ({ ...e, source: 'event' })),
-      ...projectsRes.data.map((p: any) => ({ ...p, source: 'project' }))
+      ...eventsData.map((e: any) => ({ ...e, source: 'event' })),
+      ...projectsData.map((p: any) => ({ ...p, source: 'project' }))
     ];
     
     // Sort by date descending
@@ -111,7 +125,7 @@ const fetchEvents = async () => {
     });
 
     events.value = allActive;
-    legacyEvents.value = legacyRes.data;
+    legacyEvents.value = legacyData;
 
     const detailResults = await Promise.all(
       events.value.map(async (e) => {
@@ -150,6 +164,7 @@ const fetchEvents = async () => {
     console.error('Failed to fetch events', err);
   }
 };
+
 
 const migrateLegacyEvent = async (legacyId: number) => {
   if (!confirm('この旧イベントを現在のイベント管理に移行しますか？')) return;
