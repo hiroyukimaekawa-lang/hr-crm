@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "dev": "NODE_OPTIONS=--dns-result-order=ipv4first ts-node src/server.ts",
     "build": "tsc",
     "vercel-build": "tsc"
