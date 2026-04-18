@@ -599,7 +599,10 @@ const daily = computed(() => overview.value?.daily);
 const funnel = computed(() => overview.value?.funnel);
 
 const activeEvents = computed(() =>
-  eventKpi.value.filter(e => e.deadline && e.days_remaining >= -1)
+  eventKpi.value.filter(e => {
+    if (!e.deadline) return true;
+    return e.days_remaining >= -1;
+  })
 );
 
 // \u5bfe\u8c61\u6708\u306e\u30a2\u30af\u30c6\u30a3\u30d6\u30a4\u30d9\u30f3\u30c8\uff1a\u7dde\u65e5\u304c\u9078\u629e\u6708\u306b\u542b\u307e\u308c\u308b\u3082\u306e\u3092\u671f\u65e5\u9806\u306b\u30bd\u30fc\u30c8
@@ -607,8 +610,14 @@ const activeEventsForMonth = computed(() => {
   const m = selectedMonth.value;
   const base = eventKpi.value
     .filter(e => {
-      if (!e.deadline) return false;
-      return e.deadline.startsWith(m) || e.days_remaining >= 0;
+      if (e.deadline && e.deadline.startsWith(m)) return true;
+      if (e.deadline && e.days_remaining >= 0) return true;
+      
+      const hasSlotsThisMonth = e.slots && e.slots.some((s: any) => s.date && s.date.startsWith(m));
+      if (hasSlotsThisMonth) return true;
+      
+      if (!e.deadline && (!e.slots || e.slots.length === 0)) return true; // Show events with no deadline and no slots so they can be configured
+      return false;
     })
     .sort((a, b) => {
       const da = a.deadline || '9999-12-31';
