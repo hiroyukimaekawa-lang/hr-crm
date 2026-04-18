@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import Dashboard from '../views/Dashboard.vue';
 import StudentList from '../views/StudentList.vue';
 import StudentDetail from '../views/StudentDetail.vue';
@@ -12,7 +12,7 @@ import PastEvents from '../views/PastEvents.vue';
 
 import KpiDashboard from '../views/KpiDashboard.vue';
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/students' },
   { path: '/login', component: Login },
   { path: '/register', component: RegisterInvite },
@@ -22,7 +22,7 @@ const routes = [
   { path: '/events', component: EventList },
   { path: '/events/:id', component: EventDetail },
   { path: '/projects', redirect: '/events' },
-  { path: '/projects/:id', redirect: (to: { params: { id: string } }) => `/events/${to.params.id}` },
+  { path: '/projects/:id', redirect: (to) => `/events/${to.params['id']}` },
   { path: '/lead-time', name: '初回ファネル登録', component: LeadTime },
   { path: '/kpi', component: KpiDashboard },
   { path: '/event-kpi', redirect: '/kpi' },

@@ -18,6 +18,7 @@ import {
   ChevronUp
 } from 'lucide-vue-next';
 import StatusChangeModal from '../components/StatusChangeModal.vue'
+import AgentSchedulePicker from '../components/AgentSchedulePicker.vue'
 import { getStatusLabel, getStatusBadgeClass } from '../lib/statusConfig'
 
 const route = useRoute();
@@ -77,6 +78,7 @@ const newLogType = ref<'面談' | 'エントリー' | 'その他'>('面談');
 const newLogEventId = ref('');
 const selectedEventId = ref('');
 const selectedEventDate = ref('');
+const agentScheduleDate = ref(''); // For agent-type events: YYYY-MM-DDTHH:00
 const selectedEventStatus = ref<'A_ENTRY' | 'B_WAITING' | 'C_WAITING' | 'D_PASS' | 'E_FAIL' | 'XA_CANCEL'>('A_ENTRY');
 const editingStatus = ref(false);
 const referralStatusDraft = ref('不明');
@@ -577,14 +579,19 @@ const linkEvent = async () => {
   try {
     if (!selectedEventId.value) return;
     const token = localStorage.getItem('token');
+    // For agent-type events, use the calendar-picked datetime; otherwise the slot dropdown
+    const dateToSave = isSelectedEventAgent.value
+      ? (agentScheduleDate.value || null)
+      : (selectedEventDate.value || null);
     await api.post(`/api/students/${studentId}/events`, {
       event_id: selectedEventId.value,
-      selected_event_date: selectedEventDate.value || null,
+      selected_event_date: dateToSave,
       status: selectedEventStatus.value,
       source: selectedLinkEvent.value?.source
     }, { headers: { Authorization: token } });
     selectedEventId.value = '';
     selectedEventDate.value = '';
+    agentScheduleDate.value = '';
     selectedEventStatus.value = 'A_ENTRY';
     persistDraft();
     fetchDetail();
@@ -642,6 +649,10 @@ const selectedLinkEvent = computed(() => {
   if (!id) return null;
   return availableEvents.value.find((e: any) => Number(e.id) === id) || null;
 });
+
+const isSelectedEventAgent = computed(() =>
+  selectedLinkEvent.value?.type === 'agent_interview'
+);
 
 const selectedLinkEventDates = computed(() => {
   const e: any = selectedLinkEvent.value;
@@ -1437,20 +1448,37 @@ watch(selectedEventId, () => {
             <div class="pt-5 border-t border-gray-100">
               <label class="block text-base md:text-sm font-bold text-gray-600 mb-3 ml-1">新しいイベントに紐付ける</label>
               <div class="flex flex-col gap-2">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <select v-model="selectedEventId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                    <option disabled value="">イベントを選択</option>
-                    <option v-for="ae in availableEvents" :key="ae.id" :value="ae.id">{{ ae.title }}</option>
-                  </select>
-                  <select
-                    v-if="selectedLinkEventDates.length > 1"
-                    v-model="selectedEventDate"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  >
-                    <option v-for="d in selectedLinkEventDates" :key="`add-link-date-${d}`" :value="d">{{ formatDateTime(d, selectedLinkEvent) }}</option>
-                  </select>
+                <!-- Event selector -->
+                <select v-model="selectedEventId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                  <option disabled value="">案件を選択</option>
+                  <optgroup label="エージェント面談">
+                    <option v-for="ae in availableEvents.filter((e:any) => e.type === 'agent_interview')" :key="ae.id" :value="ae.id">
+                      🤝 {{ ae.title }}
+                    </option>
+                  </optgroup>
+                  <optgroup label="イベント">
+                    <option v-for="ae in availableEvents.filter((e:any) => e.type !== 'agent_interview')" :key="ae.id" :value="ae.id">
+                      📅 {{ ae.title }}
+                    </option>
+                  </optgroup>
+                </select>
+
+                <!-- Agent-type: Calendar picker -->
+                <div v-if="selectedEventId && isSelectedEventAgent" class="mt-1">
+                  <AgentSchedulePicker v-model="agentScheduleDate" />
                 </div>
-                <div class="flex gap-2">
+
+                <!-- Non-agent: date slot dropdown (existing behavior) -->
+                <select
+                  v-else-if="selectedEventId && !isSelectedEventAgent && selectedLinkEventDates.length > 1"
+                  v-model="selectedEventDate"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option v-for="d in selectedLinkEventDates" :key="`add-link-date-${d}`" :value="d">{{ formatDateTime(d, selectedLinkEvent) }}</option>
+                </select>
+
+                <!-- Status + submit -->
+                <div class="flex gap-2" v-if="selectedEventId">
                   <select v-model="selectedEventStatus" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                     <option value="A_ENTRY">A:エントリー</option>
                     <option value="B_WAITING">B:回答待ち</option>
@@ -1459,7 +1487,11 @@ watch(selectedEventId, () => {
                     <option value="E_FAIL">E:不合格</option>
                     <option value="XA_CANCEL">XA:キャンセル</option>
                   </select>
-                  <button @click="linkEvent" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-base md:text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm min-h-[44px]">追加</button>
+                  <button
+                    @click="linkEvent"
+                    :disabled="isSelectedEventAgent && !agentScheduleDate"
+                    class="px-6 py-2 bg-blue-600 text-white rounded-lg text-base md:text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm min-h-[44px] disabled:opacity-40 disabled:cursor-not-allowed"
+                  >追加</button>
                 </div>
               </div>
             </div>
