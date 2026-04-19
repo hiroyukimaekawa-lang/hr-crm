@@ -28,6 +28,7 @@ export interface MonthlyOverview {
     interviewToSetting: number;
     inflowToSetting: number;
   };
+  salesBreakdown?: any[];
 }
 
 export interface DailyOverview {
@@ -45,6 +46,7 @@ export interface WeeklyOverview {
   seats: KpiMetric;
   entries: KpiMetric;
   interviews: KpiMetric;
+  salesBreakdown?: any[];
 }
 
 export interface FunnelCounts {
@@ -123,6 +125,7 @@ export interface EventKpiItem {
   slots: EventKpiSlot[];
   event_slots?: any[];
   unit_price: number;
+  source: string;
 }
 
 export interface GoalSetting {

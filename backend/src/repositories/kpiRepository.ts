@@ -59,6 +59,7 @@ export interface EventKpiRow {
     status_breakdown: Record<string, number>;
     event_slots: any[]; // Raw slots
     slots: any[];       // Aggregated actuals
+    source: string;
 }
 
 // ─────────────────────── Table Init ───────────────────────
@@ -291,8 +292,8 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
     const todayStr = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const todayDate = new Date(todayStr + 'T00:00:00');
 
-    // Query projects & aggregate slots from schedules
-    const eventsRes = await pool.query(`
+    // 1. Modern Projects
+    const projectsRes = await pool.query(`
         SELECT
             p.id, p.title, p.target_seats, p.unit_price,
             COALESCE(p.kpi_seat_to_entry_rate, 70) AS kpi_seat_to_entry_rate,
@@ -308,39 +309,86 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
             COALESCE(p.entry_deadline::text, (
               SELECT TO_CHAR(MAX(ps.schedule_date), 'YYYY-MM-DD\"T\"HH24:MI:SS')
               FROM project_schedules ps WHERE ps.project_id = p.id
-            )) AS deadline
+            )) AS deadline,
+            'project' as source
         FROM projects p
-        ORDER BY deadline DESC NULLS LAST
     `);
 
-    const statusRes = await pool.query(`
+    // 2. Legacy Events
+    const legacyRes = await pool.query(`
+        SELECT
+            e.id, e.title, e.target_seats, e.unit_price,
+            70 AS kpi_seat_to_entry_rate,
+            60 AS kpi_entry_to_interview_rate,
+            50 AS kpi_interview_to_reservation_rate,
+            40 AS kpi_reservation_to_application_rate,
+            50 AS kpi_interview_to_inflow_rate,
+            '[]'::jsonb AS kpi_custom_steps,
+            COALESCE((
+              SELECT jsonb_agg(jsonb_build_object('datetime', to_char(ed.event_date, 'YYYY-MM-DD\"T\"HH24:MI:SS')))
+              FROM event_dates ed WHERE ed.event_id = e.id
+            ), '[]'::jsonb) AS event_slots,
+            COALESCE(e.event_date::text, (
+              SELECT TO_CHAR(MAX(ed.event_date), 'YYYY-MM-DD\"T\"HH24:MI:SS')
+              FROM event_dates ed WHERE ed.event_id = e.id
+            )) AS deadline,
+            'event' as source
+        FROM events e
+    `);
+
+    const allEvents = [...projectsRes.rows, ...legacyRes.rows];
+
+    // Status breakdowns
+    const projectStatusRes = await pool.query(`
         SELECT project_id as event_id, status, COUNT(*)::int AS cnt
         FROM student_project_relations GROUP BY project_id, status
     `);
+    const legacyStatusRes = await pool.query(`
+        SELECT event_id, status, COUNT(*)::int AS cnt
+        FROM student_events GROUP BY event_id, status
+    `);
 
-    const slotStatusRes = await pool.query(`
+    const projectSlotStatusRes = await pool.query(`
         SELECT spr.project_id as event_id, to_char(ps.schedule_date, 'YYYY-MM-DD"T"HH24:MI') as slot_date, spr.status, COUNT(*)::int AS cnt
         FROM student_project_relations spr
         JOIN project_schedules ps ON ps.id = spr.schedule_id
         GROUP BY spr.project_id, slot_date, spr.status
     `);
+    const legacySlotStatusRes = await pool.query(`
+        -- Legacy slots are usually in event_dates but student_events doesn't link to a specific date ID in all versions.
+        -- We'll just group by the event_id for now if it's legacy.
+        SELECT event_id, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI') as slot_date, status, COUNT(*)::int AS cnt
+        FROM student_events
+        GROUP BY event_id, slot_date, status
+    `);
 
-    const breakdownMap: Record<number, Record<string, number>> = {};
-    for (const r of statusRes.rows) {
-        if (!breakdownMap[r.event_id]) breakdownMap[r.event_id] = {};
-        breakdownMap[r.event_id][r.status] = Number(r.cnt);
-    }
+    const breakdownMap: Record<string, Record<string, number>> = {};
+    const populateBD = (rows: any[], source: string) => {
+        for (const r of rows) {
+            const key = `${source}-${r.event_id}`;
+            if (!breakdownMap[key]) breakdownMap[key] = {};
+            breakdownMap[key][r.status] = Number(r.cnt);
+        }
+    };
+    populateBD(projectStatusRes.rows, 'project');
+    populateBD(legacyStatusRes.rows, 'event');
 
-    const slotBreakdownMap: Record<number, Record<string, Record<string, number>>> = {};
-    for (const r of slotStatusRes.rows) {
-        if (!slotBreakdownMap[r.event_id]) slotBreakdownMap[r.event_id] = {};
-        if (!slotBreakdownMap[r.event_id][r.slot_date]) slotBreakdownMap[r.event_id][r.slot_date] = {};
-        slotBreakdownMap[r.event_id][r.slot_date][r.status] = Number(r.cnt);
-    }
+    const slotBreakdownMap: Record<string, Record<string, Record<string, number>>> = {};
+    const populateSlotBD = (rows: any[], source: string) => {
+        for (const r of rows) {
+            const key = `${source}-${r.event_id}`;
+            if (!slotBreakdownMap[key]) slotBreakdownMap[key] = {};
+            if (!slotBreakdownMap[key][r.slot_date]) slotBreakdownMap[key][r.slot_date] = {};
+            slotBreakdownMap[key][r.slot_date][r.status] = Number(r.cnt);
+        }
+    };
+    populateSlotBD(projectSlotStatusRes.rows, 'project');
+    populateSlotBD(legacySlotStatusRes.rows, 'event');
 
-    return eventsRes.rows.map((e: any) => {
-        const bd = breakdownMap[e.id] || {};
-        const sbd = slotBreakdownMap[e.id] || {};
+    return allEvents.map((e: any) => {
+        const key = `${e.source}-${e.id}`;
+        const bd = breakdownMap[key] || {};
+        const sbd = slotBreakdownMap[key] || {};
         const ent = (bd['entry']||0) + (bd['A_ENTRY']||0) + (bd['attended']||0) + (bd['reserved']||0) + (bd['registered']||0);
         const st = (bd['attended']||0);
         const rawSlots = e.event_slots || [];
@@ -371,7 +419,7 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
             kpi_reservation_to_application_rate: Number(e.kpi_reservation_to_application_rate),
             kpi_interview_to_inflow_rate: Number(e.kpi_interview_to_inflow_rate),
             kpi_custom_steps: JSON.parse(JSON.stringify(e.kpi_custom_steps || [])),
-            status_breakdown: bd, slots
+            status_breakdown: bd, slots, source: e.source
         };
     });
 };
@@ -380,20 +428,64 @@ export const getSalesActuals = async (filters: KpiFilters) => {
     await ensureDepTables();
     const params: any[] = [];
     let idx = 1;
-    let periodWhere = '';
-    if (filters.month) { periodWhere = `(TO_CHAR(ps.schedule_date, 'YYYY-MM') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM') = $${idx})`; params.push(filters.month); idx++; }
-    else if (filters.date) { periodWhere = `(TO_CHAR(ps.schedule_date, 'YYYY-MM-DD') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM-DD') = $${idx})`; params.push(filters.date); idx++; }
-    else if (filters.week) { periodWhere = `(TO_CHAR(ps.schedule_date, 'IYYY-\"W\"IW') = $${idx} OR TO_CHAR(p.entry_deadline, 'IYYY-\"W\"IW') = $${idx})`; params.push(filters.week); idx++; }
+    let projectPeriodWhere = '';
+    let legacyPeriodWhere = '';
+
+    if (filters.month) {
+        projectPeriodWhere = `(TO_CHAR(ps.schedule_date, 'YYYY-MM') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM') = $${idx})`;
+        legacyPeriodWhere = `(TO_CHAR(ed.event_date, 'YYYY-MM') = $${idx} OR TO_CHAR(e.event_date, 'YYYY-MM') = $${idx})`;
+        params.push(filters.month);
+        idx++;
+    } else if (filters.date) {
+        projectPeriodWhere = `(TO_CHAR(ps.schedule_date, 'YYYY-MM-DD') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM-DD') = $${idx})`;
+        legacyPeriodWhere = `(TO_CHAR(ed.event_date, 'YYYY-MM-DD') = $${idx} OR TO_CHAR(e.event_date, 'YYYY-MM-DD') = $${idx})`;
+        params.push(filters.date);
+        idx++;
+    } else if (filters.week) {
+        projectPeriodWhere = `(TO_CHAR(ps.schedule_date, 'IYYY-\"W\"IW') = $${idx} OR TO_CHAR(p.entry_deadline, 'IYYY-\"W\"IW') = $${idx})`;
+        legacyPeriodWhere = `(TO_CHAR(ed.event_date, 'IYYY-\"W\"IW') = $${idx} OR TO_CHAR(e.event_date, 'IYYY-\"W\"IW') = $${idx})`;
+        params.push(filters.week);
+        idx++;
+    }
 
     const sql = `
-        SELECT p.id AS event_id, p.title AS event_title, COALESCE(p.unit_price, 0)::int AS unit_price,
-               COUNT(DISTINCT spr.id) FILTER (WHERE spr.status = 'attended')::int AS attended_count,
-               (COALESCE(p.unit_price, 0) * COUNT(DISTINCT spr.id) FILTER (WHERE spr.status = 'attended'))::bigint AS sales
-        FROM projects p
-        LEFT JOIN project_schedules ps ON ps.project_id = p.id
-        LEFT JOIN student_project_relations spr ON spr.project_id = p.id
-        ${periodWhere ? `WHERE ${periodWhere}` : ''}
-        GROUP BY p.id, p.title, p.unit_price
+        WITH all_sales AS (
+            -- Modern Projects
+            SELECT 
+                p.id AS event_id, 
+                p.title AS event_title, 
+                COALESCE(p.unit_price, 0)::int AS unit_price,
+                spr.id AS participant_id,
+                'project' as source
+            FROM projects p
+            LEFT JOIN project_schedules ps ON ps.project_id = p.id
+            LEFT JOIN student_project_relations spr ON spr.project_id = p.id AND spr.status = 'attended'
+            ${projectPeriodWhere ? `WHERE ${projectPeriodWhere}` : ''}
+            
+            UNION ALL
+            
+            -- Legacy Events
+            SELECT 
+                e.id AS event_id, 
+                e.title AS event_title, 
+                COALESCE(e.unit_price, 0)::int AS unit_price,
+                se.id AS participant_id,
+                'event' as source
+            FROM events e
+            LEFT JOIN event_dates ed ON ed.event_id = e.id
+            LEFT JOIN student_events se ON se.event_id = e.id AND se.status = 'attended'
+            ${legacyPeriodWhere ? `WHERE ${legacyPeriodWhere}` : ''}
+        )
+        SELECT 
+            event_id, 
+            event_title, 
+            unit_price,
+            source,
+            COUNT(DISTINCT participant_id)::int AS attended_count,
+            (unit_price * COUNT(DISTINCT participant_id))::bigint AS sales
+        FROM all_sales
+        GROUP BY event_id, event_title, unit_price, source
+        HAVING (unit_price * COUNT(DISTINCT participant_id)) > 0 OR COUNT(DISTINCT participant_id) > 0
         ORDER BY sales DESC
     `;
     const res = await pool.query(sql, params);

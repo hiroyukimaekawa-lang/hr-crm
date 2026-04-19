@@ -39,6 +39,7 @@ interface MonthlyOverview {
         interviewToSetting: number;
         inflowToSetting: number;
     };
+    salesBreakdown?: any[];
 }
 
 interface WeeklyOverview {
@@ -47,6 +48,7 @@ interface WeeklyOverview {
     seats: KpiMetric;
     entries: KpiMetric;
     interviews: KpiMetric;
+    salesBreakdown?: any[];
 }
 
 interface DailyOverview {
@@ -196,6 +198,7 @@ export const getOverview = async (filters: KpiFilters): Promise<KpiOverviewResul
             interviewSettings: metric(settingsTarget, funnel.interview_scheduled),
             inflow: metric(inflowTarget, funnel.reservations),
             rates: { seatToEntry, entryToInterview, interviewToSetting, inflowToSetting },
+            salesBreakdown: salesData.events,
         };
     }
 
@@ -218,6 +221,7 @@ export const getOverview = async (filters: KpiFilters): Promise<KpiOverviewResul
             seats: metric(goalMap['required_seats'] || 0, salesData.totalAttendance),
             entries: metric(goalMap['required_entries'] || 0, funnel.applications),
             interviews: metric(goalMap['required_interviews'] || 0, funnel.interview_completed),
+            salesBreakdown: salesData.events,
         };
     }
 
@@ -280,38 +284,36 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
     const events = await getEventKpiData();
 
     // 1. Get period-specific goals for events if we have a context (month, week, or date)
-    let periodGoals: Record<number, { target?: number; deadline?: string }> = {};
+    let periodGoals: Record<string, { target?: number; deadline?: string }> = {};
     
     if (filters.month || filters.week || filters.date) {
         const goalRows = await getGoals({
-            scopeType: 'event',
             periodType: filters.periodType || (filters.month ? 'monthly' : filters.week ? 'weekly' : 'daily'),
             month: filters.month,
             date: filters.date,
-            // note: getGoals handles week by passing filters.month-01 internally if month exists,
-            // we should ensure it handles week correctly.
         });
 
         for (const g of goalRows) {
-            if (g.scope_id) {
-                if (!periodGoals[g.scope_id]) periodGoals[g.scope_id] = {};
+            if (g.scope_id && (g.scope_type === 'event' || g.scope_type === 'project')) {
+                const key = `${g.scope_type}-${g.scope_id}`;
+                if (!periodGoals[key]) periodGoals[key] = {};
                 if (g.metric_key === 'target_seats') {
-                    periodGoals[g.scope_id].target = Number(g.target_value);
+                    periodGoals[key].target = Number(g.target_value);
                 }
                 if (g.metric_key === 'guaranteed_sales') {
-                    (periodGoals[g.scope_id] as any).guaranteed_sales = Number(g.target_value);
+                    (periodGoals[key] as any).guaranteed_sales = Number(g.target_value);
                 }
                 if (g.metric_key === 'cvr_seat_to_entry') {
-                    (periodGoals[g.scope_id] as any).cvr_seat_to_entry = Number(g.target_value);
+                    (periodGoals[key] as any).cvr_seat_to_entry = Number(g.target_value);
                 }
                 if (g.metric_key === 'unit_price') {
-                    (periodGoals[g.scope_id] as any).unit_price = Number(g.target_value);
+                    (periodGoals[key] as any).unit_price = Number(g.target_value);
                 }
                 if (g.metric_key === 'allocation_weight') {
-                    (periodGoals[g.scope_id] as any).allocation_weight = Number(g.target_value);
+                    (periodGoals[key] as any).allocation_weight = Number(g.target_value);
                 }
                 if (g.period_end) {
-                    periodGoals[g.scope_id].deadline = g.period_end.slice(0, 10);
+                    periodGoals[key].deadline = g.period_end.slice(0, 10);
                 }
             }
         }
@@ -321,7 +323,8 @@ export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
 
     return events.map(e => {
         // 2. Override with period-specific goals if they exist
-        const override = periodGoals[e.event_id];
+        const key = `${e.source}-${e.event_id}`;
+        const override = periodGoals[key];
         const targetSeats = override?.target ?? e.target_seats;
         const deadline = override?.deadline ?? e.deadline;
         const monthlyCvrOverride = (override as any)?.cvr_seat_to_entry;

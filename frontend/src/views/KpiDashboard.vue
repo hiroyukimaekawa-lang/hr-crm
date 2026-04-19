@@ -77,6 +77,7 @@ const goalForm = ref({
 
 const eventAllocations = ref<Array<{
   event_id: number;
+  source: string;
   event_title: string;
   unit_price: number;
   target_seats: number;
@@ -104,14 +105,14 @@ const eventForm = ref({
 });
 
 // Inline event target editing (for weekly tab)
-const editingEventTargetId = ref<number | null>(null);
+const editingEventTargetId = ref<string | null>(null);
 const inlineTargetForm = ref({
   target_seats: 0,
   target_entries: 0,
 });
 
 const openInlineTargetEdit = (ev: EventKpiItem) => {
-  editingEventTargetId.value = ev.event_id;
+  editingEventTargetId.value = `${ev.source}-${ev.event_id}`;
   inlineTargetForm.value = {
     target_seats: ev.target_seats || 0,
     target_entries: ev.target_entries || 0,
@@ -128,7 +129,7 @@ const saveInlineTarget = async (ev: EventKpiItem) => {
     const periodStart = selectedMonth.value + '-01';
     const goals = [
       {
-        scope_type: 'event',
+        scope_type: ev.source,
         scope_id: ev.event_id,
         period_type: 'monthly',
         period_start: periodStart,
@@ -139,7 +140,7 @@ const saveInlineTarget = async (ev: EventKpiItem) => {
     // target_entriesは手動上書き用のカスタムキーとして保存
     if (inlineTargetForm.value.target_entries > 0) {
       goals.push({
-        scope_type: 'event',
+        scope_type: ev.source,
         scope_id: ev.event_id,
         period_type: 'monthly',
         period_start: periodStart,
@@ -161,11 +162,11 @@ const saveInlineTarget = async (ev: EventKpiItem) => {
   }
 };
 
-const editingSlotTargetDate = ref<{ eventId: number; date: string } | null>(null);
+const editingSlotTargetDate = ref<{ eventId: number; source: string; date: string } | null>(null);
 const slotInlineTargetForm = ref<{ target_seats: number }>({ target_seats: 0 });
 
 const openSlotInlineTargetEdit = (ev: EventKpiItem, slotDate: string, currentTarget: number) => {
-  editingSlotTargetDate.value = { eventId: ev.event_id, date: slotDate };
+  editingSlotTargetDate.value = { eventId: ev.event_id, source: ev.source, date: slotDate };
   slotInlineTargetForm.value.target_seats = currentTarget || 0;
 };
 
@@ -200,9 +201,9 @@ const saveSlotInlineTarget = async (ev: EventKpiItem, slotDate: string) => {
   }
 };
 
-const expandedEvents = ref<Record<number, boolean>>({});
-const toggleEvent = (eventId: number) => {
-  expandedEvents.value[eventId] = !expandedEvents.value[eventId];
+const expandedEvents = ref<Record<string, boolean>>({});
+const toggleEvent = (key: string) => {
+  expandedEvents.value[key] = !expandedEvents.value[key];
 };
 
 // ─── Month options ───
@@ -315,8 +316,8 @@ const fetchGoals = async () => {
         return e.deadline.startsWith(targetMonth);
     });
 
-    eventAllocations.value = filteredEvents.map(e => {
-        const eventGoals = eventGoalRows.filter(g => Number(g.scope_id) === e.event_id);
+    eventAllocations.value = filteredEvents.map((e: EventKpiItem) => {
+        const eventGoals = eventGoalRows.filter(g => Number(g.scope_id) === e.event_id && g.scope_type === e.source);
         const goalSeats = eventGoals.find(g => g.metric_key === 'target_seats')?.target_value;
         const goalSales = eventGoals.find(g => g.metric_key === 'guaranteed_sales')?.target_value;
         const goalUnitPrice = eventGoals.find(g => g.metric_key === 'unit_price')?.target_value;
@@ -328,6 +329,7 @@ const fetchGoals = async () => {
 
         return {
             event_id: e.event_id,
+            source: e.source,
             event_title: e.event_title,
             unit_price: unitPrice,
             target_seats: goalSeats !== undefined ? Number(goalSeats) : e.target_seats,
@@ -375,7 +377,7 @@ const saveGoals = async () => {
     // 2. Event Allocations
     eventAllocations.value.forEach(ea => {
       const base = {
-        scope_type: 'event',
+        scope_type: ea.source,
         scope_id: ea.event_id,
         period_type: periodType,
         period_start: periodStart
@@ -548,9 +550,9 @@ const saveEventSettings = async () => {
     
     // We only save if a target is actually set or if we want to overwrite
     // For simplicity, we always sync the target of current period if it's not the 'event' tab
-    if (activeTab.value === 'monthly' || activeTab.value === 'weekly' || activeTab.value === 'daily') {
+    if ((activeTab.value === 'monthly' || activeTab.value === 'weekly' || activeTab.value === 'daily') && editingEvent.value) {
       await kpiApi.updateGoals([{
-        scope_type: 'event',
+        scope_type: editingEvent.value.source,
         scope_id: editingEvent.value.event_id,
         period_type: periodType,
         period_start: periodStart,
@@ -605,7 +607,7 @@ const activeEvents = computed(() =>
   })
 );
 
-// \u5bfe\u8c61\u6708\u306e\u30a2\u30af\u30c6\u30a3\u30d6\u30a4\u30d9\u30f3\u30c8\uff1a\u7dde\u65e5\u304c\u9078\u629e\u6708\u306b\u542b\u307e\u308c\u308b\u3082\u306e\u3092\u671f\u65e5\u9806\u306b\u30bd\u30fc\u30c8
+// 対象月のイベント：締日が選択月に含まれるものを期日順にソート
 const activeEventsForMonth = computed(() => {
   const m = selectedMonth.value;
   const base = eventKpi.value
@@ -626,16 +628,17 @@ const activeEventsForMonth = computed(() => {
     });
 
   // eventAllocations (目標設定で保存した値) とマージして target_seats / target_entries を上書き
-  return base.map(e => {
-    const alloc = eventAllocations.value.find(ea => ea.event_id === e.event_id);
+  return base.map((e: EventKpiItem) => {
+    const alloc = eventAllocations.value.find(ea => ea.event_id === e.event_id && ea.source === e.source);
     const targetSeats  = alloc ? alloc.target_seats       : e.target_seats;
     const cvrRate      = alloc ? alloc.cvr_seat_to_entry  : e.kpi_seat_to_entry_rate;
     // 目標エントリー = 目標着座 / (着座→エントリー率/100)
-    const targetEntries = targetSeats > 0 && cvrRate > 0
-      ? Math.round(targetSeats / (cvrRate / 100))
+    const targetEntries = (targetSeats || 0) > 0 && (cvrRate || 0) > 0
+      ? Math.round((targetSeats || 0) / ((cvrRate || 70) / 100))
       : e.target_entries;
     return {
       ...e,
+      source:                    e.source,
       target_seats:              targetSeats,
       target_entries:            targetEntries,
       kpi_seat_to_entry_rate:    cvrRate,
@@ -650,15 +653,20 @@ const expiredEvents = computed(() =>
   eventKpi.value.filter(e => !e.deadline || e.days_remaining < -1)
 );
 
+// Helper for breakdown cards
+const getTargetForBreakdown = (evId: number, source: string) => {
+  return eventKpi.value.find(ek => ek.event_id === evId && ek.source === source);
+};
+
 const displayEvents = computed(() => {
   if (showExpired.value) {
     return [...eventKpi.value].sort((a, b) => {
       if (a.days_remaining >= -1 && b.days_remaining < -1) return -1;
       if (a.days_remaining < -1 && b.days_remaining >= -1) return 1;
       return (b.days_remaining || 0) - (a.days_remaining || 0);
-    });
+    }).map((e: EventKpiItem) => ({ ...e, source: e.source }));
   }
-  return activeEvents.value;
+  return (activeEvents.value as EventKpiItem[]).map((e: EventKpiItem) => ({ ...e, source: e.source }));
 });
 
 // Total event sales
@@ -808,7 +816,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="ea in eventAllocations" :key="ea.event_id" class="bg-gray-50/50 hover:bg-gray-50 transition-colors rounded-lg overflow-hidden">
+                <tr v-for="ea in eventAllocations" :key="ea.source + '-' + ea.event_id" class="bg-gray-50/50 hover:bg-gray-50 transition-colors rounded-lg overflow-hidden">
                   <td class="px-3 py-3 text-sm font-bold text-gray-700">{{ ea.event_title }}</td>
                   <td class="px-3 py-3">
                     <input 
@@ -969,33 +977,46 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
               </p>
             </div>
 
-            <!-- Event Sales Progress -->
-            <div v-for="ev in activeEventsForMonth" :key="'sales-'+ev.event_id"
+            <!-- Event Sales Breakdown -->
+            <div v-for="ev in monthly?.salesBreakdown" :key="'sales-brk-'+ev.event_id+'-'+ev.source"
               class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm"
             >
               <div class="flex items-center justify-between mb-3">
-                <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase truncate max-w-[150px]">{{ ev.event_title }}</span>
-                <span class="text-xs font-bold" :class="rateColor(ev.target_seats > 0 ? (ev.current_seats / ev.target_seats) * 100 : 0)">
-                  {{ ev.target_seats > 0 ? Math.round((ev.current_seats / ev.target_seats) * 100) : 0 }}%
+                <div class="flex items-center gap-2 overflow-hidden">
+                  <span 
+                    class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase whitespace-nowrap"
+                    :class="ev.source === 'project' ? 'text-indigo-600 bg-indigo-50' : 'text-amber-600 bg-amber-50'"
+                  >
+                    {{ ev.source === 'project' ? 'Project' : 'Legacy' }}
+                  </span>
+                  <span class="text-[10px] font-bold text-gray-500 truncate">{{ ev.event_title }}</span>
+                </div>
+                <template v-if="getTargetForBreakdown(ev.event_id, ev.source)">
+                  <span class="text-xs font-bold" :class="rateColor((getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 0) > 0 ? (ev.sales / (getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 1)) * 100 : 0)">
+                    {{ (getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 0) > 0 ? Math.round((ev.sales / (getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 1)) * 100) : 0 }}%
+                  </span>
+                </template>
+              </div>
+              <p class="text-xs font-bold text-gray-400 mb-1">イベント売上</p>
+              <div class="flex items-baseline gap-2 mb-2">
+                <span class="text-2xl font-black text-gray-900">¥{{ formatCurrency(ev.sales) }}</span>
+                <span v-if="(getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 0) > 0" class="text-xs text-gray-400">
+                  / ¥{{ formatCurrency(getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 0) }}
                 </span>
               </div>
-              <p class="text-xs font-bold text-gray-400 mb-1">イベント目標振込</p>
-              <div class="flex items-baseline gap-2 mb-2">
-                <span class="text-2xl font-black text-gray-900">¥{{ formatCurrency((ev.current_seats || 0) * (ev.unit_price || 0)) }}</span>
-                <span class="text-xs text-gray-400">/ ¥{{ formatCurrency((ev.target_seats || 0) * (ev.unit_price || 0)) }}</span>
-              </div>
-              <div class="h-2 bg-gray-100 rounded-full overflow-hidden mb-1">
+              
+              <div v-if="(getTargetForBreakdown(ev.event_id, ev.source)?.target_seats || 0) > 0" class="h-2 bg-gray-100 rounded-full overflow-hidden mb-1">
                 <div
-                  v-if="ev.target_seats > 0"
                   class="h-full rounded-full transition-all duration-700"
-                  :class="Math.round((ev.current_seats / ev.target_seats) * 100) >= 80 ? 'bg-emerald-500' : Math.round((ev.current_seats / ev.target_seats) * 100) >= 50 ? 'bg-amber-500' : 'bg-rose-500'"
-                  :style="{ width: `${Math.min(Math.round((ev.current_seats / ev.target_seats) * 100), 100)}%` }"
+                  :class="Math.round((ev.sales / (getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 1)) * 100) >= 80 ? 'bg-emerald-500' : Math.round((ev.sales / (getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 1)) * 100) >= 50 ? 'bg-amber-500' : 'bg-rose-500'"
+                  :style="{ width: `${Math.min(Math.round((ev.sales / (getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 1)) * 100), 100)}%` }"
                 ></div>
-                <div v-else class="h-full bg-gray-200 w-0"></div>
               </div>
-              <p class="text-xs font-bold" :class="gapColor((ev.current_seats || 0) * (ev.unit_price || 0) - (ev.target_seats || 0) * (ev.unit_price || 0))">
-                差分: {{ ((ev.current_seats || 0) * (ev.unit_price || 0) - (ev.target_seats || 0) * (ev.unit_price || 0)) >= 0 ? '+' : '' }}¥{{ formatCurrency((ev.current_seats || 0) * (ev.unit_price || 0) - (ev.target_seats || 0) * (ev.unit_price || 0)) }}
+              
+              <p v-if="(getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 0) > 0" class="text-xs font-bold" :class="gapColor(ev.sales - (getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 0))">
+                差分: {{ (ev.sales - (getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 0)) >= 0 ? '+' : '' }}¥{{ formatCurrency(ev.sales - (getTargetForBreakdown(ev.event_id, ev.source)?.target_sales || 0)) }}
               </p>
+              <p v-else class="text-xs text-gray-400 italic">目標設定なし</p>
             </div>
           </div>
 
@@ -1054,7 +1075,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                  <tr v-for="e in activeEventsForMonth" :key="e.event_id"
+                  <tr v-for="e in activeEventsForMonth" :key="e.source + '-' + e.event_id"
                     class="hover:bg-blue-50/30 transition-colors"
                     :class="{ 'opacity-60': e.days_remaining < 0 }"
                   >
@@ -1120,7 +1141,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
           <!-- 各案件を日程ごとに展開 -->
           <div
             v-for="ev in activeEventsForMonth"
-            :key="ev.event_id"
+            :key="ev.source + '-' + ev.event_id"
             class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
           >
             <!-- 案件ヘッダー -->
@@ -1140,7 +1161,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
               <!-- 全体サマリー + 目標編集ボタン -->
               <div class="flex items-center gap-3 flex-wrap justify-end">
                 <!-- インライン目標編集フォーム -->
-                <div v-if="editingEventTargetId === ev.event_id" class="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
+                <div v-if="editingEventTargetId === `${ev.source}-${ev.event_id}`" class="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
                   <div class="flex flex-col gap-1">
                     <div class="flex items-center gap-1.5">
                       <label class="text-[10px] font-bold text-blue-600 whitespace-nowrap">目標着座</label>
@@ -1427,12 +1448,12 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
                     <tr class="hover:bg-gray-50/80 transition-colors" :class="{ 'opacity-60 bg-gray-50/50': e.days_remaining < -1 }">
                       <td class="px-3 py-3 text-center">
                         <button 
-                          @click="toggleEvent(e.event_id)"
+                          @click="toggleEvent(`${e.source}-${e.event_id}`)"
                           class="p-1 hover:bg-gray-200 rounded transition-colors"
                         >
                           <ChevronRight 
                             class="w-4 h-4 text-gray-400 transition-transform duration-200"
-                            :class="{ 'rotate-90': expandedEvents[e.event_id] }"
+                            :class="{ 'rotate-90': expandedEvents[`${e.source}-${e.event_id}`] }"
                           />
                         </button>
                       </td>
