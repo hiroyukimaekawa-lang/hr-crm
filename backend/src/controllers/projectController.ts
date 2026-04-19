@@ -388,7 +388,7 @@ export const getProjectDetail = async (req: Request, res: Response) => {
                 s.phone,
                 s.graduation_year,
                 u.name as staff_name,
-                t.content as next_task_content,
+                COALESCE(t.content, '') as next_task_content,
                 t.due_date as next_task_date
             FROM student_project_relations spr
             JOIN students s ON s.id = spr.student_id
@@ -408,15 +408,18 @@ export const getProjectDetail = async (req: Request, res: Response) => {
         `, [id]);
 
         const p = projectRes.rows[0];
+        if (!p) {
+            return res.status(404).json({ error: '指定されたプロジェクトが見つかりません。' });
+        }
         res.json({
             event: {
                 ...p,
                 source: 'project',
-                project_schedules: scheduleRes.rows,
+                project_schedules: scheduleRes.rows || [],
                 // fallback for compat
-                event_dates: scheduleRes.rows.map((r:any) => r.schedule_date)
+                event_dates: scheduleRes.rows ? scheduleRes.rows.map((r:any) => r.schedule_date) : []
             },
-            participants: participantsRes.rows
+            participants: participantsRes.rows || []
         });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
