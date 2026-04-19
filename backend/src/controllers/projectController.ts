@@ -233,7 +233,13 @@ export const updateProject = async (req: Request, res: Response) => {
             // but for full edit, let's just insert new ones and delete removed ones manually based on dates.
             const currentSchRes = await pool.query('SELECT id, schedule_date FROM project_schedules WHERE project_id = $1', [id]);
             const existingDatesMap: Record<string, number> = {};
-            currentSchRes.rows.forEach(r => existingDatesMap[r.schedule_date.toISOString().split('T')[0]] = r.id);
+            currentSchRes.rows.forEach(r => {
+                const dateVal = r.schedule_date;
+                const dateStr = (dateVal instanceof Date) 
+                    ? dateVal.toISOString().split('T')[0]
+                    : String(dateVal).split('T')[0];
+                existingDatesMap[dateStr] = r.id;
+            });
 
             const keptScheduleIds = new Set<number>();
 
