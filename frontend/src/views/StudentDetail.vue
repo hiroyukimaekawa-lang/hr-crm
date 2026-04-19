@@ -90,7 +90,8 @@ const referralStatusDraft = ref('不明');
 const progressStageDraft = ref('面談調整中');
 const progressStageOptions = ['面談調整中', '初回面談', '2回目面談', '顧客化', 'トビ'];
 const editingBasic = ref(false);
-const basicSaving = ref(false);
+const loading = ref(false);
+const fetchError = ref('');
 const basicSaveMessage = ref('');
 const basicSaveError = ref('');
 const basicDraft = ref({
@@ -239,28 +240,45 @@ const resetBasicDraft = () => {
 };
 
 const fetchDetail = async () => {
-  const token = localStorage.getItem('token');
-  const res = await api.get(`/api/students/${studentId.value}`, { headers: { Authorization: token } });
-  student.value = res.data.student;
-  studentEvents.value = res.data.events;
-  interviewLogs.value = res.data.logs;
-  tasks.value = res.data.tasks || [];
-  interviewSchedules.value = res.data.schedules || [];
-  matcherFunnel.value = res.data.matcher_funnel || null;
-  matcherForm.value = {
-    applied_at: toDateTimeLocalHour(res.data.matcher_funnel?.applied_at || student.value?.created_at),
-    reservation_created_at: toDateTimeLocalHour(res.data.matcher_funnel?.reservation_created_at || student.value?.meeting_decided_date),
-    interview_scheduled_at: toDateTimeLocalHour(res.data.matcher_funnel?.interview_scheduled_at || student.value?.first_interview_date),
-    interview_actual_at: toDateTimeLocalHour(res.data.matcher_funnel?.interview_actual_at),
-    interview_status: res.data.matcher_funnel?.interview_status || 'completed'
-  };
-  referralStatusDraft.value = student.value?.referral_status || '不明';
-  progressStageDraft.value = student.value?.progress_stage || '面談調整中';
-  resetBasicDraft();
-  
-  if (allStudents.value.length === 0) {
-    const listRes = await api.get('/api/students', { headers: { Authorization: token } });
-    allStudents.value = listRes.data;
+  if (!studentId.value) return;
+  loading.value = true;
+  fetchError.value = '';
+  try {
+    const token = localStorage.getItem('token');
+    const res = await api.get(`/api/students/${studentId.value}`, { headers: { Authorization: token } });
+    
+    // Check if response has data
+    if (!res.data || !res.data.student) {
+      throw new Error(`学生データ（ID: ${studentId.value}）が見つかりません。`);
+    }
+
+    student.value = res.data.student;
+    studentEvents.value = res.data.events;
+    interviewLogs.value = res.data.logs;
+    tasks.value = res.data.tasks || [];
+    interviewSchedules.value = res.data.schedules || [];
+    matcherFunnel.value = res.data.matcher_funnel || null;
+    matcherForm.value = {
+      applied_at: toDateTimeLocalHour(res.data.matcher_funnel?.applied_at || student.value?.created_at),
+      reservation_created_at: toDateTimeLocalHour(res.data.matcher_funnel?.reservation_created_at || student.value?.meeting_decided_date),
+      interview_scheduled_at: toDateTimeLocalHour(res.data.matcher_funnel?.interview_scheduled_at || student.value?.first_interview_date),
+      interview_actual_at: toDateTimeLocalHour(res.data.matcher_funnel?.interview_actual_at),
+      interview_status: res.data.matcher_funnel?.interview_status || 'completed'
+    };
+    referralStatusDraft.value = student.value?.referral_status || '不明';
+    progressStageDraft.value = student.value?.progress_stage || '面談調整中';
+    resetBasicDraft();
+
+    // また、紹介元選択用に全学生リストも必要なら取得
+    if (allStudents.value.length === 0) {
+      const listRes = await api.get('/api/students', { headers: { Authorization: token } });
+      allStudents.value = listRes.data;
+    }
+  } catch (err: any) {
+    console.error('Fetch error:', err);
+    fetchError.value = err.response?.data?.error || err.message || 'データの取得に失敗しました。';
+  } finally {
+    loading.value = false;
   }
 };
 
@@ -1062,7 +1080,37 @@ watch(selectedEventId, () => {
         >{{ tab }}</button>
       </div>
 
-      <div class="mb-8 flex flex-col sm:flex-row sm:items-center gap-4">
+      <!-- Loading State -->
+      <div v-if="loading" class="flex flex-col items-center justify-center py-40">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <p class="mt-4 text-gray-500 font-bold">データを読み込み中...</p>
+      </div>
+
+      <!-- Error State -->
+      <div v-else-if="fetchError" class="bg-red-50 border border-red-200 rounded-2xl p-8 text-center my-8">
+        <div class="text-red-600 text-5xl mb-4">⚠️</div>
+        <h2 class="text-xl font-bold text-red-900 mb-2">データの取得に失敗しました</h2>
+        <p class="text-red-700 mb-6 font-medium">{{ fetchError }}</p>
+        <div class="flex flex-col items-center gap-4 text-sm text-gray-500">
+          <p>対象学生ID: <span class="font-mono font-bold bg-white px-2 py-1 rounded border text-black">{{ studentId }}</span></p>
+          <div class="flex items-center gap-3">
+            <button 
+              @click="fetchDetail" 
+              class="px-6 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-100"
+            >
+              再読み込みを試す
+            </button>
+            <button 
+              @click="router.push('/students')" 
+              class="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-colors"
+            >
+              一覧に戻る
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-else>
         <button @click="router.push('/students')" class="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-600">
           <ArrowLeft class="w-6 h-6" />
         </button>
@@ -2052,7 +2100,7 @@ watch(selectedEventId, () => {
               <label class="text-xs font-medium text-gray-500 font-bold text-blue-600">紹介元学生</label>
               <select v-model="basicDraft.referred_by_id" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs font-bold bg-blue-50">
                 <option value="">なし（直接流入など）</option>
-                <option v-for="s in allStudents.filter(s => s.id !== Number(studentId))" :key="`ref-select-${s.id}`" :value="s.id">
+                <option v-for="s in allStudents.filter(s => s.id !== Number(studentId.value))" :key="`ref-select-${s.id}`" :value="s.id">
                   {{ s.name }} ({{ s.university || '-' }})
                 </option>
               </select>
@@ -2069,6 +2117,8 @@ watch(selectedEventId, () => {
         </div>
       </div>
     </teleport>
+      </div>
+    </div>
     <StatusChangeModal
       v-model="statusModalOpen"
       :studentName="student?.name || ''"

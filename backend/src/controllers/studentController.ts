@@ -798,6 +798,11 @@ export const getStudentDetail = async (req: Request, res: Response) => {
             [id]
         );
 
+        if (!studentRes.rows[0]) {
+            console.warn(`[DEBUG] Student with ID ${id} not found in database.`);
+            return res.status(404).json({ error: `指定された学生（ID: ${id}）が見つかりません。データベースに存在しないか、削除された可能性があります。` });
+        }
+
         res.json({
             student: studentRes.rows[0],
             events: eventsRes.rows,
