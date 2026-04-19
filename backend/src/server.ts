@@ -21,7 +21,8 @@ const allowedOrigins = Array.from(new Set(
         process.env.ALLOWED_ORIGINS || '',
         process.env.FRONTEND_URL || '',
         'http://localhost:5173',
-        'https://hrcrm-chi.vercel.app'
+        'https://hrcrm-chi.vercel.app',
+        'https://hr-crm-guxp.vercel.app'
     ]
         .flatMap((entry) => entry.split(','))
         .map((origin) => normalizeOrigin(origin))
