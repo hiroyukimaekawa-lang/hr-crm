@@ -74,15 +74,10 @@ app.use('/api/legacy-events', legacyRoutes_1.default);
 // Legacy routes compat
 app.use('/api/events', eventRoutes_1.default);
 app.use('/api/kpi', kpiRoutes_1.default);
-// 旧APIとの互換性のためのエイリアス（必要に応じて）
-app.post('/api/login', (req, res) => res.redirect(307, '/api/auth/login'));
-app.post('/api/interview-logs', (req, res) => res.redirect(307, '/api/students/interview-logs'));
-app.put('/api/interview-logs/:id', (req, res) => res.redirect(307, `/api/students/interview-logs/${req.params.id}`));
-app.delete('/api/interview-logs/:id', (req, res) => res.redirect(307, `/api/students/interview-logs/${req.params.id}`));
-module.exports = app;
 exports.default = app;
 // ローカル開発用
-if (require.main === module) {
+const isMain = require.main === module;
+if (isMain) {
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => __awaiter(void 0, void 0, void 0, function* () {
         console.log(`Server running on port ${PORT}`);

@@ -105,6 +105,7 @@ const getOverview = (filters) => __awaiter(void 0, void 0, void 0, function* () 
             interviewSettings: metric(settingsTarget, funnel.interview_scheduled),
             inflow: metric(inflowTarget, funnel.reservations),
             rates: { seatToEntry, entryToInterview, interviewToSetting, inflowToSetting },
+            salesBreakdown: salesData.events,
         };
     }
     // 4. Weekly overview
@@ -125,6 +126,7 @@ const getOverview = (filters) => __awaiter(void 0, void 0, void 0, function* () 
             seats: metric(goalMap['required_seats'] || 0, salesData.totalAttendance),
             entries: metric(goalMap['required_entries'] || 0, funnel.applications),
             interviews: metric(goalMap['required_interviews'] || 0, funnel.interview_completed),
+            salesBreakdown: salesData.events,
         };
     }
     // 5. Daily overview
@@ -175,34 +177,32 @@ const getEventKpi = (...args_1) => __awaiter(void 0, [...args_1], void 0, functi
     let periodGoals = {};
     if (filters.month || filters.week || filters.date) {
         const goalRows = yield (0, kpiRepository_1.getGoals)({
-            scopeType: 'event',
             periodType: filters.periodType || (filters.month ? 'monthly' : filters.week ? 'weekly' : 'daily'),
             month: filters.month,
             date: filters.date,
-            // note: getGoals handles week by passing filters.month-01 internally if month exists,
-            // we should ensure it handles week correctly.
         });
         for (const g of goalRows) {
-            if (g.scope_id) {
-                if (!periodGoals[g.scope_id])
-                    periodGoals[g.scope_id] = {};
+            if (g.scope_id && (g.scope_type === 'event' || g.scope_type === 'project')) {
+                const key = `${g.scope_type}-${g.scope_id}`;
+                if (!periodGoals[key])
+                    periodGoals[key] = {};
                 if (g.metric_key === 'target_seats') {
-                    periodGoals[g.scope_id].target = Number(g.target_value);
+                    periodGoals[key].target = Number(g.target_value);
                 }
                 if (g.metric_key === 'guaranteed_sales') {
-                    periodGoals[g.scope_id].guaranteed_sales = Number(g.target_value);
+                    periodGoals[key].guaranteed_sales = Number(g.target_value);
                 }
                 if (g.metric_key === 'cvr_seat_to_entry') {
-                    periodGoals[g.scope_id].cvr_seat_to_entry = Number(g.target_value);
+                    periodGoals[key].cvr_seat_to_entry = Number(g.target_value);
                 }
                 if (g.metric_key === 'unit_price') {
-                    periodGoals[g.scope_id].unit_price = Number(g.target_value);
+                    periodGoals[key].unit_price = Number(g.target_value);
                 }
                 if (g.metric_key === 'allocation_weight') {
-                    periodGoals[g.scope_id].allocation_weight = Number(g.target_value);
+                    periodGoals[key].allocation_weight = Number(g.target_value);
                 }
                 if (g.period_end) {
-                    periodGoals[g.scope_id].deadline = g.period_end.slice(0, 10);
+                    periodGoals[key].deadline = g.period_end.slice(0, 10);
                 }
             }
         }
@@ -211,7 +211,8 @@ const getEventKpi = (...args_1) => __awaiter(void 0, [...args_1], void 0, functi
     return events.map(e => {
         var _a, _b;
         // 2. Override with period-specific goals if they exist
-        const override = periodGoals[e.event_id];
+        const key = `${e.source}-${e.event_id}`;
+        const override = periodGoals[key];
         const targetSeats = (_a = override === null || override === void 0 ? void 0 : override.target) !== null && _a !== void 0 ? _a : e.target_seats;
         const deadline = (_b = override === null || override === void 0 ? void 0 : override.deadline) !== null && _b !== void 0 ? _b : e.deadline;
         const monthlyCvrOverride = override === null || override === void 0 ? void 0 : override.cvr_seat_to_entry;

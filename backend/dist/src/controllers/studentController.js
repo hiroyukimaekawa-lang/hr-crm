@@ -751,6 +751,10 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
              WHERE student_id = $1
              ORDER BY created_at DESC
              LIMIT 1`, [id]);
+        if (!studentRes.rows[0]) {
+            console.warn(`[DEBUG] Student with ID ${id} not found in database.`);
+            return res.status(404).json({ error: `指定された学生（ID: ${id}）が見つかりません。データベースに存在しないか、削除された可能性があります。` });
+        }
         res.json({
             student: studentRes.rows[0],
             events: eventsRes.rows,

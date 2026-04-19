@@ -30,7 +30,7 @@ const getLegacyEvents = (req, res) => __awaiter(void 0, void 0, void 0, function
                 e.capacity,
                 e.target_seats,
                 e.unit_price,
-                e.type as legacy_type,
+                'event' as legacy_type,
                 (SELECT COUNT(*) FROM student_events se WHERE se.event_id = e.id) as participant_count
             FROM events e
             LEFT JOIN event_dates ed ON ed.event_id = e.id
