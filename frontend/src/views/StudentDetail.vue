@@ -92,6 +92,7 @@ const progressStageOptions = ['面談調整中', '初回面談', '2回目面談'
 const editingBasic = ref(false);
 const loading = ref(false);
 const fetchError = ref('');
+const basicSaving = ref(false);
 const basicSaveMessage = ref('');
 const basicSaveError = ref('');
 const basicDraft = ref({
@@ -2100,7 +2101,7 @@ watch(selectedEventId, () => {
               <label class="text-xs font-medium text-gray-500 font-bold text-blue-600">紹介元学生</label>
               <select v-model="basicDraft.referred_by_id" class="w-full px-2 py-1 border border-gray-300 rounded-lg text-xs font-bold bg-blue-50">
                 <option value="">なし（直接流入など）</option>
-                <option v-for="s in allStudents.filter(s => s.id !== Number(studentId.value))" :key="`ref-select-${s.id}`" :value="s.id">
+                <option v-for="s in allStudents.filter(s => s.id !== Number(studentId))" :key="`ref-select-${s.id}`" :value="s.id">
                   {{ s.name }} ({{ s.university || '-' }})
                 </option>
               </select>
