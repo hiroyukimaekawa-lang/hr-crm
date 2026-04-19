@@ -1219,21 +1219,31 @@ export const linkEvent = async (req: Request, res: Response) => {
             await pool.query(
                 `INSERT INTO student_project_relations (student_id, project_id, status, selected_event_date)
                  VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (student_id, project_id, selected_event_date)
+                 ON CONFLICT (student_id, project_id, (COALESCE(schedule_id, 0)), (COALESCE(time_slot_id, 0)))
                  DO UPDATE SET
-                    status = EXCLUDED.status`,
+                    status = EXCLUDED.status,
+                    selected_event_date = EXCLUDED.selected_event_date`,
                 [id, event_id, safeStatus, normDate]
             );
         } else {
             await ensureStudentEventsColumns();
-            await pool.query(
-                `INSERT INTO student_events (student_id, event_id, status, selected_event_date)
-                 VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (student_id, event_id, selected_event_date)
-                 DO UPDATE SET
-                    status = EXCLUDED.status`,
-                [id, event_id, safeStatus, normDate]
+            // student_events has an index on (student_id, event_id, selected_event_date)
+            // But if selected_event_date is null Postgres doesn't consider them conflicting, so let's do a conditional update to be very robust.
+            const checkRes = await pool.query(
+                'SELECT id FROM student_events WHERE student_id = $1 AND event_id = $2 AND (selected_event_date = $3 OR (selected_event_date IS NULL AND $3 IS NULL))',
+                [id, event_id, normDate]
             );
+            if (checkRes.rows.length > 0) {
+                await pool.query(
+                    'UPDATE student_events SET status = $1 WHERE id = $2',
+                    [safeStatus, checkRes.rows[0].id]
+                );
+            } else {
+                await pool.query(
+                    'INSERT INTO student_events (student_id, event_id, status, selected_event_date) VALUES ($1, $2, $3, $4)',
+                    [id, event_id, safeStatus, normDate]
+                );
+            }
         }
         res.json({ success: true });
     } catch (err: any) {
