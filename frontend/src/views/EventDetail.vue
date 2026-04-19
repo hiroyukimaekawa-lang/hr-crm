@@ -238,6 +238,7 @@ const updateEvent = async () => {
     description: form.value.description,
     event_slots: form.value.event_slots.filter(s => s.datetime),
     event_dates: form.value.event_slots.map(s => s.datetime).filter(Boolean),
+    entry_deadline: form.value.entry_deadline || null,
     location: form.value.location || null,
     lp_url: form.value.lp_url || null,
   }, { headers: { Authorization: token } });
@@ -442,7 +443,7 @@ onMounted(fetchDetail);
                 <input v-model="form.graduation_year" type="number" placeholder="例: 2026" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
               </div>
             </div>
-            <div>
+            <div v-if="form.type !== 'agent_interview'">
               <label class="block text-xs text-gray-500 mb-1">開催日時・場所・備考</label>
               <div class="space-y-2">
                 <div v-for="(slot, idx) in form.event_slots" :key="`edit-event-slot-${idx}`" class="flex flex-col sm:flex-row gap-2 pb-2 border-b border-gray-100 sm:border-0 items-end sm:items-center">
@@ -459,6 +460,10 @@ onMounted(fetchDetail);
                 </div>
                 <button type="button" class="px-3 py-2 border border-blue-200 text-blue-700 rounded-lg text-xs hover:bg-blue-50" @click="addSlot">日程追加</button>
               </div>
+            </div>
+            <div v-else>
+              <label class="block text-xs text-gray-500 mb-1">締日</label>
+              <input v-model="form.entry_deadline" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">場所（オンライン/会場）</label>

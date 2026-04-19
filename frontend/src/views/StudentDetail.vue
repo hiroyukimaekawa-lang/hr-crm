@@ -23,7 +23,6 @@ import {
   UserCheck
 } from 'lucide-vue-next';
 import StatusChangeModal from '../components/StatusChangeModal.vue'
-import AgentSchedulePicker from '../components/AgentSchedulePicker.vue'
 import { getStatusLabel, getStatusBadgeClass } from '../lib/statusConfig'
 
 const route = useRoute();
@@ -1549,17 +1548,32 @@ watch(selectedEventId, () => {
                     <p class="text-base md:text-sm text-gray-500 mt-0.5">{{ e.selected_event_date ? formatDateTime(e.selected_event_date, e) : formatDateTime(e.event_date, e) }}</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-                    <select
-                      v-if="eventDateOptions(e).length > 1"
-                      class="px-2 py-1.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-[140px]"
-                      :value="e.selected_event_date || ''"
-                      @change="updateEventParticipationDate(e.id, e.student_event_id, e.participation_status, ($event.target as HTMLSelectElement).value, e.source)"
-                    >
-                      <option disabled value="">参加日を選択</option>
-                      <option v-for="d in eventDateOptions(e)" :key="`student-event-date-${e.id}-${d}`" :value="d">
-                        {{ formatDateTime(d, e) }}
-                      </option>
-                    </select>
+                    <!-- Agent interview: free datetime picker -->
+                    <template v-if="e.type === 'agent_interview'">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-xs text-gray-400 whitespace-nowrap">面談日時</span>
+                        <input
+                          type="datetime-local"
+                          class="px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-indigo-400 outline-none"
+                          :value="e.selected_event_date ? e.selected_event_date.slice(0, 16) : ''"
+                          @change="updateEventParticipationDate(e.id, e.student_event_id, e.participation_status, ($event.target as HTMLInputElement).value, e.source)"
+                        />
+                      </div>
+                    </template>
+                    <!-- Regular event: date slot dropdown -->
+                    <template v-else>
+                      <select
+                        v-if="eventDateOptions(e).length > 1"
+                        class="px-2 py-1.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-[140px]"
+                        :value="e.selected_event_date || ''"
+                        @change="updateEventParticipationDate(e.id, e.student_event_id, e.participation_status, ($event.target as HTMLSelectElement).value, e.source)"
+                      >
+                        <option disabled value="">参加日を選択</option>
+                        <option v-for="d in eventDateOptions(e)" :key="`student-event-date-${e.id}-${d}`" :value="d">
+                          {{ formatDateTime(d, e) }}
+                        </option>
+                      </select>
+                    </template>
                     <span class="text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap" :class="participationStatusClass(e.participation_status)">
                       {{ participationStatusLabel(e.participation_status) }}
                     </span>
@@ -1569,6 +1583,7 @@ watch(selectedEventId, () => {
                       :class="getStatusBadgeClass(e.participation_status)"
                     >{{ getStatusLabel(e.participation_status) }} ▼</button>
                   </div>
+
                 </div>
               </div>
               <div v-if="studentEvents.length === 0" class="text-base md:text-sm text-gray-400 text-center py-4">
@@ -1594,9 +1609,10 @@ watch(selectedEventId, () => {
                   </optgroup>
                 </select>
 
-                <!-- Agent-type: Calendar picker -->
+                <!-- Agent-type: Native datetime picker -->
                 <div v-if="selectedEventId && isSelectedEventAgent" class="mt-1">
-                  <AgentSchedulePicker v-model="agentScheduleDate" />
+                  <label class="block text-xs text-gray-500 mb-1">面談予約日時を選択</label>
+                  <input v-model="agentScheduleDate" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
                 </div>
 
                 <!-- Non-agent: date slot dropdown (existing behavior) -->
