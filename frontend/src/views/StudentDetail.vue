@@ -15,7 +15,12 @@ import {
   Edit,
   Trash2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Activity,
+  TrendingUp,
+  Coins,
+  CheckCircle2,
+  UserCheck
 } from 'lucide-vue-next';
 import StatusChangeModal from '../components/StatusChangeModal.vue'
 import AgentSchedulePicker from '../components/AgentSchedulePicker.vue'
@@ -23,7 +28,7 @@ import { getStatusLabel, getStatusBadgeClass } from '../lib/statusConfig'
 
 const route = useRoute();
 const router = useRouter();
-const studentId = route.params.id;
+const studentId = computed(() => route.params.id);
 const activeTab = ref('基本情報');
 const student = ref<any>({});
 const studentEvents = ref<any[]>([]);
@@ -146,7 +151,7 @@ const matcherInterviewActualAtHour = computed({
   set: (val: string) => matcherForm.value.interview_actual_at = mergeDateHour(getDatePart(matcherForm.value.interview_actual_at) || '', (val || '10:00').split(':')[0] || '10')
 });
 
-const draftStorageKey = computed(() => `student-detail-draft:${String(studentId)}`);
+const draftStorageKey = computed(() => `student-detail-draft:${String(studentId.value)}`);
 
 const restoreDraft = () => {
   try {
@@ -235,7 +240,7 @@ const resetBasicDraft = () => {
 
 const fetchDetail = async () => {
   const token = localStorage.getItem('token');
-  const res = await api.get(`/api/students/${studentId}`, { headers: { Authorization: token } });
+  const res = await api.get(`/api/students/${studentId.value}`, { headers: { Authorization: token } });
   student.value = res.data.student;
   studentEvents.value = res.data.events;
   interviewLogs.value = res.data.logs;
@@ -315,11 +320,11 @@ const registerMatcherApply = async () => {
   try {
     const token = localStorage.getItem('token');
     const appliedAt = normalizeHourDateTime(matcherForm.value.applied_at);
-    await api.post(`/api/students/${studentId}/funnel/application`, {
+    await api.post(`/api/students/${studentId.value}/funnel/application`, {
       source: student.value?.source_company || null,
       applied_at: appliedAt
     }, { headers: { Authorization: token } });
-    await api.post(`/api/students/${studentId}/matcher-funnel/apply`, {
+    await api.post(`/api/students/${studentId.value}/matcher-funnel/apply`, {
       applied_at: appliedAt
     }, { headers: { Authorization: token } });
     fetchDetail();
@@ -334,12 +339,12 @@ const registerMatcherReservation = async () => {
     const token = localStorage.getItem('token');
     const reservationCreatedAt = normalizeHourDateTime(matcherForm.value.reservation_created_at);
     const interviewScheduledAt = normalizeHourDateTime(matcherForm.value.interview_scheduled_at);
-    await api.put(`/api/students/${studentId}/funnel/reservation`, {
+    await api.put(`/api/students/${studentId.value}/funnel/reservation`, {
       reservation_status: '初回面談',
       reservation_created_at: reservationCreatedAt,
       reservation_date: interviewScheduledAt
     }, { headers: { Authorization: token } });
-    await api.post(`/api/students/${studentId}/matcher-funnel/reservation`, {
+    await api.post(`/api/students/${studentId.value}/matcher-funnel/reservation`, {
       reservation_created_at: reservationCreatedAt,
       reservation_status: '初回面談',
       interview_scheduled_at: interviewScheduledAt
@@ -356,7 +361,7 @@ const registerMatcherInterview = async () => {
     const token = localStorage.getItem('token');
     const interviewActualAt = normalizeHourDateTime(matcherForm.value.interview_actual_at);
     const interviewScheduledAt = normalizeHourDateTime(matcherForm.value.interview_scheduled_at);
-    await api.post(`/api/students/${studentId}/matcher-funnel/interview`, {
+    await api.post(`/api/students/${studentId.value}/matcher-funnel/interview`, {
       interview_actual_at: interviewActualAt,
       interview_status: matcherForm.value.interview_status || 'completed',
       interview_scheduled_at: interviewScheduledAt
@@ -393,7 +398,7 @@ const fetchProposalMaster = async () => {
 
 const fetchEventProposals = async () => {
   const token = localStorage.getItem('token');
-  const res = await api.get(`/api/students/${studentId}/funnel/event-proposals`, { headers: { Authorization: token } });
+  const res = await api.get(`/api/students/${studentId.value}/funnel/event-proposals`, { headers: { Authorization: token } });
   eventProposals.value = Array.isArray(res.data) ? res.data : [];
 };
 
@@ -403,7 +408,7 @@ const submitEventProposal = async () => {
   const selectedReason = proposalForm.value.reason || '';
   const matchedLostReason = proposalLostReasons.value.find((r: any) => String(r.reason_name || '') === selectedReason);
   const lostReasonId = proposalForm.value.status === 'lost' && matchedLostReason ? Number(matchedLostReason.id) : null;
-  await api.post(`/api/students/${studentId}/funnel/event-proposal`, {
+  await api.post(`/api/students/${studentId.value}/funnel/event-proposal`, {
     event_id: Number(proposalForm.value.event_id),
     selected_event_date: proposalForm.value.selected_event_date || null,
     status: proposalForm.value.status || 'proposed',
@@ -427,7 +432,7 @@ const addLog = async () => {
     const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)"}');
     await api.post('/api/interview-logs', {
-      student_id: studentId,
+      student_id: studentId.value,
       staff_id: user.id,
       log_type: newLogType.value,
       event_id: newLogType.value === 'エントリー' ? newLogEventId.value : null,
@@ -497,7 +502,7 @@ const addTask = async () => {
   try {
     if (!newTaskContent.value.trim()) return;
     const token = localStorage.getItem('token');
-    await api.post(`/api/students/${studentId}/tasks`, {
+    await api.post(`/api/students/${studentId.value}/tasks`, {
       due_date: mergeDateHour(newTaskDate.value || '', (newTaskHour.value || '10:00').split(':')[0] || '10') || null,
       content: newTaskContent.value
     }, { headers: { Authorization: token } });
@@ -514,7 +519,7 @@ const addTask = async () => {
 const addInterviewSchedule = async () => {
   try {
     const token = localStorage.getItem('token');
-    await api.post(`/api/students/${studentId}/interview-schedules`, {
+    await api.post(`/api/students/${studentId.value}/interview-schedules`, {
       scheduled_at: mergeDateHour(newScheduleDate.value || '', (newScheduleHour.value || '10:00').split(':')[0] || '10') || null,
       schedule_type: newScheduleType.value,
       status: newScheduleType.value === 'リスケ' ? 'rescheduled' : 'scheduled'
@@ -583,7 +588,7 @@ const linkEvent = async () => {
     const dateToSave = isSelectedEventAgent.value
       ? (agentScheduleDate.value || null)
       : (selectedEventDate.value || null);
-    await api.post(`/api/students/${studentId}/events`, {
+    await api.post(`/api/students/${studentId.value}/events`, {
       event_id: selectedEventId.value,
       selected_event_date: dateToSave,
       status: selectedEventStatus.value,
@@ -687,6 +692,19 @@ const ltvFormatted = computed(() =>
   ltv.value.toLocaleString('ja-JP')
 );
 
+const funnelStages = computed(() => [
+  { label: '申込', completed: !!(matcherFunnel.value?.applied_at || student.value?.created_at) },
+  { label: '面談予約', completed: !!(matcherFunnel.value?.reservation_created_at || student.value?.meeting_decided_date) },
+  { label: '面談実施', completed: !!(matcherFunnel.value?.interview_actual_at || student.value?.first_interview_date) },
+  { label: '完了', completed: matcherFunnel.value?.interview_status === 'completed' && !!matcherFunnel.value?.interview_actual_at }
+]);
+
+const funnelProgressWidth = computed(() => {
+  const completedCount = funnelStages.value.filter(s => s.completed).length;
+  if (completedCount <= 1) return '0%';
+  return `${((completedCount - 1) / (funnelStages.value.length - 1)) * 100}%`;
+});
+
 const eventDateOptions = (event: any) => {
   const dates = Array.isArray(event?.event_dates)
     ? event.event_dates.filter((d: any) => !!d).map((d: any) => String(d))
@@ -745,7 +763,7 @@ const participationStatusLabel = (status?: string) => {
 const updateStatus = async () => {
   try {
     const token = localStorage.getItem('token');
-    await api.put(`/api/students/${studentId}/meta`, {
+    await api.put(`/api/students/${studentId.value}/meta`, {
       referral_status: referralStatusDraft.value,
       progress_stage: progressStageDraft.value
     }, { headers: { Authorization: token } });
@@ -763,7 +781,7 @@ const saveBasic = async () => {
     basicSaveError.value = '';
     basicSaveMessage.value = '';
     const token = localStorage.getItem('token');
-    await api.put(`/api/students/${studentId}`, {
+    await api.put(`/api/students/${studentId.value}`, {
       ...basicDraft.value,
       graduation_year: basicDraft.value.graduation_year ? Number(basicDraft.value.graduation_year) : null,
       meeting_decided_date: basicDraft.value.meeting_decided_date || null,
@@ -917,7 +935,7 @@ const unifiedReasonOptions = computed(() => {
   ];
   return Array.from(new Set(all));
 });
-const isPinned = computed(() => getPinnedStudent()?.id === Number(studentId));
+const isPinned = computed(() => getPinnedStudent()?.id === Number(studentId.value));
 
 const pinCurrentStudent = () => {
   if (!student.value?.id) return;
@@ -925,7 +943,7 @@ const pinCurrentStudent = () => {
 };
 
 const unpinCurrentStudent = () => {
-  if (getPinnedStudent()?.id === Number(studentId)) {
+  if (getPinnedStudent()?.id === Number(studentId.value)) {
     clearPinnedStudent();
   }
 };
@@ -952,6 +970,21 @@ onMounted(() => {
   fetchProposalMaster();
   fetchEventProposals();
   window.addEventListener('beforeunload', onBeforeUnload);
+});
+
+watch(studentId, (newId) => {
+  if (newId) {
+    // Reset state before fetching
+    student.value = {};
+    studentEvents.value = [];
+    interviewLogs.value = [];
+    tasks.value = [];
+    interviewSchedules.value = [];
+    matcherFunnel.value = null;
+    
+    fetchDetail().then(restoreDraft);
+    fetchEventProposals();
+  }
 });
 
 onBeforeUnmount(() => {
@@ -1069,6 +1102,55 @@ watch(selectedEventId, () => {
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
         <div class="lg:col-span-1 space-y-8">
+          <!-- KPI & サマリーカード (常に表示) -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <TrendingUp class="w-5 h-5 text-blue-600" />
+              実績・ステータス
+            </h2>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+              <div class="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                <p class="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">総参加案件</p>
+                <div class="flex items-center gap-2">
+                  <Activity class="w-4 h-4 text-blue-500" />
+                  <span class="text-xl font-bold text-blue-900">{{ totalEventCount }}</span>
+                  <span class="text-xs text-blue-600">件</span>
+                </div>
+              </div>
+              <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">LTV (売上)</p>
+                <div class="flex items-center gap-1">
+                  <Coins class="w-4 h-4 text-emerald-500" />
+                  <span class="text-xl font-bold text-emerald-900">¥{{ ltvFormatted }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Matcher面談ファネル進捗 (常に表示) -->
+            <div v-if="student.source_company === 'Matcher' || matcherFunnel" class="space-y-4">
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-xs font-bold text-gray-500">Matcher面談フェーズ</p>
+                <button @click="showMatcherFunnel = true" class="text-[10px] text-blue-600 font-bold hover:underline">詳細編集</button>
+              </div>
+              <div class="relative flex items-center justify-between px-2">
+                <!-- 線 -->
+                <div class="absolute left-0 right-0 top-3 h-0.5 bg-gray-100 -z-0"></div>
+                <div class="absolute left-0 top-3 h-0.5 bg-blue-500 transition-all duration-500 -z-0" :style="{ width: funnelProgressWidth }"></div>
+                
+                <div v-for="(stage, idx) in funnelStages" :key="stage.label" class="relative z-10 flex flex-col items-center gap-1.5">
+                  <div 
+                    class="w-6 h-6 rounded-full flex items-center justify-center transition-all shadow-sm"
+                    :class="stage.completed ? 'bg-blue-600 text-white' : 'bg-white border-2 border-gray-200 text-gray-300'"
+                  >
+                    <CheckCircle2 v-if="stage.completed" class="w-4 h-4" />
+                    <span v-else class="text-[10px] font-bold">{{ idx + 1 }}</span>
+                  </div>
+                  <span class="text-[10px] font-bold" :class="stage.completed ? 'text-blue-600' : 'text-gray-400'">{{ stage.label }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div :class="activeTab === '基本情報' ? 'block' : 'hidden md:block'" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div class="flex items-start justify-between mb-4">
               <div>
@@ -1185,14 +1267,14 @@ watch(selectedEventId, () => {
                 <Mail class="w-5 h-5" />
                 <div>
                   <p class="text-base md:text-sm text-gray-500">メールアドレス</p>
-                  <p class="text-sm font-medium">{{ student.email }}</p>
+                  <p class="text-sm font-medium">{{ student.email || '-' }}</p>
                 </div>
               </div>
               <div class="flex items-center gap-3 text-gray-600 min-w-0">
                 <Phone class="w-5 h-5" />
                 <div>
                   <p class="text-base md:text-sm text-gray-500">電話番号</p>
-                  <p class="text-sm font-medium">{{ student.phone }}</p>
+                  <p class="text-sm font-medium">{{ student.phone || '-' }}</p>
                 </div>
               </div>
 
