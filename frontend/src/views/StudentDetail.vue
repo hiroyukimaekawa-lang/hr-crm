@@ -450,7 +450,7 @@ const addLog = async () => {
     if (!newLog.value) return;
     const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)"}');
-    await api.post('/api/interview-logs', {
+    await api.post('/api/students/interview-logs', {
       student_id: studentId.value,
       staff_id: user.id,
       log_type: newLogType.value,
