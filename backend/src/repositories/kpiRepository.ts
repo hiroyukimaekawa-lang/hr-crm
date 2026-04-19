@@ -300,7 +300,7 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
             COALESCE(p.kpi_entry_to_interview_rate, 60) AS kpi_entry_to_interview_rate,
             COALESCE(p.kpi_interview_to_reservation_rate, 50) AS kpi_interview_to_reservation_rate,
             COALESCE(p.kpi_reservation_to_application_rate, 40) AS kpi_reservation_to_application_rate,
-            50 AS kpi_interview_to_inflow_rate,
+            COALESCE(p.kpi_interview_to_inflow_rate, 50) AS kpi_interview_to_inflow_rate,
             COALESCE(p.kpi_custom_steps, '[]') AS kpi_custom_steps,
             COALESCE((
               SELECT jsonb_agg(jsonb_build_object('datetime', to_char(ps.schedule_date, 'YYYY-MM-DD\"T\"HH24:MI:SS')))

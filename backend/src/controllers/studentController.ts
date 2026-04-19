@@ -761,7 +761,7 @@ export const getStudentDetail = async (req: Request, res: Response) => {
                 pp.id as student_event_id,
                 pp.status as participation_status,
                 pp.created_at as participation_created_at,
-                NULL as selected_event_date,
+                to_char(pp.selected_event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as selected_event_date,
                 'project' as source
             FROM projects p
             JOIN student_project_relations pp ON p.id = pp.project_id

@@ -68,7 +68,6 @@ app.use('/api/legacy-events', legacyRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/kpi', kpiRoutes);
 
-// 旧APIとの互換性のためのエイリアス（必要に応じて）
 export default app;
 
 // ローカル開発用
