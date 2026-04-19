@@ -2118,8 +2118,6 @@ watch(selectedEventId, () => {
         </div>
       </div>
     </teleport>
-      </div>
-    </div>
     <StatusChangeModal
       v-model="statusModalOpen"
       :studentName="student?.name || ''"
