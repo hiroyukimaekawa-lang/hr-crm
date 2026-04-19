@@ -601,13 +601,18 @@ const completeTask = async (taskId: number) => {
 const linkEvent = async () => {
   try {
     if (!selectedEventId.value) return;
+    
+    // Parse the compound key (source_id)
+    const key = String(selectedEventId.value);
+    const finalEventId = key.includes('_') ? Number(key.split('_')[1]) : Number(key);
+
     const token = localStorage.getItem('token');
     // For agent-type events, use the calendar-picked datetime; otherwise the slot dropdown
     const dateToSave = isSelectedEventAgent.value
       ? (agentScheduleDate.value || null)
       : (selectedEventDate.value || null);
     await api.post(`/api/students/${studentId.value}/events`, {
-      event_id: selectedEventId.value,
+      event_id: finalEventId,
       selected_event_date: dateToSave,
       status: selectedEventStatus.value,
       source: selectedLinkEvent.value?.source
@@ -668,9 +673,17 @@ const updateEventParticipationDate = async (
 };
 
 const selectedLinkEvent = computed(() => {
-  const id = Number(selectedEventId.value || 0);
-  if (!id) return null;
-  return availableEvents.value.find((e: any) => Number(e.id) === id) || null;
+  const key = String(selectedEventId.value);
+  if (!key) return null;
+  
+  if (key.includes('_')) {
+    const [source, idStr] = key.split('_');
+    const id = Number(idStr);
+    return availableEvents.value.find((e: any) => Number(e.id) === id && e.source === source) || null;
+  } else {
+    const id = Number(key);
+    return availableEvents.value.find((e: any) => Number(e.id) === id) || null;
+  }
 });
 
 const isSelectedEventAgent = computed(() =>
@@ -1598,12 +1611,12 @@ watch(selectedEventId, () => {
                 <select v-model="selectedEventId" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                   <option disabled value="">案件を選択</option>
                   <optgroup label="エージェント面談">
-                    <option v-for="ae in availableEvents.filter((e:any) => e.type === 'agent_interview')" :key="ae.id" :value="ae.id">
+                    <option v-for="ae in availableEvents.filter((e:any) => e.type === 'agent_interview')" :key="ae.source + '_' + ae.id" :value="ae.source + '_' + ae.id">
                       🤝 {{ ae.title }}
                     </option>
                   </optgroup>
                   <optgroup label="イベント">
-                    <option v-for="ae in availableEvents.filter((e:any) => e.type !== 'agent_interview')" :key="ae.id" :value="ae.id">
+                    <option v-for="ae in availableEvents.filter((e:any) => e.type !== 'agent_interview')" :key="ae.source + '_' + ae.id" :value="ae.source + '_' + ae.id">
                       📅 {{ ae.title }}
                     </option>
                   </optgroup>
