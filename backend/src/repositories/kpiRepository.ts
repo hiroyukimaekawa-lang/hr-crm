@@ -489,7 +489,6 @@ export const getSalesActuals = async (filters: KpiFilters) => {
             (unit_price * COUNT(DISTINCT participant_id))::bigint AS sales
         FROM all_sales
         GROUP BY event_id, event_title, unit_price, source
-        HAVING (unit_price * COUNT(DISTINCT participant_id)) > 0 OR COUNT(DISTINCT participant_id) > 0
         ORDER BY sales DESC
     `;
     const res = await pool.query(sql, params);
