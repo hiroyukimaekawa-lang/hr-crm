@@ -394,7 +394,11 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
         const rawSlots = e.event_slots || [];
         const norm = (dt: string) => dt ? dt.slice(0, 16) : dt;
         const normSbd: any = {}; Object.entries(sbd).forEach(([k, v]) => { normSbd[norm(k)] = v; });
-        const keys = new Set([...rawSlots.map((s: any) => norm(s.datetime)), ...Object.keys(normSbd)]);
+        
+        // Define exact master event dates. We only use explicit slots from projects/events.
+        // We do NOT union with Object.keys(normSbd) because for legacy events that contains 
+        // random created_at timestamps which would otherwise bloat the UI with fake slots.
+        const keys = new Set([...rawSlots.map((s: any) => norm(s.datetime))]);
         const slots = Array.from(keys).filter(Boolean).map(k => {
             const b = normSbd[k] || {};
             return {
