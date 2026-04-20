@@ -11,6 +11,8 @@ interface Student {
   is_favorite?: boolean;
   referral_outreach_status?: string;
   referral_count?: number;
+  referral_expected_reach_count?: number;
+  referral_expected_count?: number;
   university?: string;
   graduation_year?: number;
   staff_name?: string;
@@ -1103,6 +1105,16 @@ const filteredMonthlyParticipants = computed(() => {
   });
 });
 
+const referralStats = computed(() => {
+  const favoriteStudents = students.value.filter(s => s.is_favorite);
+  return {
+    targetCount: favoriteStudents.length,
+    expectedReach: favoriteStudents.reduce((sum, s) => sum + (s.referral_expected_reach_count || 0), 0),
+    expectedReferrals: favoriteStudents.reduce((sum, s) => sum + (s.referral_expected_count || 0), 0),
+    actualReferrals: favoriteStudents.reduce((sum, s) => sum + (s.referral_count || 0), 0)
+  };
+});
+
 const updateReferralOutreachStatus = async (studentId: number, status: string) => {
   try {
     const token = localStorage.getItem('token');
@@ -1116,6 +1128,25 @@ const updateReferralOutreachStatus = async (studentId: number, status: string) =
     }
   } catch (err) {
     console.error(err);
+  }
+};
+
+const updateReferralCounts = async (studentId: number, field: 'referral_expected_reach_count' | 'referral_expected_count', value: number) => {
+  try {
+    const token = localStorage.getItem('token');
+    const updateData: any = {};
+    updateData[field] = value;
+    
+    await api.patch(`/api/students/${studentId}/referral-counts`, updateData, {
+      headers: { Authorization: token }
+    });
+    
+    const student = students.value.find(s => s.id === studentId);
+    if (student) {
+      student[field] = value;
+    }
+  } catch (err) {
+    console.error('Failed to update referral counts:', err);
   }
 };
 
@@ -1840,6 +1871,26 @@ watch(selectedGraduationYear, fetchFunnelKpi);
         </div>
       </div>
 
+      <!-- Referral KPI Summary Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="bg-slate-50 rounded-2xl p-5 border border-slate-100 flex flex-col items-center justify-center">
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">紹介打診対象</p>
+          <p class="text-2xl font-black text-slate-900">{{ referralStats.targetCount }}<span class="text-xs ml-0.5 font-bold">名</span></p>
+        </div>
+        <div class="bg-blue-50/50 rounded-2xl p-5 border border-blue-100/50 flex flex-col items-center justify-center">
+          <p class="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">声かけ見込み数</p>
+          <p class="text-2xl font-black text-blue-600">{{ referralStats.expectedReach }}<span class="text-xs ml-0.5 font-bold">名</span></p>
+        </div>
+        <div class="bg-indigo-50/50 rounded-2xl p-5 border border-indigo-100/50 flex flex-col items-center justify-center">
+          <p class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">紹介見込み数</p>
+          <p class="text-2xl font-black text-indigo-600">{{ referralStats.expectedReferrals }}<span class="text-xs ml-0.5 font-bold">名</span></p>
+        </div>
+        <div class="bg-emerald-50/50 rounded-2xl p-5 border border-emerald-100/50 flex flex-col items-center justify-center">
+          <p class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1">紹介実績数</p>
+          <p class="text-2xl font-black text-emerald-600">{{ referralStats.actualReferrals }}<span class="text-xs ml-0.5 font-bold">名</span></p>
+        </div>
+      </div>
+
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-slate-50 border-b border-slate-100">
@@ -1847,7 +1898,9 @@ watch(selectedGraduationYear, fetchFunnelKpi);
               <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">学生名</th>
               <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">大学 / 卒年</th>
               <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">打診ステータス</th>
-              <th class="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider text-green-600">紹介人数</th>
+              <th class="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">声かけ見込み</th>
+              <th class="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">紹介見込み</th>
+              <th class="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider text-green-600">紹介実績</th>
               <th class="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">操作</th>
             </tr>
           </thead>
@@ -1871,7 +1924,25 @@ watch(selectedGraduationYear, fetchFunnelKpi);
                 </select>
               </td>
               <td class="px-4 py-4 text-center">
-                <span v-if="s.referral_count && s.referral_count > 0" class="inline-flex items-center px-3 py-1 rounded-full bg-green-100 text-green-700 font-black text-base animate-in zoom-in">
+                <input
+                  type="number"
+                  class="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-center text-xs font-bold focus:ring-1 focus:ring-blue-400 outline-none"
+                  :value="s.referral_expected_reach_count || 0"
+                  @change="updateReferralCounts(s.id, 'referral_expected_reach_count', Number(($event.target as HTMLInputElement).value))"
+                  min="0"
+                />
+              </td>
+              <td class="px-4 py-4 text-center">
+                <input
+                  type="number"
+                  class="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-center text-xs font-bold focus:ring-1 focus:ring-indigo-400 outline-none"
+                  :value="s.referral_expected_count || 0"
+                  @change="updateReferralCounts(s.id, 'referral_expected_count', Number(($event.target as HTMLInputElement).value))"
+                  min="0"
+                />
+              </td>
+              <td class="px-4 py-4 text-center">
+                <span v-if="s.referral_count && s.referral_count > 0" class="inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-sm">
                   {{ s.referral_count }}人
                 </span>
                 <span v-else class="text-slate-300 font-bold">-</span>

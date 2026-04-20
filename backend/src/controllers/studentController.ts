@@ -78,6 +78,14 @@ const ensureStudentExtendedColumns = async () => {
                 ALTER TABLE students
                 ADD COLUMN IF NOT EXISTS referred_by_id INTEGER REFERENCES students(id) ON DELETE SET NULL
             `);
+            await pool.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS referral_expected_reach_count INTEGER DEFAULT 0
+            `);
+            await pool.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS referral_expected_count INTEGER DEFAULT 0
+            `);
             cachedStudentColumns = null;
             studentExtendedColumnsReady = true;
         })().finally(() => {
@@ -2712,6 +2720,28 @@ export const updateStudentReferralStatus = async (req: Request, res: Response) =
     const result = await pool.query(
       'UPDATE students SET referral_outreach_status = $1 WHERE id = $2 RETURNING *',
       [referral_outreach_status, id]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Student not found' });
+      return;
+    }
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const updateStudentReferralCounts = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { referral_expected_reach_count, referral_expected_count } = req.body;
+  try {
+    await ensureStudentExtendedColumns();
+    const result = await pool.query(
+      `UPDATE students 
+       SET referral_expected_reach_count = COALESCE($1, referral_expected_reach_count),
+           referral_expected_count = COALESCE($2, referral_expected_count)
+       WHERE id = $3 RETURNING *`,
+      [referral_expected_reach_count, referral_expected_count, id]
     );
     if (result.rows.length === 0) {
       res.status(404).json({ error: 'Student not found' });
