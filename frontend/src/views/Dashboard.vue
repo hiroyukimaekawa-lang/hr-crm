@@ -1109,9 +1109,9 @@ const referralStats = computed(() => {
   const favoriteStudents = students.value.filter(s => s.is_favorite);
   return {
     targetCount: favoriteStudents.length,
-    expectedReach: favoriteStudents.reduce((sum, s) => sum + (s.referral_expected_reach_count || 0), 0),
-    expectedReferrals: favoriteStudents.reduce((sum, s) => sum + (s.referral_expected_count || 0), 0),
-    actualReferrals: favoriteStudents.reduce((sum, s) => sum + (s.referral_count || 0), 0)
+    expectedReach: favoriteStudents.reduce((sum, s) => sum + Number(s.referral_expected_reach_count || 0), 0),
+    expectedReferrals: favoriteStudents.reduce((sum, s) => sum + Number(s.referral_expected_count || 0), 0),
+    actualReferrals: favoriteStudents.reduce((sum, s) => sum + Number(s.referral_count || 0), 0)
   };
 });
 
@@ -1897,6 +1897,7 @@ watch(selectedGraduationYear, fetchFunnelKpi);
             <tr>
               <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">学生名</th>
               <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">大学 / 卒年</th>
+              <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">担当者</th>
               <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">打診ステータス</th>
               <th class="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">声かけ見込み</th>
               <th class="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">紹介見込み</th>
@@ -1909,6 +1910,9 @@ watch(selectedGraduationYear, fetchFunnelKpi);
               <td class="px-4 py-4 font-black text-slate-900">{{ s.name }}</td>
               <td class="px-4 py-4 text-slate-500 font-medium">
                 {{ s.university || '-' }} / {{ s.graduation_year ? s.graduation_year + '卒' : '-' }}
+              </td>
+              <td class="px-4 py-4 text-slate-600 text-xs font-bold">
+                {{ s.staff_name || '-' }}
               </td>
               <td class="px-4 py-4">
                 <select
