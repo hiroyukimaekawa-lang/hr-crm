@@ -302,7 +302,8 @@ const fetchGoals = async () => {
     
     // Reset global form
     goalForm.value = {
-      sales_target: 0, required_seats: 0, required_entries: 0, required_interviews: 0,
+      sales_target: 0, unit_price: 0, deal_cvr: 50, interview_cvr: 60,
+      required_seats: 0, required_entries: 0, required_interviews: 0,
       required_interview_settings: 0, required_inflow: 0,
       cvr_seat_to_entry: 70, cvr_entry_to_interview: 60, cvr_interview_to_setting: 50, cvr_inflow_to_setting: 40
     };
