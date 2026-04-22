@@ -4,6 +4,10 @@
  * Computes target vs actual, CVRs, gap, achievementRate, and derived
  * (reverse-calculated) requirements. This is the ONLY place where KPI
  * maths lives.
+ *
+ * === Revenue-Driven KPI Architecture ===
+ * Revenue Target (top) → ÷ Unit Price → Deal Count → ÷ CVR → Interview Count
+ * → ÷ CVR → Entry Count → Channel Allocation (Event / Agent)
  */
 import {
     KpiFilters,
@@ -14,6 +18,7 @@ import {
     upsertGoals,
     getEventKpiData,
     getSalesActuals as getSalesData,
+    getChannelActuals as getChannelData,
     ensureKpiTable,
 } from '../repositories/kpiRepository';
 
@@ -24,6 +29,52 @@ interface KpiMetric {
     actual: number;
     gap: number;
     achievementRate: number; // 0-100+
+}
+
+// === Revenue Decomposition Types ===
+
+export interface RevenueDecompositionInput {
+    revenue_target: number;
+    unit_price: number;
+    deal_cvr: number;        // interview → deal (%) — maps to kpi_interview_to_reservation_rate
+    interview_cvr: number;   // entry → interview (%) — maps to kpi_entry_to_interview_rate
+}
+
+export interface RevenueDecompositionResult {
+    revenue_target: number;
+    unit_price: number;
+    deal_count: number;        // = revenue / unit_price
+    deal_cvr: number;
+    interview_count: number;   // = deal_count / (deal_cvr / 100)
+    interview_cvr: number;
+    entry_count: number;       // = interview_count / (interview_cvr / 100)
+}
+
+export interface ChannelAllocation {
+    channel_type: 'event' | 'agent_interview';
+    project_id: number;
+    project_title: string;
+    allocated_entries: number;
+    allocated_interviews: number;
+    allocated_deals: number;
+    allocated_revenue: number;
+    unit_price: number;
+    deal_cvr: number;
+    interview_cvr: number;
+    is_manual_override: boolean;
+}
+
+export interface ChannelAllocationResult {
+    decomposition: RevenueDecompositionResult;
+    allocations: ChannelAllocation[];
+    totals: {
+        event_revenue: number;
+        agent_revenue: number;
+        event_entries: number;
+        agent_entries: number;
+        unallocated_revenue: number;
+    };
+    warnings: string[];
 }
 
 interface MonthlyOverview {
@@ -40,6 +91,8 @@ interface MonthlyOverview {
         inflowToSetting: number;
     };
     salesBreakdown?: any[];
+    decomposition?: RevenueDecompositionResult;
+    channelActuals?: any;
 }
 
 interface WeeklyOverview {
@@ -58,6 +111,12 @@ interface DailyOverview {
     entries: KpiMetric;
     interviews: KpiMetric;
     trend: Array<{ day: string; count: number }>;
+    requiredDaily?: {
+        entries: number;
+        interviews: number;
+        deals: number;
+        revenue: number;
+    };
 }
 
 export interface KpiOverviewResult {
@@ -72,6 +131,8 @@ export interface KpiOverviewResult {
     };
     perStaff?: any[];
     perSource?: any[];
+    decomposition?: RevenueDecompositionResult;
+    channelActuals?: any;
 }
 
 export interface EventKpiResult {
@@ -144,6 +205,167 @@ const buildGoalMap = (goals: GoalRow[]): Record<string, number> => {
     return map;
 };
 
+// ─────────────────────── Revenue Decomposition ───────────────────────
+
+/**
+ * Core revenue → KPI decomposition engine.
+ * Revenue Target → ÷ Unit Price → Deal Count → ÷ CVR → Interview Count → ÷ CVR → Entry Count
+ *
+ * AI role: calculation & proposal ONLY. Human makes final decisions.
+ */
+export const decomposeFromRevenue = (input: RevenueDecompositionInput): RevenueDecompositionResult => {
+    const { revenue_target, unit_price, deal_cvr, interview_cvr } = input;
+
+    // Guard against division by zero
+    const safeUnitPrice = unit_price > 0 ? unit_price : 1;
+    const safeDealCvr = deal_cvr > 0 ? Math.min(deal_cvr, 100) : 50;
+    const safeInterviewCvr = interview_cvr > 0 ? Math.min(interview_cvr, 100) : 60;
+
+    const deal_count = Math.ceil(revenue_target / safeUnitPrice);
+    const interview_count = Math.ceil(deal_count / (safeDealCvr / 100));
+    const entry_count = Math.ceil(interview_count / (safeInterviewCvr / 100));
+
+    return {
+        revenue_target,
+        unit_price: safeUnitPrice,
+        deal_count,
+        deal_cvr: safeDealCvr,
+        interview_count,
+        interview_cvr: safeInterviewCvr,
+        entry_count,
+    };
+};
+
+/**
+ * Suggest channel allocation across event/agent projects.
+ * Uses each project's own unit_price and CVRs from the projects table.
+ * Human can override any allocation; remaining is auto-redistributed.
+ */
+export const suggestChannelAllocation = async (
+    decomposition: RevenueDecompositionResult,
+    month: string,
+    manualOverrides: Record<number, { allocated_revenue?: number }> = {}
+): Promise<ChannelAllocationResult> => {
+    const events = await getEventKpiData();
+    const warnings: string[] = [];
+
+    // Filter to projects that are relevant (have deadlines in the month or are active)
+    const relevantProjects = events.filter(e => {
+        if (!e.deadline) return true; // No deadline = always relevant
+        const dl = e.deadline.slice(0, 7); // YYYY-MM
+        return dl >= month;
+    });
+
+    if (relevantProjects.length === 0) {
+        warnings.push('対象月に有効なイベント/エージェント案件がありません。');
+        return {
+            decomposition,
+            allocations: [],
+            totals: {
+                event_revenue: 0,
+                agent_revenue: 0,
+                event_entries: 0,
+                agent_entries: 0,
+                unallocated_revenue: decomposition.revenue_target,
+            },
+            warnings,
+        };
+    }
+
+    let remainingRevenue = decomposition.revenue_target;
+    const allocations: ChannelAllocation[] = [];
+
+    // 1. Apply manual overrides first
+    for (const proj of relevantProjects) {
+        const override = manualOverrides[proj.event_id];
+        if (override?.allocated_revenue != null) {
+            const projUnitPrice = proj.unit_price > 0 ? proj.unit_price : decomposition.unit_price;
+            const projDealCvr = safeRate(proj.kpi_interview_to_reservation_rate, decomposition.deal_cvr);
+            const projInterviewCvr = safeRate(proj.kpi_entry_to_interview_rate, decomposition.interview_cvr);
+
+            const allocRevenue = Math.min(override.allocated_revenue, remainingRevenue);
+            const allocDeals = Math.ceil(allocRevenue / projUnitPrice);
+            const allocInterviews = Math.ceil(allocDeals / (projDealCvr / 100));
+            const allocEntries = Math.ceil(allocInterviews / (projInterviewCvr / 100));
+
+            allocations.push({
+                channel_type: (proj as any).type === 'agent_interview' ? 'agent_interview' : 'event',
+                project_id: proj.event_id,
+                project_title: proj.event_title,
+                allocated_entries: allocEntries,
+                allocated_interviews: allocInterviews,
+                allocated_deals: allocDeals,
+                allocated_revenue: allocRevenue,
+                unit_price: projUnitPrice,
+                deal_cvr: projDealCvr,
+                interview_cvr: projInterviewCvr,
+                is_manual_override: true,
+            });
+
+            remainingRevenue -= allocRevenue;
+        }
+    }
+
+    // 2. Auto-distribute remaining revenue proportionally by capacity
+    const unallocatedProjects = relevantProjects.filter(
+        p => !manualOverrides[p.event_id]?.allocated_revenue
+    );
+
+    if (unallocatedProjects.length > 0 && remainingRevenue > 0) {
+        const totalCapacity = unallocatedProjects.reduce(
+            (sum, p) => sum + Math.max(p.target_seats, 1), 0
+        );
+
+        for (const proj of unallocatedProjects) {
+            const weight = Math.max(proj.target_seats, 1) / totalCapacity;
+            const projUnitPrice = proj.unit_price > 0 ? proj.unit_price : decomposition.unit_price;
+            const projDealCvr = safeRate(proj.kpi_interview_to_reservation_rate, decomposition.deal_cvr);
+            const projInterviewCvr = safeRate(proj.kpi_entry_to_interview_rate, decomposition.interview_cvr);
+
+            const allocRevenue = Math.round(remainingRevenue * weight);
+            const allocDeals = Math.ceil(allocRevenue / projUnitPrice);
+            const allocInterviews = Math.ceil(allocDeals / (projDealCvr / 100));
+            const allocEntries = Math.ceil(allocInterviews / (projInterviewCvr / 100));
+
+            allocations.push({
+                channel_type: (proj as any).type === 'agent_interview' ? 'agent_interview' : 'event',
+                project_id: proj.event_id,
+                project_title: proj.event_title,
+                allocated_entries: allocEntries,
+                allocated_interviews: allocInterviews,
+                allocated_deals: allocDeals,
+                allocated_revenue: allocRevenue,
+                unit_price: projUnitPrice,
+                deal_cvr: projDealCvr,
+                interview_cvr: projInterviewCvr,
+                is_manual_override: false,
+            });
+        }
+    }
+
+    // Compute totals
+    const eventAllocs = allocations.filter(a => a.channel_type === 'event');
+    const agentAllocs = allocations.filter(a => a.channel_type === 'agent_interview');
+    const allocatedTotal = allocations.reduce((s, a) => s + a.allocated_revenue, 0);
+
+    if (allocatedTotal < decomposition.revenue_target * 0.95) {
+        warnings.push(`配分合計(¥${allocatedTotal.toLocaleString()})が売上目標(¥${decomposition.revenue_target.toLocaleString()})の95%を下回っています。`);
+    }
+
+    return {
+        decomposition,
+        allocations,
+        totals: {
+            event_revenue: eventAllocs.reduce((s, a) => s + a.allocated_revenue, 0),
+            agent_revenue: agentAllocs.reduce((s, a) => s + a.allocated_revenue, 0),
+            event_entries: eventAllocs.reduce((s, a) => s + a.allocated_entries, 0),
+            agent_entries: agentAllocs.reduce((s, a) => s + a.allocated_entries, 0),
+            unallocated_revenue: Math.max(decomposition.revenue_target - allocatedTotal, 0),
+        },
+        warnings,
+    };
+};
+
 // ─────────────────────── Overview ───────────────────────
 
 export const getOverview = async (filters: KpiFilters): Promise<KpiOverviewResult> => {
@@ -190,6 +412,24 @@ export const getOverview = async (filters: KpiFilters): Promise<KpiOverviewResul
         const interviewToSetting = goalMap['cvr_interview_to_setting'] || 50;
         const inflowToSetting = goalMap['cvr_inflow_to_setting'] || 40;
 
+        // Revenue decomposition (if revenue target is set)
+        let decomposition: RevenueDecompositionResult | undefined;
+        if (salesTarget > 0) {
+            const avgUnitPrice = goalMap['unit_price'] || (salesData.totalAttendance > 0 ? Math.round(salesData.totalSales / salesData.totalAttendance) : 0);
+            decomposition = decomposeFromRevenue({
+                revenue_target: salesTarget,
+                unit_price: avgUnitPrice > 0 ? avgUnitPrice : 1,
+                deal_cvr: goalMap['deal_cvr'] || interviewToSetting,
+                interview_cvr: goalMap['interview_cvr'] || entryToInterview,
+            });
+        }
+
+        // Channel actuals
+        let channelActuals;
+        try {
+            channelActuals = await getChannelData(filters);
+        } catch { /* non-critical */ }
+
         monthly = {
             sales: metric(salesTarget, salesData.totalSales),
             seats: metric(seatsTarget, salesData.totalAttendance),
@@ -199,6 +439,8 @@ export const getOverview = async (filters: KpiFilters): Promise<KpiOverviewResul
             inflow: metric(inflowTarget, funnel.reservations),
             rates: { seatToEntry, entryToInterview, interviewToSetting, inflowToSetting },
             salesBreakdown: salesData.events,
+            decomposition,
+            channelActuals,
         };
     }
 
@@ -240,25 +482,34 @@ export const getOverview = async (filters: KpiFilters): Promise<KpiOverviewResul
             };
         } else if (filters.month && monthly) {
             const daysRemaining = remainingDaysInMonth(filters.month);
+
+            const dailyRevenue = daysRemaining > 0 ? Math.ceil(Math.max(monthly.sales.target - monthly.sales.actual, 0) / daysRemaining) : 0;
+            const dailyEntries = daysRemaining > 0 ? Math.ceil(Math.max(monthly.entries.target - monthly.entries.actual, 0) / daysRemaining) : 0;
+            const dailyInterviews = daysRemaining > 0 ? Math.ceil(Math.max(monthly.interviews.target - monthly.interviews.actual, 0) / daysRemaining) : 0;
+
+            // Compute daily required deals from decomposition if available
+            let dailyDeals = 0;
+            if (monthly.decomposition) {
+                const remainingDeals = Math.max(monthly.decomposition.deal_count - monthly.seats.actual, 0);
+                dailyDeals = daysRemaining > 0 ? Math.ceil(remainingDeals / daysRemaining) : 0;
+            }
+
             daily = {
                 date: new Date().toISOString().slice(0, 10),
-                sales: metric(
-                    daysRemaining > 0 ? Math.ceil(Math.max(monthly.sales.target - monthly.sales.actual, 0) / daysRemaining) : 0,
-                    0
-                ),
+                sales: metric(dailyRevenue, 0),
                 seats: metric(
                     daysRemaining > 0 ? Math.ceil(Math.max(monthly.seats.target - monthly.seats.actual, 0) / daysRemaining) : 0,
                     0
                 ),
-                entries: metric(
-                    daysRemaining > 0 ? Math.ceil(Math.max(monthly.entries.target - monthly.entries.actual, 0) / daysRemaining) : 0,
-                    0
-                ),
-                interviews: metric(
-                    daysRemaining > 0 ? Math.ceil(Math.max(monthly.interviews.target - monthly.interviews.actual, 0) / daysRemaining) : 0,
-                    0
-                ),
+                entries: metric(dailyEntries, 0),
+                interviews: metric(dailyInterviews, 0),
                 trend,
+                requiredDaily: {
+                    entries: dailyEntries,
+                    interviews: dailyInterviews,
+                    deals: dailyDeals,
+                    revenue: dailyRevenue,
+                },
             };
         }
     }

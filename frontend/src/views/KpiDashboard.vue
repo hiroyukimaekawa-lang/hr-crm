@@ -13,6 +13,9 @@ import {
   type EventKpiSlot,
   type GoalSetting,
   type KpiMetric,
+  type RevenueDecomposition,
+  type DecomposeResponse,
+  type ChannelAllocationResult,
 } from '../lib/kpi';
 import {
   BarChart3,
@@ -64,6 +67,9 @@ const showGoalEditor = ref(false);
 const editorPeriodType = ref<'monthly' | 'weekly' | 'daily'>('monthly');
 const goalForm = ref({
   sales_target: 0,
+  unit_price: 0,
+  deal_cvr: 50,
+  interview_cvr: 60,
   required_seats: 0,
   required_entries: 0,
   required_interviews: 0,
@@ -74,6 +80,11 @@ const goalForm = ref({
   cvr_interview_to_setting: 50,
   cvr_inflow_to_setting: 40,
 });
+
+// Revenue decomposition state
+const decomposition = ref<RevenueDecomposition | null>(null);
+const allocationResult = ref<ChannelAllocationResult | null>(null);
+const decomposing = ref(false);
 
 const eventAllocations = ref<Array<{
   event_id: number;
@@ -419,6 +430,7 @@ const onAllocationChange = (ea: any, field: 'guaranteed' | 'seats' | 'price' | '
     if (goalForm.value.sales_target > 0) {
       ea.weight_pct = Math.round((ea.guaranteed_sales / goalForm.value.sales_target) * 100);
     }
+    handleManualOverride(ea.event_id, ea.guaranteed_sales);
   } else if (field === 'guaranteed') {
     // 確約金額を直接入力 → 着座数を自動算出
     if (ea.unit_price > 0) {
@@ -427,17 +439,20 @@ const onAllocationChange = (ea: any, field: 'guaranteed' | 'seats' | 'price' | '
     if (goalForm.value.sales_target > 0) {
       ea.weight_pct = Math.round((ea.guaranteed_sales / goalForm.value.sales_target) * 100);
     }
+    handleManualOverride(ea.event_id, ea.guaranteed_sales);
   } else if (field === 'price') {
     // 単価変更 → 確約金額から着座数を再算出
     if (ea.unit_price > 0) {
       ea.target_seats = Math.ceil(ea.guaranteed_sales / ea.unit_price);
     }
+    handleManualOverride(ea.event_id, ea.guaranteed_sales);
   } else if (field === 'seats') {
     // 着座数を直接入力 → 確約金額を再算出
     ea.guaranteed_sales = ea.target_seats * ea.unit_price;
     if (goalForm.value.sales_target > 0) {
       ea.weight_pct = Math.round((ea.guaranteed_sales / goalForm.value.sales_target) * 100);
     }
+    handleManualOverride(ea.event_id, ea.guaranteed_sales);
   }
 };
 
@@ -450,6 +465,53 @@ watch(() => goalForm.value.sales_target, (newTarget) => {
         });
     }
 });
+
+// Revenue decomposition method
+const manualOverrides = ref<Record<number, { allocated_revenue?: number }>>({});
+
+const runDecomposition = async () => {
+  const { sales_target, unit_price, deal_cvr, interview_cvr } = goalForm.value;
+  if (!sales_target || sales_target <= 0) {
+    decomposition.value = null;
+    allocationResult.value = null;
+    return;
+  }
+  decomposing.value = true;
+  try {
+    const res = await kpiApi.decompose({
+      revenue_target: sales_target,
+      unit_price: unit_price || 1,
+      deal_cvr: deal_cvr || 50,
+      interview_cvr: interview_cvr || 60,
+      month: selectedMonth.value,
+      overrides: manualOverrides.value
+    });
+    decomposition.value = res.data.decomposition;
+    allocationResult.value = res.data.allocation;
+
+    // Apply allocation back to UI form fields
+    if (res.data.allocation) {
+      res.data.allocation.allocations.forEach((a: any) => {
+        const ea = eventAllocations.value.find(e => e.event_id === a.project_id);
+        if (ea) {
+          ea.guaranteed_sales = a.allocated_revenue;
+          ea.target_seats = Math.ceil(a.allocated_entries / ((ea.cvr_seat_to_entry || 70) / 100));
+          ea.unit_price = a.unit_price;
+          ea.weight_pct = Math.round((a.allocated_revenue / sales_target) * 100);
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Decomposition error:', err);
+  } finally {
+    decomposing.value = false;
+  }
+};
+
+const handleManualOverride = async (projectId: number, newSales: number) => {
+  manualOverrides.value[projectId] = { allocated_revenue: newSales };
+  await runDecomposition();
+};
 
 const fetchStaffUsers = async () => {
   try {
@@ -777,13 +839,93 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
               selectedMonth.replace('-', '年') + '月' 
           }})
         </h3>
-        <div class="mb-6 max-w-xs">
-          <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">売上目標 (円)</label>
-          <input
-            v-model.number="goalForm.sales_target"
-            type="number"
-            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
-          />
+        <div class="mb-6">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div>
+              <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">売上目標 (円)</label>
+              <input
+                v-model.number="goalForm.sales_target"
+                type="number"
+                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                placeholder="例: 5000000"
+              />
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">平均単価 (円)</label>
+              <input
+                v-model.number="goalForm.unit_price"
+                type="number"
+                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                placeholder="例: 5000"
+              />
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">成約率 (面談→成約 %)</label>
+              <input
+                v-model.number="goalForm.deal_cvr"
+                type="number" min="1" max="100"
+                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">面談化率 (エントリー→面談 %)</label>
+              <input
+                v-model.number="goalForm.interview_cvr"
+                type="number" min="1" max="100"
+                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+              />
+            </div>
+          </div>
+
+          <!-- Decompose Button -->
+          <button
+            @click="runDecomposition"
+            :disabled="decomposing || !goalForm.sales_target"
+            class="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg text-sm font-bold hover:from-indigo-600 hover:to-purple-700 disabled:opacity-40 transition-all shadow-md shadow-indigo-200"
+          >
+            <TrendingUp class="w-4 h-4" />
+            {{ decomposing ? '計算中...' : '売上から逆算（分解実行）' }}
+          </button>
+
+          <!-- Decomposition Result -->
+          <div v-if="decomposition" class="mt-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-4">
+            <h4 class="text-xs font-bold text-indigo-700 uppercase mb-3 flex items-center gap-2">
+              <TrendingUp class="w-3.5 h-3.5" />
+              売上逆算結果 (提案値)
+            </h4>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div class="bg-white/80 rounded-lg p-3 text-center border border-indigo-100">
+                <p class="text-[9px] font-bold text-indigo-400 uppercase mb-1">売上目標</p>
+                <p class="text-lg font-black text-gray-900">¥{{ decomposition.revenue_target.toLocaleString() }}</p>
+              </div>
+              <div class="bg-white/80 rounded-lg p-3 text-center border border-indigo-100">
+                <p class="text-[9px] font-bold text-indigo-400 uppercase mb-1">÷ 単価 ¥{{ decomposition.unit_price.toLocaleString() }}</p>
+                <p class="text-lg font-black text-emerald-600">{{ decomposition.deal_count }}件</p>
+                <p class="text-[9px] text-gray-400">必要成約数</p>
+              </div>
+              <div class="bg-white/80 rounded-lg p-3 text-center border border-indigo-100">
+                <p class="text-[9px] font-bold text-indigo-400 uppercase mb-1">÷ 成約率 {{ decomposition.deal_cvr }}%</p>
+                <p class="text-lg font-black text-blue-600">{{ decomposition.interview_count }}件</p>
+                <p class="text-[9px] text-gray-400">必要面談数</p>
+              </div>
+              <div class="bg-white/80 rounded-lg p-3 text-center border border-indigo-100">
+                <p class="text-[9px] font-bold text-indigo-400 uppercase mb-1">÷ 面談化率 {{ decomposition.interview_cvr }}%</p>
+                <p class="text-lg font-black text-violet-600">{{ decomposition.entry_count }}件</p>
+                <p class="text-[9px] text-gray-400">必要エントリー数</p>
+              </div>
+              <div class="bg-white/80 rounded-lg p-3 text-center border border-indigo-100">
+                <p class="text-[9px] font-bold text-indigo-400 uppercase mb-1">チャネル配分</p>
+                <p class="text-lg font-black text-orange-600">→</p>
+                <p class="text-[9px] text-gray-400">下記テーブル参照</p>
+              </div>
+            </div>
+            <!-- Warnings -->
+            <div v-if="allocationResult?.warnings?.length" class="mt-3 space-y-1">
+              <p v-for="(w, i) in allocationResult.warnings" :key="i" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 font-medium">
+                ⚠ {{ w }}
+              </p>
+            </div>
+          </div>
         </div>
 
         <!-- Event Breakdown Table (New) -->
@@ -950,6 +1092,121 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
 
         <!-- ═══════ Monthly KPI Tab ═══════ -->
         <div v-if="activeTab === 'monthly' && overview">
+          
+          <!-- Revenue Decomposition Summary (New) -->
+          <div v-if="monthly?.decomposition" class="bg-gradient-to-tr from-indigo-50 via-white to-purple-50 rounded-2xl border border-indigo-100 p-5 mb-6 shadow-sm">
+            <div class="flex items-center gap-2 mb-4">
+              <TrendingUp class="w-5 h-5 text-indigo-600" />
+              <h3 class="text-sm font-bold text-indigo-900">売上起点アクション目標（逆算値）</h3>
+              <span class="text-[10px] text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full font-bold ml-2">自動算出</span>
+            </div>
+            
+            <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+              <!-- Revenue -->
+              <div class="flex-1 w-full bg-white/80 rounded-xl p-4 border border-indigo-50 text-center shadow-sm relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-16 h-16 bg-indigo-50 rounded-bl-full -mr-8 -mt-8"></div>
+                <p class="text-[10px] font-bold text-gray-400 uppercase mb-1">売上目標</p>
+                <div class="flex items-baseline justify-center gap-1">
+                  <span class="text-xl font-black text-gray-900">¥{{ monthly.decomposition.revenue_target.toLocaleString() }}</span>
+                </div>
+              </div>
+
+              <!-- Required Deals -->
+              <div class="hidden md:flex items-center text-indigo-200">
+                <ChevronRight class="w-5 h-5" />
+              </div>
+              <div class="flex-1 w-full bg-white/80 rounded-xl p-4 border border-indigo-50 text-center shadow-sm">
+                <p class="text-[10px] font-bold text-gray-400 uppercase mb-1">必要成約数 (単価¥{{ monthly.decomposition.unit_price.toLocaleString() }})</p>
+                <div class="flex items-baseline justify-center gap-1">
+                  <span class="text-xl font-black text-emerald-600">{{ monthly.decomposition.deal_count }}</span>
+                  <span class="text-xs font-bold text-gray-400">件</span>
+                </div>
+              </div>
+
+              <!-- Required Interviews -->
+              <div class="hidden md:flex items-center text-indigo-200">
+                <ChevronRight class="w-5 h-5" />
+              </div>
+              <div class="flex-1 w-full bg-white/80 rounded-xl p-4 border border-indigo-50 text-center shadow-sm">
+                <p class="text-[10px] font-bold text-gray-400 uppercase mb-1">必要面談数 (成約率{{ monthly.decomposition.deal_cvr }}%)</p>
+                <div class="flex items-baseline justify-center gap-1">
+                  <span class="text-xl font-black text-blue-600">{{ monthly.decomposition.interview_count }}</span>
+                  <span class="text-xs font-bold text-gray-400">件</span>
+                </div>
+              </div>
+
+              <!-- Required Entries -->
+              <div class="hidden md:flex items-center text-indigo-200">
+                <ChevronRight class="w-5 h-5" />
+              </div>
+              <div class="flex-1 w-full bg-indigo-600 rounded-xl p-4 border border-indigo-700 text-center shadow-md relative overflow-hidden text-white">
+                <div class="absolute inset-0 bg-gradient-to-tr from-transparent to-white/10"></div>
+                <p class="text-[10px] font-bold text-indigo-200 uppercase mb-1 relative z-10">必要総エントリー数 (面談率{{ monthly.decomposition.interview_cvr }}%)</p>
+                <div class="flex items-baseline justify-center gap-1 relative z-10">
+                  <span class="text-2xl font-black text-white">{{ monthly.decomposition.entry_count }}</span>
+                  <span class="text-xs font-bold text-indigo-200">件</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Channel Actuals Summary (New) -->
+          <div v-if="monthly?.channelActuals && Object.keys(monthly.channelActuals).length > 0" class="bg-white rounded-2xl border border-gray-200 p-5 mb-6 shadow-sm">
+            <h3 class="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <Users class="w-4 h-4 text-gray-400" />
+              チャネル別実績サマリー
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Event Channel -->
+              <div class="flex items-center gap-4 bg-gray-50 rounded-xl p-4 border border-gray-100">
+                <div class="p-3 bg-blue-100 text-blue-600 rounded-lg">
+                  <Calendar class="w-5 h-5" />
+                </div>
+                <div class="flex-1">
+                  <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">イベントチャネル</h4>
+                  <div class="flex justify-between items-end">
+                    <div>
+                      <p class="text-[10px] text-gray-400 font-bold">売上実績</p>
+                      <p class="text-base font-black text-gray-900">¥{{ (monthly.channelActuals['event']?.total_sales || 0).toLocaleString() }}</p>
+                    </div>
+                    <div class="text-right">
+                      <p class="text-[10px] text-gray-400 font-bold">エントリー</p>
+                      <p class="text-sm font-bold text-gray-700">{{ monthly.channelActuals['event']?.entry_count || 0 }}<span class="text-[10px] font-normal ml-0.5">名</span></p>
+                    </div>
+                    <div class="text-right">
+                      <p class="text-[10px] text-gray-400 font-bold">稼働案件数</p>
+                      <p class="text-sm font-bold text-gray-700">{{ monthly.channelActuals['event']?.project_count || 0 }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Agent Channel -->
+              <div class="flex items-center gap-4 bg-gray-50 rounded-xl p-4 border border-gray-100">
+                <div class="p-3 bg-indigo-100 text-indigo-600 rounded-lg">
+                  <Users class="w-5 h-5" />
+                </div>
+                <div class="flex-1">
+                  <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">エージェントチャネル</h4>
+                  <div class="flex justify-between items-end">
+                    <div>
+                      <p class="text-[10px] text-gray-400 font-bold">売上実績</p>
+                      <p class="text-base font-black text-gray-900">¥{{ (monthly.channelActuals['agent_interview']?.total_sales || 0).toLocaleString() }}</p>
+                    </div>
+                    <div class="text-right">
+                      <p class="text-[10px] text-gray-400 font-bold">エントリー</p>
+                      <p class="text-sm font-bold text-gray-700">{{ monthly.channelActuals['agent_interview']?.entry_count || 0 }}<span class="text-[10px] font-normal ml-0.5">名</span></p>
+                    </div>
+                    <div class="text-right">
+                      <p class="text-[10px] text-gray-400 font-bold">稼働案件数</p>
+                      <p class="text-sm font-bold text-gray-700">{{ monthly.channelActuals['agent_interview']?.project_count || 0 }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Summary cards -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6" v-if="monthly">
             <!-- Sales -->
@@ -1054,10 +1311,21 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
 
           <!-- ══ デイリーKGI進捗テーブル ══ -->
           <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-              <div class="w-1 h-5 bg-blue-600 rounded-full"></div>
-              <h3 class="text-sm font-bold text-gray-800">デイリーKGI進捗</h3>
-              <span class="text-[10px] text-gray-400 ml-1">— 残り期間から逆算した必要アクション数</span>
+            <div class="px-5 py-4 border-b border-gray-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div class="flex items-center gap-2">
+                <div class="w-1 h-5 bg-blue-600 rounded-full"></div>
+                <h3 class="text-sm font-bold text-gray-800">デイリーKGI進捗</h3>
+                <span class="text-[10px] text-gray-400 ml-1">— 残り期間から逆算した必要アクション</span>
+              </div>
+              <div v-if="daily?.requiredDaily" class="flex items-center gap-3 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg">
+                <span class="text-[10px] font-bold text-gray-500 uppercase">全体1日あたりの必要数:</span>
+                <div class="flex items-center gap-2 text-xs font-bold">
+                  <div>売上: <span class="text-gray-900">¥{{ daily.requiredDaily.revenue.toLocaleString() }}</span></div>
+                  <div>エ: <span class="text-indigo-600">{{ daily.requiredDaily.entries }}</span></div>
+                  <div>面: <span class="text-blue-600">{{ daily.requiredDaily.interviews }}</span></div>
+                  <div>成: <span class="text-emerald-600">{{ daily.requiredDaily.deals }}</span></div>
+                </div>
+              </div>
             </div>
             <div class="overflow-x-auto">
               <table class="w-full text-sm">
@@ -1346,7 +1614,28 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
 
         <!-- ═══════ Daily KPI Tab ═══════ -->
         <div v-if="activeTab === 'daily' && overview?.daily">
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <!-- Required Daily Actions -->
+          <div v-if="overview.daily.requiredDaily" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white/80 rounded-2xl p-5 border border-indigo-100 shadow-sm text-center relative overflow-hidden">
+              <div class="absolute -top-6 -right-6 w-16 h-16 bg-blue-50 rounded-full"></div>
+              <p class="text-[10px] font-bold text-gray-400 uppercase mb-2 relative z-10">本日必要売上</p>
+              <p class="text-3xl font-black text-gray-900 relative z-10">¥{{ overview.daily.requiredDaily.revenue.toLocaleString() }}</p>
+            </div>
+            <div class="bg-white/80 rounded-2xl p-5 border border-indigo-100 shadow-sm text-center relative overflow-hidden">
+              <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">本日必要成約</p>
+              <p class="text-3xl font-black text-emerald-600">{{ overview.daily.requiredDaily.deals }}<span class="text-sm ml-1 text-gray-400 font-bold">件</span></p>
+            </div>
+            <div class="bg-white/80 rounded-2xl p-5 border border-indigo-100 shadow-sm text-center relative overflow-hidden">
+              <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">本日必要面談</p>
+              <p class="text-3xl font-black text-blue-600">{{ overview.daily.requiredDaily.interviews }}<span class="text-sm ml-1 text-gray-400 font-bold">件</span></p>
+            </div>
+            <div class="bg-indigo-600 rounded-2xl p-5 border border-indigo-700 shadow-md text-center relative overflow-hidden text-white">
+              <div class="absolute inset-0 bg-gradient-to-tr from-transparent to-white/10"></div>
+              <p class="text-[10px] font-bold text-indigo-200 uppercase mb-2 relative z-10">本日必要エントリー</p>
+              <p class="text-3xl font-black text-white relative z-10">{{ overview.daily.requiredDaily.entries }}<span class="text-sm ml-1 text-indigo-200 font-bold">件</span></p>
+            </div>
+          </div>
+          <div v-else class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
             <div v-for="item in [
               { label: '本日必要売上', metric: overview.daily.sales, unit: '円' },
               { label: '本日必要着座', metric: overview.daily.seats, unit: '名' },

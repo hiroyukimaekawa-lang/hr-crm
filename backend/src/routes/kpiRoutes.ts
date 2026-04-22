@@ -7,6 +7,8 @@ import {
     kpiGoals,
     kpiGoalsBulk,
     kpiFunnel,
+    kpiDecompose,
+    kpiAllocation,
 } from '../controllers/kpiController';
 
 const router = express.Router();
@@ -20,5 +22,9 @@ router.get('/events', authenticate, kpiEvents);
 router.get('/goals', authenticate, kpiGoals);
 router.put('/goals/bulk', authenticate, kpiGoalsBulk);
 router.get('/funnel', authenticate, kpiFunnel);
+
+// Revenue-driven KPI endpoints
+router.post('/decompose', authenticate, kpiDecompose);
+router.put('/allocation', authenticate, kpiAllocation);
 
 export default router;

@@ -15,6 +15,52 @@ export interface KpiMetric {
   achievementRate: number;
 }
 
+// === Revenue Decomposition Types ===
+
+export interface RevenueDecomposition {
+  revenue_target: number;
+  unit_price: number;
+  deal_count: number;
+  deal_cvr: number;
+  interview_count: number;
+  interview_cvr: number;
+  entry_count: number;
+}
+
+export interface ChannelAllocation {
+  channel_type: 'event' | 'agent_interview';
+  project_id: number;
+  project_title: string;
+  allocated_entries: number;
+  allocated_interviews: number;
+  allocated_deals: number;
+  allocated_revenue: number;
+  unit_price: number;
+  deal_cvr: number;
+  interview_cvr: number;
+  is_manual_override: boolean;
+}
+
+export interface ChannelAllocationResult {
+  decomposition: RevenueDecomposition;
+  allocations: ChannelAllocation[];
+  totals: {
+    event_revenue: number;
+    agent_revenue: number;
+    event_entries: number;
+    agent_entries: number;
+    unallocated_revenue: number;
+  };
+  warnings: string[];
+}
+
+export interface DecomposeResponse {
+  decomposition: RevenueDecomposition;
+  allocation: ChannelAllocationResult | null;
+}
+
+// === Existing Types (extended) ===
+
 export interface MonthlyOverview {
   sales: KpiMetric;
   seats: KpiMetric;
@@ -29,6 +75,13 @@ export interface MonthlyOverview {
     inflowToSetting: number;
   };
   salesBreakdown?: any[];
+  decomposition?: RevenueDecomposition;
+  channelActuals?: Record<string, {
+    project_count: number;
+    attended_count: number;
+    entry_count: number;
+    total_sales: number;
+  }>;
 }
 
 export interface DailyOverview {
@@ -38,6 +91,12 @@ export interface DailyOverview {
   entries: KpiMetric;
   interviews: KpiMetric;
   trend: Array<{ day: string; count: number }>;
+  requiredDaily?: {
+    entries: number;
+    interviews: number;
+    deals: number;
+    revenue: number;
+  };
 }
 
 export interface WeeklyOverview {
@@ -63,6 +122,8 @@ export interface KpiOverviewResponse {
   funnel: FunnelCounts;
   perStaff?: any[];
   perSource?: any[];
+  decomposition?: RevenueDecomposition;
+  channelActuals?: any;
 }
 
 export interface EventKpiSlot {
@@ -87,6 +148,7 @@ export interface EventKpiSlot {
 export interface EventKpiItem {
   event_id: number;
   event_title: string;
+  type: string;
   deadline: string | null;
   days_remaining: number;
   
@@ -212,6 +274,33 @@ export const kpiApi = {
    */
   updateEventKpi: (id: number, data: any) =>
     api.put(`/api/projects/${id}/kpi`, data, authHeaders()),
+
+  /**
+   * Revenue → KPI decomposition (calculation & proposal engine).
+   * AI role: calculate and propose. Human decides.
+   */
+  decompose: (params: {
+    revenue_target: number;
+    unit_price: number;
+    deal_cvr: number;
+    interview_cvr: number;
+    month?: string;
+    overrides?: Record<number, { allocated_revenue?: number }>;
+  }) =>
+    api.post<DecomposeResponse>('/api/kpi/decompose', params, authHeaders()),
+
+  /**
+   * Update channel allocation with manual overrides.
+   */
+  updateAllocation: (params: {
+    revenue_target: number;
+    unit_price: number;
+    deal_cvr: number;
+    interview_cvr: number;
+    month: string;
+    overrides: Record<number, { allocated_revenue?: number }>;
+  }) =>
+    api.put<ChannelAllocationResult>('/api/kpi/allocation', params, authHeaders()),
 };
 
 // ─── Display Helpers (front-end formatting only, NO computation) ───
@@ -236,3 +325,4 @@ export const gapColor = (gap: number): string => {
 
 export const formatCurrency = (n: number): string =>
   n.toLocaleString('ja-JP');
+

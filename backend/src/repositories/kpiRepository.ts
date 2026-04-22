@@ -44,6 +44,7 @@ export interface FunnelCounts {
 export interface EventKpiRow {
     event_id: number;
     event_title: string;
+    type: string;           // 'event' | 'agent_interview'
     deadline: string | null;
     days_remaining: number;
     target_seats: number;
@@ -295,7 +296,7 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
     // 1. Modern Projects
     const projectsRes = await pool.query(`
         SELECT
-            p.id, p.title, p.target_seats, p.unit_price,
+            p.id, p.title, p.type, p.target_seats, p.unit_price,
             COALESCE(p.kpi_seat_to_entry_rate, 70) AS kpi_seat_to_entry_rate,
             COALESCE(p.kpi_entry_to_interview_rate, 60) AS kpi_entry_to_interview_rate,
             COALESCE(p.kpi_interview_to_reservation_rate, 50) AS kpi_interview_to_reservation_rate,
@@ -414,7 +415,8 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
         let daysRem = 0; if (dlStr) { daysRem = Math.floor((new Date(dlStr+'T00:00:00').getTime() - todayDate.getTime())/86400000); }
 
         return {
-            event_id: e.id, event_title: e.title, deadline: dlStr, days_remaining: daysRem,
+            event_id: e.id, event_title: e.title, type: e.type || 'event',
+            deadline: dlStr, days_remaining: daysRem,
             target_seats: Number(e.target_seats || 0), current_seats: st, current_entries: ent,
             event_slots: rawSlots, unit_price: Number(e.unit_price || 0),
             kpi_seat_to_entry_rate: Number(e.kpi_seat_to_entry_rate),
@@ -497,4 +499,45 @@ export const getSalesActuals = async (filters: KpiFilters) => {
         totalSales: res.rows.reduce((s, r) => s + Number(r.sales || 0), 0),
         totalAttendance: res.rows.reduce((s, r) => s + Number(r.attended_count || 0), 0)
     };
+};
+
+// ─────────────────────── Channel Actuals (Event vs Agent) ───────────────────────
+
+export const getChannelActuals = async (filters: KpiFilters) => {
+    await ensureDepTables();
+    const params: any[] = [];
+    let idx = 1;
+    let periodWhere = '';
+
+    if (filters.month) {
+        periodWhere = `AND (TO_CHAR(ps.schedule_date, 'YYYY-MM') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM') = $${idx})`;
+        params.push(filters.month);
+        idx++;
+    }
+
+    const sql = `
+        SELECT
+            p.type AS channel_type,
+            COUNT(DISTINCT p.id)::int AS project_count,
+            COUNT(DISTINCT spr.id) FILTER (WHERE spr.status = 'attended')::int AS attended_count,
+            COUNT(DISTINCT spr.id) FILTER (WHERE spr.status = 'A_ENTRY')::int AS entry_count,
+            SUM(CASE WHEN spr.status = 'attended' THEN COALESCE(p.unit_price, 0) ELSE 0 END)::bigint AS total_sales
+        FROM projects p
+        LEFT JOIN project_schedules ps ON ps.project_id = p.id
+        LEFT JOIN student_project_relations spr ON spr.project_id = p.id
+        WHERE 1=1 ${periodWhere}
+        GROUP BY p.type
+    `;
+    const res = await pool.query(sql, params);
+
+    const result: Record<string, any> = {};
+    for (const row of res.rows) {
+        result[row.channel_type || 'event'] = {
+            project_count: Number(row.project_count || 0),
+            attended_count: Number(row.attended_count || 0),
+            entry_count: Number(row.entry_count || 0),
+            total_sales: Number(row.total_sales || 0),
+        };
+    }
+    return result;
 };
