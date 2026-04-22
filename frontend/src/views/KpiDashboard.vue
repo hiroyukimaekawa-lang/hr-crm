@@ -1056,7 +1056,6 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
             v-for="tab in [
               { id: 'monthly', label: '月間KPI' },
               { id: 'weekly', label: '日程別KPI' },
-              { id: 'daily', label: 'デイリー' },
               { id: 'event', label: '全イベント' },
               { id: 'staff', label: '担当者別' },
               { id: 'source', label: '流入元別' },
@@ -1092,63 +1091,6 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
 
         <!-- ═══════ Monthly KPI Tab ═══════ -->
         <div v-if="activeTab === 'monthly' && overview">
-          
-          <!-- Revenue Decomposition Summary (New) -->
-          <div v-if="monthly?.decomposition" class="bg-gradient-to-tr from-indigo-50 via-white to-purple-50 rounded-2xl border border-indigo-100 p-5 mb-6 shadow-sm">
-            <div class="flex items-center gap-2 mb-4">
-              <TrendingUp class="w-5 h-5 text-indigo-600" />
-              <h3 class="text-sm font-bold text-indigo-900">売上起点アクション目標（逆算値）</h3>
-              <span class="text-[10px] text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full font-bold ml-2">自動算出</span>
-            </div>
-            
-            <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
-              <!-- Revenue -->
-              <div class="flex-1 w-full bg-white/80 rounded-xl p-4 border border-indigo-50 text-center shadow-sm relative overflow-hidden">
-                <div class="absolute top-0 right-0 w-16 h-16 bg-indigo-50 rounded-bl-full -mr-8 -mt-8"></div>
-                <p class="text-[10px] font-bold text-gray-400 uppercase mb-1">売上目標</p>
-                <div class="flex items-baseline justify-center gap-1">
-                  <span class="text-xl font-black text-gray-900">¥{{ monthly.decomposition.revenue_target.toLocaleString() }}</span>
-                </div>
-              </div>
-
-              <!-- Required Deals -->
-              <div class="hidden md:flex items-center text-indigo-200">
-                <ChevronRight class="w-5 h-5" />
-              </div>
-              <div class="flex-1 w-full bg-white/80 rounded-xl p-4 border border-indigo-50 text-center shadow-sm">
-                <p class="text-[10px] font-bold text-gray-400 uppercase mb-1">必要成約数 (単価¥{{ monthly.decomposition.unit_price.toLocaleString() }})</p>
-                <div class="flex items-baseline justify-center gap-1">
-                  <span class="text-xl font-black text-emerald-600">{{ monthly.decomposition.deal_count }}</span>
-                  <span class="text-xs font-bold text-gray-400">件</span>
-                </div>
-              </div>
-
-              <!-- Required Interviews -->
-              <div class="hidden md:flex items-center text-indigo-200">
-                <ChevronRight class="w-5 h-5" />
-              </div>
-              <div class="flex-1 w-full bg-white/80 rounded-xl p-4 border border-indigo-50 text-center shadow-sm">
-                <p class="text-[10px] font-bold text-gray-400 uppercase mb-1">必要面談数 (成約率{{ monthly.decomposition.deal_cvr }}%)</p>
-                <div class="flex items-baseline justify-center gap-1">
-                  <span class="text-xl font-black text-blue-600">{{ monthly.decomposition.interview_count }}</span>
-                  <span class="text-xs font-bold text-gray-400">件</span>
-                </div>
-              </div>
-
-              <!-- Required Entries -->
-              <div class="hidden md:flex items-center text-indigo-200">
-                <ChevronRight class="w-5 h-5" />
-              </div>
-              <div class="flex-1 w-full bg-indigo-600 rounded-xl p-4 border border-indigo-700 text-center shadow-md relative overflow-hidden text-white">
-                <div class="absolute inset-0 bg-gradient-to-tr from-transparent to-white/10"></div>
-                <p class="text-[10px] font-bold text-indigo-200 uppercase mb-1 relative z-10">必要総エントリー数 (面談率{{ monthly.decomposition.interview_cvr }}%)</p>
-                <div class="flex items-baseline justify-center gap-1 relative z-10">
-                  <span class="text-2xl font-black text-white">{{ monthly.decomposition.entry_count }}</span>
-                  <span class="text-xs font-bold text-indigo-200">件</span>
-                </div>
-              </div>
-            </div>
-          </div>
 
           <!-- Channel Actuals Summary (New) -->
           <div v-if="monthly?.channelActuals && Object.keys(monthly.channelActuals).length > 0" class="bg-white rounded-2xl border border-gray-200 p-5 mb-6 shadow-sm">
@@ -1277,37 +1219,7 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
             </div>
           </div>
 
-          <!-- CVR summary -->
-          <div class="bg-white rounded-2xl border border-gray-200 p-5 mb-6">
-            <h3 class="text-sm font-bold text-gray-800 mb-4">CVR（コンバージョン率）</h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div v-for="cvr in [
-                { label: '着座→エントリー', value: monthly?.rates.seatToEntry },
-                { label: 'エントリー→面談', value: monthly?.rates.entryToInterview },
-                { label: '面談→設定', value: monthly?.rates.interviewToSetting },
-                { label: '流入→設定', value: monthly?.rates.inflowToSetting },
-              ]" :key="cvr.label" class="text-center p-3 bg-gray-50 rounded-xl">
-                <p class="text-[10px] font-bold text-gray-500 mb-1 uppercase">{{ cvr.label }}</p>
-                <p class="text-2xl font-black text-gray-900">{{ cvr.value }}<span class="text-sm text-gray-400">%</span></p>
-              </div>
-            </div>
-          </div>
 
-          <!-- Funnel -->
-          <div v-if="funnel" class="bg-white rounded-2xl border border-gray-200 p-5 mb-6">
-            <h3 class="text-sm font-bold text-gray-800 mb-4">ファネル集計</h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div v-for="item in [
-                { label: '申込数', value: funnel.applications, color: 'text-violet-700' },
-                { label: '予約数', value: funnel.reservations, color: 'text-blue-700' },
-                { label: '面談設定', value: funnel.interview_scheduled, color: 'text-amber-700' },
-                { label: '面談実施', value: funnel.interview_completed, color: 'text-emerald-700' },
-              ]" :key="item.label" class="text-center p-3 bg-gray-50 rounded-xl">
-                <p class="text-[10px] font-bold text-gray-500 mb-1 uppercase">{{ item.label }}</p>
-                <p class="text-3xl font-black" :class="item.color">{{ item.value }}</p>
-              </div>
-            </div>
-          </div>
 
           <!-- ══ デイリーKGI進捗テーブル ══ -->
           <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -1609,75 +1521,6 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
           <!-- 案件なし -->
           <div v-if="activeEventsForMonth.length === 0" class="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center text-gray-400">
             対象月の案件がありません
-          </div>
-        </div>
-
-        <!-- ═══════ Daily KPI Tab ═══════ -->
-        <div v-if="activeTab === 'daily' && overview?.daily">
-          <!-- Required Daily Actions -->
-          <div v-if="overview.daily.requiredDaily" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div class="bg-white/80 rounded-2xl p-5 border border-indigo-100 shadow-sm text-center relative overflow-hidden">
-              <div class="absolute -top-6 -right-6 w-16 h-16 bg-blue-50 rounded-full"></div>
-              <p class="text-[10px] font-bold text-gray-400 uppercase mb-2 relative z-10">本日必要売上</p>
-              <p class="text-3xl font-black text-gray-900 relative z-10">¥{{ overview.daily.requiredDaily.revenue.toLocaleString() }}</p>
-            </div>
-            <div class="bg-white/80 rounded-2xl p-5 border border-indigo-100 shadow-sm text-center relative overflow-hidden">
-              <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">本日必要成約</p>
-              <p class="text-3xl font-black text-emerald-600">{{ overview.daily.requiredDaily.deals }}<span class="text-sm ml-1 text-gray-400 font-bold">件</span></p>
-            </div>
-            <div class="bg-white/80 rounded-2xl p-5 border border-indigo-100 shadow-sm text-center relative overflow-hidden">
-              <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">本日必要面談</p>
-              <p class="text-3xl font-black text-blue-600">{{ overview.daily.requiredDaily.interviews }}<span class="text-sm ml-1 text-gray-400 font-bold">件</span></p>
-            </div>
-            <div class="bg-indigo-600 rounded-2xl p-5 border border-indigo-700 shadow-md text-center relative overflow-hidden text-white">
-              <div class="absolute inset-0 bg-gradient-to-tr from-transparent to-white/10"></div>
-              <p class="text-[10px] font-bold text-indigo-200 uppercase mb-2 relative z-10">本日必要エントリー</p>
-              <p class="text-3xl font-black text-white relative z-10">{{ overview.daily.requiredDaily.entries }}<span class="text-sm ml-1 text-indigo-200 font-bold">件</span></p>
-            </div>
-          </div>
-          <div v-else class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div v-for="item in [
-              { label: '本日必要売上', metric: overview.daily.sales, unit: '円' },
-              { label: '本日必要着座', metric: overview.daily.seats, unit: '名' },
-              { label: '本日必要エントリー', metric: overview.daily.entries, unit: '件' },
-              { label: '本日必要面談', metric: overview.daily.interviews, unit: '件' },
-            ]" :key="item.label" class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm text-center">
-              <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">{{ item.label }}</p>
-              <p class="text-3xl font-black text-blue-800">{{ formatCurrency(item.metric.target) }}<span class="text-sm ml-1">{{ item.unit }}</span></p>
-            </div>
-          </div>
-
-          <!-- Daily trend -->
-          <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8">
-            <div class="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-              <h3 class="text-sm font-bold text-gray-800">エントリー推移 (直近)</h3>
-              <TrendingUp class="w-4 h-4 text-gray-400" />
-            </div>
-            <div class="p-6">
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="text-left text-[10px] font-bold text-gray-400 uppercase">
-                    <th class="px-4 py-2 border-b">日付</th>
-                    <th class="px-4 py-2 border-b text-right">件数</th>
-                    <th class="px-4 py-2 border-b"></th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                  <tr v-for="d in overview.daily.trend.slice(0, 14)" :key="d.day" class="hover:bg-gray-50">
-                    <td class="px-4 py-2 text-gray-700 font-medium whitespace-nowrap">{{ d.day.slice(5) }}</td>
-                    <td class="px-4 py-2 text-right font-bold text-gray-900">{{ d.count }}</td>
-                    <td class="px-4 py-2">
-                      <div class="h-4 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          class="h-full bg-blue-500 rounded-full transition-all"
-                          :style="{ width: `${Math.min((d.count / Math.max(...overview.daily.trend.map(t => t.count), 1)) * 100, 100)}%` }"
-                        ></div>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
           </div>
         </div>
 
