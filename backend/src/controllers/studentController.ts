@@ -255,6 +255,12 @@ const ensureSalesFunnelTables = async () => {
                 ADD COLUMN IF NOT EXISTS reason TEXT
             `);
             await pool.query(`
+                ALTER TABLE event_proposals
+                ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'event',
+                ALTER COLUMN event_id DROP NOT NULL
+            `);
+            await pool.query(`
                 INSERT INTO lost_reasons (reason_name)
                 VALUES
                     ('日程が合わない'),
@@ -1937,20 +1943,23 @@ export const createInterviewRecord = async (req: Request, res: Response) => {
 
 export const createEventProposal = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { event_id, proposed_at, status, lost_reason_id, selected_event_date, memo, reason } = req.body || {};
+    const { event_id, proposed_at, status, lost_reason_id, selected_event_date, memo, reason, source } = req.body || {};
     if (!event_id) {
         res.status(400).json({ error: 'event_id is required' });
         return;
     }
     try {
         await ensureSalesFunnelTables();
+        const isProject = source === 'project';
         const result = await pool.query(
-            `INSERT INTO event_proposals (student_id, event_id, proposed_at, status, lost_reason_id, selected_event_date, memo, reason)
-             VALUES ($1, $2, COALESCE($3, CURRENT_TIMESTAMP), $4, $5, $6, $7, $8)
+            `INSERT INTO event_proposals (student_id, event_id, project_id, source, proposed_at, status, lost_reason_id, selected_event_date, memo, reason)
+             VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_TIMESTAMP), $6, $7, $8, $9, $10)
              RETURNING *`,
             [
                 id,
-                Number(event_id),
+                isProject ? null : Number(event_id),
+                isProject ? Number(event_id) : null,
+                isProject ? 'project' : 'event',
                 normalizeNullableText(proposed_at),
                 normalizeNullableText(status) || 'proposed',
                 lost_reason_id ? Number(lost_reason_id) : null,
@@ -1973,7 +1982,9 @@ export const getStudentEventProposals = async (req: Request, res: Response) => {
             `SELECT
                 ep.id,
                 ep.student_id,
-                ep.event_id,
+                COALESCE(ep.project_id, ep.event_id) as event_id,
+                ep.project_id,
+                ep.source,
                 ep.proposed_at,
                 ep.status,
                 ep.lost_reason_id,
@@ -1981,11 +1992,12 @@ export const getStudentEventProposals = async (req: Request, res: Response) => {
                 ep.memo,
                 ep.reason,
                 ep.created_at,
-                e.title AS event_name,
+                COALESCE(p.title, e.title) AS event_name,
                 e.event_date,
                 lr.reason_name AS lost_reason_name
              FROM event_proposals ep
              LEFT JOIN events e ON e.id = ep.event_id
+             LEFT JOIN projects p ON p.id = ep.project_id
              LEFT JOIN lost_reasons lr ON lr.id = ep.lost_reason_id
              WHERE ep.student_id = $1
              ORDER BY ep.proposed_at DESC, ep.id DESC`,

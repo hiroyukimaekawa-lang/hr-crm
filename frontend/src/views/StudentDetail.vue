@@ -426,8 +426,19 @@ const submitEventProposal = async () => {
   const selectedReason = proposalForm.value.reason || '';
   const matchedLostReason = proposalLostReasons.value.find((r: any) => String(r.reason_name || '') === selectedReason);
   const lostReasonId = proposalForm.value.status === 'lost' && matchedLostReason ? Number(matchedLostReason.id) : null;
+  
+  const rawId = proposalForm.value.event_id;
+  let source = 'event';
+  let eventId = Number(rawId);
+  if (typeof rawId === 'string' && rawId.includes('_')) {
+    const parts = rawId.split('_');
+    source = parts[0];
+    eventId = Number(parts[1]);
+  }
+
   await api.post(`/api/students/${studentId.value}/funnel/event-proposal`, {
-    event_id: Number(proposalForm.value.event_id),
+    event_id: eventId,
+    source: source,
     selected_event_date: proposalForm.value.selected_event_date || null,
     status: proposalForm.value.status || 'proposed',
     lost_reason_id: lostReasonId,
@@ -945,9 +956,16 @@ const toggleOverviewEvent = (eventId: number) => {
 
 const tags = computed(() => Array.isArray(student.value?.tags) ? student.value.tags : []);
 const selectedProposalEvent = computed(() => {
-  const id = Number(proposalForm.value.event_id || 0);
-  if (!id) return null;
-  return proposalEvents.value.find((e: any) => Number(e.id) === id) || null;
+  const val = proposalForm.value.event_id;
+  if (!val) return null;
+  let source = 'event';
+  let eventId = Number(val);
+  if (typeof val === 'string' && val.includes('_')) {
+    const parts = val.split('_');
+    source = parts[0];
+    eventId = Number(parts[1]);
+  }
+  return availableEvents.value.find((e: any) => e.source === source && Number(e.id) === eventId) || null;
 });
 const selectedProposalEventDates = computed(() => {
   const e: any = selectedProposalEvent.value;
@@ -1524,9 +1542,16 @@ watch(selectedEventId, () => {
             <div class="pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-2">
               <select v-model="proposalForm.event_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm">
                 <option value="">案件を選択</option>
-                <option v-for="e in proposalEvents" :key="`proposal-event-${e.id}`" :value="String(e.id)">
-                  {{ e.event_name || e.title }}（{{ e.event_date ? formatDateTime(e.event_date) : '-' }}）
-                </option>
+                <optgroup label="エージェント面談">
+                  <option v-for="ae in availableEvents.filter((e:any) => e.type === 'agent_interview')" :key="'proposal-agent-' + ae.source + '_' + ae.id" :value="ae.source + '_' + ae.id">
+                    🤝 {{ ae.title }}
+                  </option>
+                </optgroup>
+                <optgroup label="イベント">
+                  <option v-for="ae in availableEvents.filter((e:any) => e.type !== 'agent_interview')" :key="'proposal-event-' + ae.source + '_' + ae.id" :value="ae.source + '_' + ae.id">
+                    📅 {{ ae.title }}
+                  </option>
+                </optgroup>
               </select>
               <select v-model="proposalForm.selected_event_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-base md:text-sm" :disabled="!proposalForm.event_id">
                 <option value="">参加日程を選択</option>

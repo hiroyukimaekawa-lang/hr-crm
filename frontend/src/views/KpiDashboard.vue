@@ -37,7 +37,7 @@ import {
 
 // ─── State ───
 
-const activeTab = ref<'monthly' | 'weekly' | 'daily' | 'event' | 'staff' | 'source'>('monthly');
+const activeTab = ref<'monthly' | 'weekly' | 'event' | 'staff' | 'source'>('monthly');
 const loading = ref(false);
 const saving = ref(false);
 const showExpired = ref(false);
@@ -64,7 +64,7 @@ const user = ref<any>(JSON.parse(localStorage.getItem('user') || '{"role":"admin
 
 // Goal editing
 const showGoalEditor = ref(false);
-const editorPeriodType = ref<'monthly' | 'weekly' | 'daily'>('monthly');
+const editorPeriodType = ref<'monthly' | 'weekly'>('monthly');
 const goalForm = ref({
   sales_target: 0,
   unit_price: 0,
@@ -162,7 +162,7 @@ const saveInlineTarget = async (ev: EventKpiItem) => {
     await kpiApi.updateGoals(goals);
     editingEventTargetId.value = null;
     await fetchEvents();
-    if (activeTab.value === 'monthly' || activeTab.value === 'weekly' || activeTab.value === 'daily') {
+    if (activeTab.value === 'monthly' || activeTab.value === 'weekly') {
         await fetchOverview();
     }
   } catch (err) {
@@ -201,7 +201,7 @@ const saveSlotInlineTarget = async (ev: EventKpiItem, slotDate: string) => {
     
     editingSlotTargetDate.value = null;
     await fetchEvents();
-    if (activeTab.value === 'monthly' || activeTab.value === 'weekly' || activeTab.value === 'daily') {
+    if (activeTab.value === 'monthly' || activeTab.value === 'weekly') {
         await fetchOverview();
     }
   } catch (err) {
@@ -236,9 +236,7 @@ const fetchOverview = async () => {
   try {
     // タブに応じて適切なパラメータのみ送信（複数同時送信すると500エラーになる）
     let params: Record<string, any> = {};
-    if (activeTab.value === 'daily') {
-      params = { date: selectedDate.value };
-    } else if (activeTab.value === 'weekly') {
+    if (activeTab.value === 'weekly') {
       params = { month: selectedMonth.value }; // 週次は月で取得
     } else {
       params = { month: selectedMonth.value };
@@ -361,7 +359,7 @@ const fetchGoals = async () => {
   }
 };
 
-const openGoalEditor = (period: 'monthly' | 'weekly' | 'daily') => {
+const openGoalEditor = (period: 'monthly' | 'weekly') => {
     editorPeriodType.value = period;
     fetchGoals();
     showGoalEditor.value = true;
@@ -608,12 +606,12 @@ const saveEventSettings = async () => {
     await kpiApi.updateEventKpi(editingEvent.value.event_id, eventForm.value);
 
     // 2. Period-specific target settings (manual override)
-    const periodType = activeTab.value === 'weekly' ? 'weekly' : activeTab.value === 'daily' ? 'daily' : 'monthly';
-    const periodStart = activeTab.value === 'weekly' ? selectedWeek.value : activeTab.value === 'daily' ? selectedDate.value : selectedMonth.value + '-01';
+    const periodType = activeTab.value === 'weekly' ? 'weekly' : 'monthly';
+    const periodStart = activeTab.value === 'weekly' ? selectedWeek.value : selectedMonth.value + '-01';
     
     // We only save if a target is actually set or if we want to overwrite
     // For simplicity, we always sync the target of current period if it's not the 'event' tab
-    if ((activeTab.value === 'monthly' || activeTab.value === 'weekly' || activeTab.value === 'daily') && editingEvent.value) {
+    if ((activeTab.value === 'monthly' || activeTab.value === 'weekly') && editingEvent.value) {
       await kpiApi.updateGoals([{
         scope_type: editingEvent.value.source,
         scope_id: editingEvent.value.event_id,
@@ -627,7 +625,7 @@ const saveEventSettings = async () => {
 
     showEventEditor.value = false;
     await fetchEvents();
-    if (activeTab.value === 'monthly' || activeTab.value === 'weekly' || activeTab.value === 'daily') {
+    if (activeTab.value === 'monthly' || activeTab.value === 'weekly') {
         await fetchOverview();
     }
   } catch (err) {
@@ -660,7 +658,6 @@ const applyTemplate = (type: 'simple' | 'extended') => {
 // ─── Computed helpers ───
 
 const monthly = computed(() => overview.value?.monthly);
-const daily = computed(() => overview.value?.daily);
 const funnel = computed(() => overview.value?.funnel);
 
 const activeEvents = computed(() =>
@@ -832,14 +829,13 @@ const getRemainingEntriesNeededForSlot = (ev: EventKpiItem, slot: EventKpiSlot):
 
       <!-- Goal Editor -->
       <div v-if="showGoalEditor" class="bg-white rounded-2xl border border-blue-200 p-6 mb-6 shadow-sm">
-        <h3 class="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <Target class="w-4 h-4 text-blue-600" />
-          {{ editorPeriodType === 'weekly' ? '週間' : editorPeriodType === 'daily' ? 'デイリー' : '月間' }}目標設定 ({{ 
-              editorPeriodType === 'weekly' ? selectedWeek : 
-              editorPeriodType === 'daily' ? selectedDate : 
-              selectedMonth.replace('-', '年') + '月' 
-          }})
-        </h3>
+          <h3 class="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Target class="w-4 h-4 text-blue-600" />
+            {{ editorPeriodType === 'weekly' ? '週間' : '月間' }}目標設定 ({{ 
+                editorPeriodType === 'weekly' ? selectedWeek : 
+                selectedMonth.replace('-', '年') + '月' 
+            }})
+          </h3>
         <div class="mb-6">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <div>
