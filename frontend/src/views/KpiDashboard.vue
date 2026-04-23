@@ -658,6 +658,7 @@ const applyTemplate = (type: 'simple' | 'extended') => {
 // ─── Computed helpers ───
 
 const monthly = computed(() => overview.value?.monthly);
+const daily = computed(() => overview.value?.daily);
 const funnel = computed(() => overview.value?.funnel);
 
 const activeEvents = computed(() =>
