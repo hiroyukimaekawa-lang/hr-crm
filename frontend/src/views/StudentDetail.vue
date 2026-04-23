@@ -432,7 +432,7 @@ const submitEventProposal = async () => {
   let eventId = Number(rawId);
   if (typeof rawId === 'string' && rawId.includes('_')) {
     const parts = rawId.split('_');
-    source = parts[0];
+    source = parts[0] || 'event';
     eventId = Number(parts[1]);
   }
 
@@ -962,7 +962,7 @@ const selectedProposalEvent = computed(() => {
   let eventId = Number(val);
   if (typeof val === 'string' && val.includes('_')) {
     const parts = val.split('_');
-    source = parts[0];
+    source = parts[0] || 'event';
     eventId = Number(parts[1]);
   }
   return availableEvents.value.find((e: any) => e.source === source && Number(e.id) === eventId) || null;
