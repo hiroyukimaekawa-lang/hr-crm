@@ -203,12 +203,6 @@ export interface GoalSetting {
   meta?: any;
 }
 
-// ─── Helpers ───
-
-const authHeaders = () => ({
-  headers: { Authorization: localStorage.getItem('token') || '' }
-});
-
 // ─── API Client ───
 
 export const kpiApi = {
@@ -224,7 +218,7 @@ export const kpiApi = {
     graduation_year?: number;
     group_by?: string;
   } = {}) =>
-    api.get<KpiOverviewResponse>('/api/kpi/overview', { ...authHeaders(), params }),
+    api.get<KpiOverviewResponse>('/api/kpi/overview', { params }),
 
   /**
    * Get event-level KPI (all events).
@@ -235,7 +229,7 @@ export const kpiApi = {
     date?: string;
     period_type?: string;
   } = {}) =>
-    api.get<EventKpiItem[]>('/api/kpi/events', { ...authHeaders(), params }),
+    api.get<EventKpiItem[]>('/api/kpi/events', { params }),
 
   /**
    * Get goal settings.
@@ -251,13 +245,13 @@ export const kpiApi = {
     date?: string;
     week?: string;
   } = {}) =>
-    api.get<GoalSetting[]>('/api/kpi/goals', { ...authHeaders(), params }),
+    api.get<GoalSetting[]>('/api/kpi/goals', { params }),
 
   /**
    * Bulk upsert goal settings.
    */
   updateGoals: (goals: GoalSetting[]) =>
-    api.put('/api/kpi/goals/bulk', { goals }, authHeaders()),
+    api.put('/api/kpi/goals/bulk', { goals }),
 
   /**
    * Get funnel-only data.
@@ -267,13 +261,13 @@ export const kpiApi = {
     staff_id?: number;
     source_company?: string;
   } = {}) =>
-    api.get<FunnelCounts>('/api/kpi/funnel', { ...authHeaders(), params }),
+    api.get<FunnelCounts>('/api/kpi/funnel', { params }),
   
   /**
    * Update specific event KPI settings.
    */
   updateEventKpi: (id: number, data: any) =>
-    api.put(`/api/projects/${id}/kpi`, data, authHeaders()),
+    api.put(`/api/projects/${id}/kpi`, data),
 
   /**
    * Revenue → KPI decomposition (calculation & proposal engine).
@@ -287,7 +281,7 @@ export const kpiApi = {
     month?: string;
     overrides?: Record<number, { allocated_revenue?: number }>;
   }) =>
-    api.post<DecomposeResponse>('/api/kpi/decompose', params, authHeaders()),
+    api.post<DecomposeResponse>('/api/kpi/decompose', params),
 
   /**
    * Update channel allocation with manual overrides.
@@ -300,7 +294,7 @@ export const kpiApi = {
     month: string;
     overrides: Record<number, { allocated_revenue?: number }>;
   }) =>
-    api.put<ChannelAllocationResult>('/api/kpi/allocation', params, authHeaders()),
+    api.put<ChannelAllocationResult>('/api/kpi/allocation', params),
 };
 
 // ─── Display Helpers (front-end formatting only, NO computation) ───

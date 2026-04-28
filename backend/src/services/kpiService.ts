@@ -246,7 +246,7 @@ export const suggestChannelAllocation = async (
     month: string,
     manualOverrides: Record<number, { allocated_revenue?: number }> = {}
 ): Promise<ChannelAllocationResult> => {
-    const events = await getEventKpiData();
+    const events = await getEventKpiData({ month });
     const warnings: string[] = [];
 
     // Filter to projects that are relevant (have deadlines in the month or are active)
@@ -532,7 +532,7 @@ export const getOverview = async (filters: KpiFilters): Promise<KpiOverviewResul
 // ─────────────────────── Event KPI ───────────────────────
 
 export const getEventKpi = async (filters: KpiFilters = {}): Promise<any[]> => {
-    const events = await getEventKpiData();
+    const events = await getEventKpiData(filters);
 
     // 1. Get period-specific goals for events if we have a context (month, week, or date)
     let periodGoals: Record<string, { target?: number; deadline?: string }> = {};

@@ -169,10 +169,6 @@ export const getCanonicalFunnelCounts = async (filters: KpiFilters): Promise<Fun
     const appCond = appDateFilter.condition ? `AND ${appDateFilter.condition}` : '';
     currentIdx = appDateFilter.paramIndex;
 
-    const intDateFilter = buildDateFilter(`cf.interview_scheduled_at`, filters, params, currentIdx);
-    const intCond = intDateFilter.condition ? `AND ${intDateFilter.condition}` : '';
-    currentIdx = intDateFilter.paramIndex;
-
     const groupByCol = filters.groupBy === 'staff' ? 's.staff_id' : filters.groupBy === 'source' ? 's.source_company' : null;
     const selectExtra = groupByCol ? `, ${groupByCol} AS group_key` : '';
     const groupByClause = groupByCol ? `GROUP BY ${groupByCol}` : '';
@@ -201,8 +197,8 @@ export const getCanonicalFunnelCounts = async (filters: KpiFilters): Promise<Fun
         SELECT
             COUNT(DISTINCT CASE WHEN cf.student_id IS NOT NULL ${appCond} THEN cf.student_id END)::int AS applications,
             COUNT(DISTINCT CASE WHEN cf.reservation_at IS NOT NULL ${appCond} THEN cf.student_id END)::int AS reservations,
-            COUNT(DISTINCT CASE WHEN cf.interview_scheduled_at IS NOT NULL ${intCond} THEN cf.student_id END)::int AS interview_scheduled,
-            COUNT(DISTINCT CASE WHEN cf.interview_completed_at IS NOT NULL ${intCond} THEN cf.student_id END)::int AS interview_completed
+            COUNT(DISTINCT CASE WHEN cf.interview_scheduled_at IS NOT NULL ${appCond} THEN cf.student_id END)::int AS interview_scheduled,
+            COUNT(DISTINCT CASE WHEN cf.interview_completed_at IS NOT NULL ${appCond} THEN cf.student_id END)::int AS interview_completed
             ${selectExtra}
         FROM canonical_funnel cf
         JOIN students s ON s.id = cf.student_id
@@ -287,7 +283,7 @@ export const upsertGoals = async (goals: GoalRow[]): Promise<void> => {
 
 // ─────────────────────── Event KPI (Unified to Projects) ───────────────────────
 
-export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
+export const getEventKpiData = async (filters: KpiFilters = {}): Promise<EventKpiRow[]> => {
     await ensureDepTables();
     const now = new Date();
     const todayStr = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -339,29 +335,40 @@ export const getEventKpiData = async (): Promise<EventKpiRow[]> => {
 
     const allEvents = [...projectsRes.rows, ...legacyRes.rows];
 
+    // Date filters for status breakdowns
+    const projectDateParams: any[] = [];
+    const projectDateRes = buildDateFilter('created_at', filters, projectDateParams, 1);
+    const projectDateCond = projectDateRes.condition ? `WHERE ${projectDateRes.condition}` : '';
+
     // Status breakdowns
     const projectStatusRes = await pool.query(`
         SELECT project_id as event_id, status, COUNT(*)::int AS cnt
-        FROM student_project_relations GROUP BY project_id, status
-    `);
+        FROM student_project_relations
+        ${projectDateCond}
+        GROUP BY project_id, status
+    `, projectDateParams);
+    
     const legacyStatusRes = await pool.query(`
         SELECT event_id, status, COUNT(*)::int AS cnt
-        FROM student_events GROUP BY event_id, status
-    `);
+        FROM student_events
+        ${projectDateCond}
+        GROUP BY event_id, status
+    `, projectDateParams);
 
     const projectSlotStatusRes = await pool.query(`
         SELECT spr.project_id as event_id, to_char(ps.schedule_date, 'YYYY-MM-DD"T"HH24:MI') as slot_date, spr.status, COUNT(*)::int AS cnt
         FROM student_project_relations spr
         JOIN project_schedules ps ON ps.id = spr.schedule_id
+        ${projectDateCond.replace('created_at', 'spr.created_at')}
         GROUP BY spr.project_id, slot_date, spr.status
-    `);
+    `, projectDateParams);
+    
     const legacySlotStatusRes = await pool.query(`
-        -- Legacy slots are usually in event_dates but student_events doesn't link to a specific date ID in all versions.
-        -- We'll just group by the event_id for now if it's legacy.
         SELECT event_id, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI') as slot_date, status, COUNT(*)::int AS cnt
         FROM student_events
+        ${projectDateCond}
         GROUP BY event_id, slot_date, status
-    `);
+    `, projectDateParams);
 
     const breakdownMap: Record<string, Record<string, number>> = {};
     const populateBD = (rows: any[], source: string) => {
@@ -438,18 +445,18 @@ export const getSalesActuals = async (filters: KpiFilters) => {
     let legacyPeriodWhere = '';
 
     if (filters.month) {
-        projectPeriodWhere = `(TO_CHAR(ps.schedule_date, 'YYYY-MM') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM') = $${idx})`;
-        legacyPeriodWhere = `(TO_CHAR(ed.event_date, 'YYYY-MM') = $${idx} OR TO_CHAR(e.event_date, 'YYYY-MM') = $${idx})`;
+        projectPeriodWhere = `TO_CHAR(ps.schedule_date, 'YYYY-MM') = $${idx}`;
+        legacyPeriodWhere = `TO_CHAR(ed.event_date, 'YYYY-MM') = $${idx}`;
         params.push(filters.month);
         idx++;
     } else if (filters.date) {
-        projectPeriodWhere = `(TO_CHAR(ps.schedule_date, 'YYYY-MM-DD') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM-DD') = $${idx})`;
-        legacyPeriodWhere = `(TO_CHAR(ed.event_date, 'YYYY-MM-DD') = $${idx} OR TO_CHAR(e.event_date, 'YYYY-MM-DD') = $${idx})`;
+        projectPeriodWhere = `TO_CHAR(ps.schedule_date, 'YYYY-MM-DD') = $${idx}`;
+        legacyPeriodWhere = `TO_CHAR(ed.event_date, 'YYYY-MM-DD') = $${idx}`;
         params.push(filters.date);
         idx++;
     } else if (filters.week) {
-        projectPeriodWhere = `(TO_CHAR(ps.schedule_date, 'IYYY-\"W\"IW') = $${idx} OR TO_CHAR(p.entry_deadline, 'IYYY-\"W\"IW') = $${idx})`;
-        legacyPeriodWhere = `(TO_CHAR(ed.event_date, 'IYYY-\"W\"IW') = $${idx} OR TO_CHAR(e.event_date, 'IYYY-\"W\"IW') = $${idx})`;
+        projectPeriodWhere = `TO_CHAR(ps.schedule_date, 'IYYY-\"W\"IW') = $${idx}`;
+        legacyPeriodWhere = `TO_CHAR(ed.event_date, 'IYYY-\"W\"IW') = $${idx}`;
         params.push(filters.week);
         idx++;
     }

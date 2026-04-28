@@ -244,8 +244,7 @@ const fetchDetail = async () => {
   loading.value = true;
   fetchError.value = '';
   try {
-    const token = localStorage.getItem('token');
-    const res = await api.get(`/api/students/${studentId.value}`, { headers: { Authorization: token } });
+    const res = await api.get(`/api/students/${studentId.value}`);
     
     // Check if response has data
     if (!res.data || !res.data.student) {
@@ -271,7 +270,7 @@ const fetchDetail = async () => {
 
     // また、紹介元選択用に全学生リストも必要なら取得
     if (allStudents.value.length === 0) {
-      const listRes = await api.get('/api/students', { headers: { Authorization: token } });
+      const listRes = await api.get('/api/students');
       allStudents.value = listRes.data;
     }
   } catch (err: any) {
@@ -336,15 +335,14 @@ const mergeDateHour = (date: string, hour: string) => {
 
 const registerMatcherApply = async () => {
   try {
-    const token = localStorage.getItem('token');
     const appliedAt = normalizeHourDateTime(matcherForm.value.applied_at);
     await api.post(`/api/students/${studentId.value}/funnel/application`, {
       source: student.value?.source_company || null,
       applied_at: appliedAt
-    }, { headers: { Authorization: token } });
+    });
     await api.post(`/api/students/${studentId.value}/matcher-funnel/apply`, {
       applied_at: appliedAt
-    }, { headers: { Authorization: token } });
+    });
     fetchDetail();
   } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
@@ -354,19 +352,18 @@ const registerMatcherApply = async () => {
 
 const registerMatcherReservation = async () => {
   try {
-    const token = localStorage.getItem('token');
     const reservationCreatedAt = normalizeHourDateTime(matcherForm.value.reservation_created_at);
     const interviewScheduledAt = normalizeHourDateTime(matcherForm.value.interview_scheduled_at);
     await api.put(`/api/students/${studentId.value}/funnel/reservation`, {
       reservation_status: '初回面談',
       reservation_created_at: reservationCreatedAt,
       reservation_date: interviewScheduledAt
-    }, { headers: { Authorization: token } });
+    });
     await api.post(`/api/students/${studentId.value}/matcher-funnel/reservation`, {
       reservation_created_at: reservationCreatedAt,
       reservation_status: '初回面談',
       interview_scheduled_at: interviewScheduledAt
-    }, { headers: { Authorization: token } });
+    });
     fetchDetail();
   } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
@@ -376,14 +373,13 @@ const registerMatcherReservation = async () => {
 
 const registerMatcherInterview = async () => {
   try {
-    const token = localStorage.getItem('token');
     const interviewActualAt = normalizeHourDateTime(matcherForm.value.interview_actual_at);
     const interviewScheduledAt = normalizeHourDateTime(matcherForm.value.interview_scheduled_at);
     await api.post(`/api/students/${studentId.value}/matcher-funnel/interview`, {
       interview_actual_at: interviewActualAt,
       interview_status: matcherForm.value.interview_status || 'completed',
       interview_scheduled_at: interviewScheduledAt
-    }, { headers: { Authorization: token } });
+    });
     fetchDetail();
   } catch (e: any) {
     console.error('面談実施登録エラー:', e);
@@ -392,11 +388,10 @@ const registerMatcherInterview = async () => {
 };
 
 const fetchAllEvents = async () => {
-  const token = localStorage.getItem('token');
   try {
     const [eventsRes, projectsRes] = await Promise.all([
-      api.get('/api/events', { headers: { Authorization: token } }),
-      api.get('/api/projects', { headers: { Authorization: token } })
+      api.get('/api/events'),
+      api.get('/api/projects')
     ]);
     availableEvents.value = [
       ...eventsRes.data.map((e: any) => ({ ...e, source: 'event' })),
@@ -408,21 +403,18 @@ const fetchAllEvents = async () => {
 };
 
 const fetchProposalMaster = async () => {
-  const token = localStorage.getItem('token');
-  const res = await api.get('/api/students/funnel/master', { headers: { Authorization: token } });
+  const res = await api.get('/api/students/funnel/master');
   proposalEvents.value = Array.isArray(res.data?.events) ? res.data.events : [];
   proposalLostReasons.value = Array.isArray(res.data?.lost_reasons) ? res.data.lost_reasons : [];
 };
 
 const fetchEventProposals = async () => {
-  const token = localStorage.getItem('token');
-  const res = await api.get(`/api/students/${studentId.value}/funnel/event-proposals`, { headers: { Authorization: token } });
+  const res = await api.get(`/api/students/${studentId.value}/funnel/event-proposals`);
   eventProposals.value = Array.isArray(res.data) ? res.data : [];
 };
 
 const submitEventProposal = async () => {
   if (!proposalForm.value.event_id) return;
-  const token = localStorage.getItem('token');
   const selectedReason = proposalForm.value.reason || '';
   const matchedLostReason = proposalLostReasons.value.find((r: any) => String(r.reason_name || '') === selectedReason);
   const lostReasonId = proposalForm.value.status === 'lost' && matchedLostReason ? Number(matchedLostReason.id) : null;
@@ -444,7 +436,7 @@ const submitEventProposal = async () => {
     lost_reason_id: lostReasonId,
     reason: selectedReason || null,
     memo: proposalForm.value.memo || null
-  }, { headers: { Authorization: token } });
+  });
   proposalForm.value = {
     event_id: '',
     selected_event_date: '',
@@ -458,7 +450,6 @@ const submitEventProposal = async () => {
 const addLog = async () => {
   try {
     if (!newLog.value) return;
-    const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)"}');
     await api.post('/api/students/interview-logs', {
       student_id: studentId.value,
@@ -467,7 +458,7 @@ const addLog = async () => {
       event_id: newLogType.value === 'エントリー' ? newLogEventId.value : null,
       content: newLog.value,
       interview_date: new Date()
-    }, { headers: { Authorization: token } });
+    });
     newLog.value = '';
     newLogEventId.value = '';
     newLogType.value = '面談';
@@ -482,8 +473,7 @@ const addLog = async () => {
 const deleteLog = async (logId: number) => {
   try {
     if (!confirm('このログを削除しますか？')) return;
-    const token = localStorage.getItem('token');
-    await api.delete(`/api/students/interview-logs/${logId}`, { headers: { Authorization: token } });
+    await api.delete(`/api/students/interview-logs/${logId}`);
     fetchDetail();
   } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
@@ -512,10 +502,9 @@ const updateLog = async (logId: number) => {
   if (!editingLogContent.value.trim()) return;
   try {
     savingLogId.value = logId;
-    const token = localStorage.getItem('token');
     await api.put(`/api/students/interview-logs/${logId}`, {
       content: editingLogContent.value
-    }, { headers: { Authorization: token } });
+    });
     editingLogId.value = null;
     editingLogContent.value = '';
     await fetchDetail();
@@ -530,11 +519,10 @@ const updateLog = async (logId: number) => {
 const addTask = async () => {
   try {
     if (!newTaskContent.value.trim()) return;
-    const token = localStorage.getItem('token');
     await api.post(`/api/students/${studentId.value}/tasks`, {
       due_date: mergeDateHour(newTaskDate.value || '', (newTaskHour.value || '10:00').split(':')[0] || '10') || null,
       content: newTaskContent.value
-    }, { headers: { Authorization: token } });
+    });
     newTaskDate.value = '';
     newTaskContent.value = '';
     persistDraft();
@@ -547,12 +535,11 @@ const addTask = async () => {
 
 const addInterviewSchedule = async () => {
   try {
-    const token = localStorage.getItem('token');
     await api.post(`/api/students/${studentId.value}/interview-schedules`, {
       scheduled_at: mergeDateHour(newScheduleDate.value || '', (newScheduleHour.value || '10:00').split(':')[0] || '10') || null,
       schedule_type: newScheduleType.value,
       status: newScheduleType.value === 'リスケ' ? 'rescheduled' : 'scheduled'
-    }, { headers: { Authorization: token } });
+    });
     newScheduleDate.value = '';
     newScheduleType.value = '面談';
     persistDraft();
@@ -565,8 +552,7 @@ const addInterviewSchedule = async () => {
 
 const updateInterviewSchedule = async (scheduleId: number, payload: { scheduled_at?: string | null; actual_at?: string | null; status?: string; schedule_type?: '流入日' | '面談' | 'リスケ' }) => {
   try {
-    const token = localStorage.getItem('token');
-    await api.put(`/api/students/interview-schedules/${scheduleId}`, payload, { headers: { Authorization: token } });
+    await api.put(`/api/students/interview-schedules/${scheduleId}`, payload);
     fetchDetail();
   } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
@@ -577,8 +563,7 @@ const updateInterviewSchedule = async (scheduleId: number, payload: { scheduled_
 const deleteInterviewSchedule = async (scheduleId: number) => {
   try {
     if (!confirm('この面談予定を削除しますか？')) return;
-    const token = localStorage.getItem('token');
-    await api.delete(`/api/students/interview-schedules/${scheduleId}`, { headers: { Authorization: token } });
+    await api.delete(`/api/students/interview-schedules/${scheduleId}`);
     fetchDetail();
   } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
@@ -589,8 +574,7 @@ const deleteInterviewSchedule = async (scheduleId: number) => {
 const deleteTask = async (taskId: number) => {
   try {
     if (!confirm('このタスクを削除しますか？')) return;
-    const token = localStorage.getItem('token');
-    await api.delete(`/api/students/tasks/${taskId}`, { headers: { Authorization: token } });
+    await api.delete(`/api/students/tasks/${taskId}`);
     fetchDetail();
   } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
@@ -600,8 +584,7 @@ const deleteTask = async (taskId: number) => {
 
 const completeTask = async (taskId: number) => {
   try {
-    const token = localStorage.getItem('token');
-    await api.put(`/api/students/tasks/${taskId}/complete`, {}, { headers: { Authorization: token } });
+    await api.put(`/api/students/tasks/${taskId}/complete`, {});
     fetchDetail();
   } catch (e: any) { 
     console.error("DEBUG ERROR:", e); 
@@ -617,7 +600,6 @@ const linkEvent = async () => {
     const key = String(selectedEventId.value);
     const finalEventId = key.includes('_') ? Number(key.split('_')[1]) : Number(key);
 
-    const token = localStorage.getItem('token');
     // For agent-type events, use the calendar-picked datetime; otherwise the slot dropdown
     const dateToSave = isSelectedEventAgent.value
       ? (agentScheduleDate.value || null)
@@ -627,7 +609,7 @@ const linkEvent = async () => {
       selected_event_date: dateToSave,
       status: selectedEventStatus.value,
       source: selectedLinkEvent.value?.source
-    }, { headers: { Authorization: token } });
+    });
     selectedEventId.value = '';
     selectedEventDate.value = '';
     agentScheduleDate.value = '';
@@ -647,12 +629,10 @@ const updateEventParticipationStatus = async (
   source?: string
 ) => {
   try {
-    const token = localStorage.getItem('token');
     const endpoint = source === 'project' ? 'projects' : 'events';
     await api.put(
       `/api/${endpoint}/${eventId}/participants/${studentEventId}`,
-      { status },
-      { headers: { Authorization: token } }
+      { status }
     );
     fetchDetail();
   } catch (e: any) { 
@@ -669,12 +649,10 @@ const updateEventParticipationDate = async (
   source?: string
 ) => {
   try {
-    const token = localStorage.getItem('token');
     const endpoint = source === 'project' ? 'projects' : 'events';
     await api.put(
       `/api/${endpoint}/${eventId}/participants/${studentEventId}`,
-      { status: currentStatus || 'A_ENTRY', selected_event_date: date || null },
-      { headers: { Authorization: token } }
+      { status: currentStatus || 'A_ENTRY', selected_event_date: date || null }
     );
     fetchDetail();
   } catch (e: any) { 

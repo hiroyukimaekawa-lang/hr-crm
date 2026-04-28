@@ -89,7 +89,6 @@ const legacyEvents = ref<any[]>([]);
 const activeTab = ref<'projects' | 'legacy'>('projects');
 
 const fetchEvents = async () => {
-  const token = localStorage.getItem('token');
   try {
     // ── 各APIを独立して取得（一つが失敗しても他は影響なし）──
     let eventsData: any[]   = [];
@@ -97,17 +96,17 @@ const fetchEvents = async () => {
     let legacyData: any[]   = [];
 
     try {
-      const res = await api.get('/api/events', { headers: { Authorization: token } });
+      const res = await api.get('/api/events');
       eventsData = Array.isArray(res.data) ? res.data : [];
     } catch (e) { console.warn('/api/events failed', e); }
 
     try {
-      const res = await api.get('/api/projects', { headers: { Authorization: token } });
+      const res = await api.get('/api/projects');
       projectsData = Array.isArray(res.data) ? res.data : [];
     } catch (e) { console.warn('/api/projects failed', e); }
 
     try {
-      const res = await api.get('/api/legacy-events', { headers: { Authorization: token } });
+      const res = await api.get('/api/legacy-events');
       legacyData = Array.isArray(res.data) ? res.data : [];
     } catch (e) { console.warn('/api/legacy-events failed (non-critical)', e); }
 
@@ -131,7 +130,7 @@ const fetchEvents = async () => {
       events.value.map(async (e) => {
         try {
           const endpoint = e.source === 'project' ? `/api/projects/${e.id}` : `/api/events/${e.id}`;
-          const detail = await api.get(endpoint, { headers: { Authorization: token } });
+          const detail = await api.get(endpoint);
           const participants: Participant[] = Array.isArray(detail.data?.participants)
             ? detail.data.participants.map((p: any) => ({
                 id: p.student_event_id || p.id,
@@ -169,10 +168,7 @@ const fetchEvents = async () => {
 const migrateLegacyEvent = async (legacyId: number) => {
   if (!confirm('この旧イベントを現在のイベント管理に移行しますか？')) return;
   try {
-    const token = localStorage.getItem('token');
-    // Note: This still migrates to 'projects' as per original logic, 
-    // but the UI will show it in 'active' unified list.
-    await api.post(`/api/legacy-events/${legacyId}/migrate`, {}, { headers: { Authorization: token } });
+    await api.post(`/api/legacy-events/${legacyId}/migrate`, {});
     alert('移行しました。');
     fetchEvents();
     activeTab.value = 'projects';
@@ -183,12 +179,10 @@ const migrateLegacyEvent = async (legacyId: number) => {
 };
 
 const createEvent = async () => {
-  const token = localStorage.getItem('token');
-  // Reverted to original projects table as new source of truth
   await api.post('/api/projects', {
     ...newEvent.value,
     event_dates: newEvent.value.event_dates.filter(v => String(v || '').trim())
-  }, { headers: { Authorization: token } });
+  });
   newEvent.value = { title: '', type: 'event', graduation_year: '', description: '', event_dates: [''], location: '', lp_url: '' };
   showCreate.value = false;
   fetchEvents();
@@ -196,9 +190,8 @@ const createEvent = async () => {
 
 const deleteEvent = async (event: EventItem) => {
   if (!confirm('このイベントを削除しますか？')) return;
-  const token = localStorage.getItem('token');
-  const endpoint = (event as any).source === 'project' ? `/api/projects/${event.id}` : `/api/events/${event.id}`;
-  await api.delete(endpoint, { headers: { Authorization: token } });
+  const endpoint = event.source === 'project' ? `/api/projects/${event.id}` : `/api/events/${event.id}`;
+  await api.delete(endpoint);
   fetchEvents();
 };
 
@@ -329,12 +322,8 @@ const openEventDetailPanel = async (event: EventItem, dateKey?: string) => {
   selectedEventParticipants.value = [];
   isLoadingParticipants.value = true;
   try {
-    const token = localStorage.getItem('token');
-    const endpoint = event.isLegacy 
-      ? `/api/legacy-events/${event.id}/participants`
-      : ((event as any).source === 'project' ? `/api/projects/${event.id}` : `/api/events/${event.id}`);
-    
-    const res = await api.get(endpoint, { headers: { Authorization: token } });
+    const endpoint = event.isLegacy ? `/api/legacy-events/${event.id}` : (event.source === 'project' ? `/api/projects/${event.id}` : `/api/events/${event.id}`);
+    const res = await api.get(endpoint);
     const rawData = event.isLegacy ? res.data : (res.data?.participants || []);
     
     if (Array.isArray(rawData)) {

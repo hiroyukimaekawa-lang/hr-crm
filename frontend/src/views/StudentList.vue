@@ -120,11 +120,7 @@ const user = ref<any>(JSON.parse(localStorage.getItem('user') || '{"id": 1, "nam
 // Sync user profile to ensure latest admin role is respected
 onMounted(async () => {
   try {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    const res = await api.get('/api/auth/me', {
-      headers: { Authorization: token }
-    });
+    const res = await api.get('/api/auth/me');
     if (res.data.user) {
       user.value = res.data.user;
       localStorage.setItem('user', JSON.stringify(res.data.user));
@@ -255,10 +251,7 @@ const mergeDateHour = (date: string, hour: string) => {
 const toggleFavorite = async (student: Student) => {
   const newValue = !student.is_favorite;
   try {
-    const token = localStorage.getItem('token');
-    await api.patch(`/api/students/${student.id}/favorite`, { is_favorite: newValue }, {
-      headers: { Authorization: token }
-    });
+    await api.patch(`/api/students/${student.id}/favorite`, { is_favorite: newValue });
     student.is_favorite = newValue;
     pushNotification(newValue ? 'お気に入り登録しました' : 'お気に入り解除しました', 'success');
   } catch (err) {
@@ -269,12 +262,11 @@ const toggleFavorite = async (student: Student) => {
 
 const fetchStudents = async () => {
   try {
-    const token = localStorage.getItem('token');
     let url = '/api/students';
     if (!showAll.value && user.value.id) {
       url += `?staffId=${user.value.id}`;
     }
-    const res = await api.get(url, { headers: { Authorization: token } });
+    const res = await api.get(url);
     students.value = res.data;
   } catch (err) {
     console.error(err);
@@ -283,8 +275,7 @@ const fetchStudents = async () => {
 
 const fetchStaffUsers = async () => {
   try {
-    const token = localStorage.getItem('token');
-    const res = await api.get('/api/auth/users', { headers: { Authorization: token } });
+    const res = await api.get('/api/auth/users');
     staffUsers.value = res.data;
   } catch (err) {
     console.error(err);
@@ -293,8 +284,7 @@ const fetchStaffUsers = async () => {
 
 const fetchSourceCategories = async () => {
   try {
-    const token = localStorage.getItem('token');
-    const res = await api.get('/api/students/source-categories', { headers: { Authorization: token } });
+    const res = await api.get('/api/students/source-categories');
     sourceCategories.value = Array.isArray(res.data) ? res.data : [];
   } catch (err) {
     console.error(err);
@@ -303,8 +293,7 @@ const fetchSourceCategories = async () => {
 
 const fetchGraduationYearCategories = async () => {
   try {
-    const token = localStorage.getItem('token');
-    const res = await api.get('/api/students/graduation-year-categories', { headers: { Authorization: token } });
+    const res = await api.get('/api/students/graduation-year-categories');
     graduationYearCategories.value = Array.isArray(res.data) ? res.data : [];
   } catch (err) {
     console.error(err);
@@ -313,8 +302,7 @@ const fetchGraduationYearCategories = async () => {
 
 const fetchFunnelKpi = async () => {
   try {
-    const token = localStorage.getItem('token');
-    const res = await api.get('/api/students/metrics/funnel', { headers: { Authorization: token } });
+    const res = await api.get('/api/students/metrics/funnel');
     funnelKpi.value = {
       daily_applications: Array.isArray(res.data?.daily_applications) ? res.data.daily_applications : [],
       daily_settings: Array.isArray(res.data?.daily_settings) ? res.data.daily_settings : [],
@@ -358,15 +346,14 @@ const openFunnelModal = (student: Student) => {
 const submitApplication = async () => {
   if (!selectedFunnelStudent.value) return;
   try {
-    const token = localStorage.getItem('token');
     const appliedAt = normalizeHourDateTime(funnelForm.value.applied_at);
     await api.post(`/api/students/${selectedFunnelStudent.value.id}/funnel/application`, {
       source: funnelForm.value.source || null,
       applied_at: appliedAt
-    }, { headers: { Authorization: token } });
+    });
     await api.post(`/api/students/${selectedFunnelStudent.value.id}/matcher-funnel/apply`, {
       applied_at: appliedAt
-    }, { headers: { Authorization: token } });
+    });
     await fetchStudents();
     await fetchFunnelKpi();
     showToast('申込登録を保存しました。', 'success');
@@ -379,19 +366,18 @@ const submitApplication = async () => {
 const submitReservation = async () => {
   if (!selectedFunnelStudent.value) return;
   try {
-    const token = localStorage.getItem('token');
     const reservationDate = normalizeHourDateTime(funnelForm.value.reservation_date);
     const scheduledDate = normalizeHourDateTime(funnelForm.value.interview_scheduled_at);
     await api.put(`/api/students/${selectedFunnelStudent.value.id}/funnel/reservation`, {
       reservation_status: '初回面談',
       reservation_date: reservationDate,
       reservation_created_at: reservationDate
-    }, { headers: { Authorization: token } });
+    });
     await api.post(`/api/students/${selectedFunnelStudent.value.id}/matcher-funnel/reservation`, {
       reservation_created_at: reservationDate,
       reservation_status: '初回面談',
       interview_scheduled_at: scheduledDate
-    }, { headers: { Authorization: token } });
+    });
     await fetchStudents();
     await fetchFunnelKpi();
     showToast('予約登録を保存しました。', 'success');
@@ -404,19 +390,18 @@ const submitReservation = async () => {
 const submitInterview = async () => {
   if (!selectedFunnelStudent.value) return;
   try {
-    const token = localStorage.getItem('token');
     const scheduledAt = normalizeHourDateTime(funnelForm.value.interview_scheduled_at || funnelForm.value.reservation_date);
     const interviewedAt = normalizeHourDateTime(funnelForm.value.interview_interviewed_at);
     await api.post(`/api/students/${selectedFunnelStudent.value.id}/funnel/interview`, {
       scheduled_at: scheduledAt,
       interviewed_at: interviewedAt,
       status: funnelForm.value.interview_status || 'completed'
-    }, { headers: { Authorization: token } });
+    });
     await api.post(`/api/students/${selectedFunnelStudent.value.id}/matcher-funnel/interview`, {
       interview_scheduled_at: scheduledAt,
       interview_actual_at: interviewedAt,
       interview_status: funnelForm.value.interview_status || 'completed'
-    }, { headers: { Authorization: token } });
+    });
     await fetchStudents();
     await fetchFunnelKpi();
     showToast('面談実施登録を保存しました。', 'success');
@@ -428,10 +413,9 @@ const submitInterview = async () => {
 
 const updateStaff = async (studentId: number, staffId: number | null) => {
   try {
-    const token = localStorage.getItem('token');
     await api.put(`/api/students/${studentId}/staff`, {
       staff_id: staffId
-    }, { headers: { Authorization: token } });
+    });
     const selected = staffUsers.value.find((u) => u.id === staffId);
     students.value = students.value.map((s) => (
       s.id === studentId
@@ -448,8 +432,7 @@ const progressStageOptions = ['面談調整中', '初回面談', '2回目面談'
 
 const updateStudentMeta = async (studentId: number, payload: { referral_status?: string; progress_stage?: string; source_company?: string; next_meeting_date?: string | null; next_action?: string | null }) => {
   try {
-    const token = localStorage.getItem('token');
-    await api.put(`/api/students/${studentId}/meta`, payload, { headers: { Authorization: token } });
+    await api.put(`/api/students/${studentId}/meta`, payload);
     students.value = students.value.map((s) => (
       s.id === studentId ? { ...s, ...payload } : s
     ));
@@ -467,8 +450,7 @@ const normalizeSourceCompany = (value?: string | null) => {
 const deleteStudent = async (studentId: number) => {
   if (!confirm('この学生を削除しますか？')) return;
   try {
-    const token = localStorage.getItem('token');
-    await api.delete(`/api/students/${studentId}`, { headers: { Authorization: token } });
+    await api.delete(`/api/students/${studentId}`);
     students.value = students.value.filter((s) => s.id !== studentId);
   } catch (err) {
     console.error(err);
@@ -486,11 +468,9 @@ const createStudent = async () => {
       return;
     }
     showToast('学生登録を受け付けました。', 'success');
-    const token = localStorage.getItem('token');
     const assignedStaffId = user.value.role === 'admin'
       ? (newStudent.value.staff_id ? Number(newStudent.value.staff_id) : null)
       : Number(user.value.id);
-
     await api.post('/api/students', {
       source_company: newStudent.value.source_company,
       name: newStudent.value.name,
@@ -502,7 +482,7 @@ const createStudent = async () => {
       academic_track: newStudent.value.academic_track || null,
       graduation_year: newStudent.value.graduation_year ? Number(newStudent.value.graduation_year) : null,
       staff_id: assignedStaffId
-    }, { headers: { Authorization: token } });
+    });
 
     showCreate.value = false;
     newStudent.value = {

@@ -514,11 +514,7 @@ const handleManualOverride = async (projectId: number, newSales: number) => {
 
 const fetchStaffUsers = async () => {
   try {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    const res = await api.get('/api/auth/users', {
-      headers: { Authorization: token }
-    });
+    const res = await api.get('/api/auth/users');
     staffUsers.value = res.data;
   } catch (err) {
     console.error('Failed to fetch staff users:', err);
@@ -535,15 +531,10 @@ const loadAll = async () => {
   loading.value = true;
   try {
     // Sync user profile
-    const token = localStorage.getItem('token');
-    if (token) {
-      const resProfile = await api.get('/api/auth/me', {
-        headers: { Authorization: token }
-      });
-      if (resProfile.data.user) {
-        user.value = resProfile.data.user;
-        localStorage.setItem('user', JSON.stringify(resProfile.data.user));
-      }
+    const resProfile = await api.get('/api/auth/me');
+    if (resProfile.data.user) {
+      user.value = resProfile.data.user;
+      localStorage.setItem('user', JSON.stringify(resProfile.data.user));
     }
 
     // Sequence important: Overview and Events first, then Goals which depends on event data
@@ -673,13 +664,16 @@ const activeEventsForMonth = computed(() => {
   const m = selectedMonth.value;
   const base = eventKpi.value
     .filter(e => {
+      // 1. 締日が選択月と一致する場合
       if (e.deadline && e.deadline.startsWith(m)) return true;
-      if (e.deadline && e.days_remaining >= 0) return true;
       
+      // 2. 選択月内に実施スロット（回）がある場合
       const hasSlotsThisMonth = e.slots && e.slots.some((s: any) => s.date && s.date.startsWith(m));
       if (hasSlotsThisMonth) return true;
       
-      if (!e.deadline && (!e.slots || e.slots.length === 0)) return true; // Show events with no deadline and no slots so they can be configured
+      // 3. 締切もスロットもないが、設定待ちのもの（便宜上表示）
+      if (!e.deadline && (!e.slots || e.slots.length === 0)) return true;
+      
       return false;
     })
     .sort((a, b) => {

@@ -55,10 +55,9 @@ today.setHours(0, 0, 0, 0);
 const fetchEvents = async () => {
   loading.value = true;
   try {
-    const token = localStorage.getItem('token');
     const [eventsRes, projectsRes] = await Promise.all([
-      api.get('/api/events', { headers: { Authorization: token } }),
-      api.get('/api/projects', { headers: { Authorization: token } })
+      api.get('/api/events'),
+      api.get('/api/projects')
     ]);
     
     const all = [
@@ -138,10 +137,9 @@ const toggleRow = async (eventId: number) => {
 const fetchParticipants = async (eventId: number) => {
   loadingParticipants.value[eventId] = true;
   try {
-    const token = localStorage.getItem('token');
     const ev = events.value.find(e => e.id === eventId);
     const endpoint = (ev as any)?.source === 'project' ? `/api/projects/${eventId}` : `/api/events/${eventId}`;
-    const res = await api.get(endpoint, { headers: { Authorization: token } });
+    const res = await api.get(endpoint);
     participantsData.value[eventId] = res.data.participants || [];
   } catch (err) {
     console.error(`Failed to fetch participants for event ${eventId}:`, err);

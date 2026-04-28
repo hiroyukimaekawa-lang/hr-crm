@@ -31,12 +31,10 @@ const update = async () => {
   if (saving.value || selectedStatus.value === props.currentStatus) return
   saving.value = true
   try {
-    const token = localStorage.getItem('token')
     const endpoint = props.source === 'project' ? 'projects' : 'events'
     await api.put(
       `/api/${endpoint}/${props.eventId}/participants/${props.studentEventId}`,
-      { status: selectedStatus.value },
-      { headers: { Authorization: token } }
+      { status: selectedStatus.value }
     )
     emit('updated', selectedStatus.value)
     emit('update:modelValue', false)

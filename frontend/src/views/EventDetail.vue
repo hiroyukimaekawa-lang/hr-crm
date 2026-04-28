@@ -166,10 +166,9 @@ const toDateTimeLocalValue = (value?: string) => {
 };
 
 const fetchDetail = async () => {
-  const token = localStorage.getItem('token');
   try {
     const endpoint = source.value === 'project' ? `/api/projects/${eventId}` : `/api/events/${eventId}`;
-    const res = await api.get(endpoint, { headers: { Authorization: token } });
+    const res = await api.get(endpoint);
     event.value = res.data.event;
     participants.value = res.data.participants;
   form.value = {
@@ -202,7 +201,7 @@ const fetchDetail = async () => {
     try {
       kgiLoading.value = true;
       const kgiEndpoint = source.value === 'project' ? '/api/projects/kgi-progress' : '/api/events/kgi-progress';
-      const kgiRes = await api.get(kgiEndpoint, { headers: { Authorization: token } });
+      const kgiRes = await api.get(kgiEndpoint);
       if (Array.isArray(kgiRes.data)) {
         kgiData.value = kgiRes.data.find((k: any) => k.event_id === Number(eventId)) || null;
       }
@@ -217,19 +216,16 @@ const fetchDetail = async () => {
 };
 
 const updateParticipantStatus = async (studentEventId: number, status: string) => {
-  const token = localStorage.getItem('token');
   const endpoint = source.value === 'project' 
     ? `/api/projects/${eventId}/participants/${studentEventId}`
     : `/api/events/${eventId}/participants/${studentEventId}`;
   await api.put(endpoint,
-    { status },
-    { headers: { Authorization: token } }
+    { status }
   );
   fetchDetail();
 };
 
 const updateEvent = async () => {
-  const token = localStorage.getItem('token');
   const endpoint = source.value === 'project' ? `/api/projects/${eventId}` : `/api/events/${eventId}`;
   await api.put(endpoint, {
     title: form.value.title,
@@ -241,7 +237,7 @@ const updateEvent = async () => {
     entry_deadline: form.value.entry_deadline || null,
     location: form.value.location || null,
     lp_url: form.value.lp_url || null,
-  }, { headers: { Authorization: token } });
+  });
   isEditing.value = false;
   saveMessage.value = 'イベント情報を更新しました。';
   fetchDetail();

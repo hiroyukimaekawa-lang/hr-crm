@@ -38,11 +38,8 @@ const funnelTheme = computed(() => {
 });
 
 const fetchSources = async () => {
-  const token = localStorage.getItem('token');
   try {
-    const res = await api.get('/api/students/metrics/funnel-sources', {
-      headers: { Authorization: token }
-    });
+    const res = await api.get('/api/students/metrics/funnel-sources');
     sourceCategories.value = res.data;
   } catch (err) {
     console.error('Error fetching sources:', err);
@@ -86,25 +83,15 @@ const isEventsLoading = ref(false);
 const fetchFunnelData = async () => {
   isLoading.value = true;
   try {
-    const token = localStorage.getItem('token');
     const sourceParam = selectedSource.value ? { source_company: selectedSource.value } : {};
     const monthParam = selectedMonth.value ? { month: selectedMonth.value } : {};
     const gradParam = selectedGraduationYear.value ? { graduation_year: selectedGraduationYear.value } : {};
     const params = { ...sourceParam, ...monthParam, ...gradParam };
 
     const [kpiRes, historyRes, overviewRes] = await Promise.all([
-      api.get('/api/students/metrics/funnel', {
-        headers: { Authorization: token },
-        params
-      }),
-      api.get('/api/students/metrics/funnel', {
-        headers: { Authorization: token },
-        params: { group_by_month: '1', ...sourceParam }
-      }),
-      api.get('/api/kpi/overview', {
-        headers: { Authorization: token },
-        params
-      })
+      api.get('/api/students/metrics/funnel', { params }),
+      api.get('/api/students/metrics/funnel', { params: { group_by_month: '1', ...sourceParam } }),
+      api.get('/api/kpi/overview', { params })
     ]);
 
     funnelKpi.value = kpiRes.data;
@@ -242,8 +229,7 @@ onMounted(async () => {
 const fetchEventsData = async () => {
   isEventsLoading.value = true;
   try {
-    const token = localStorage.getItem('token');
-    const res = await api.get('/api/projects', { headers: { Authorization: token } });
+    const res = await api.get('/api/projects');
     allEvents.value = res.data;
   } catch (err) {
     console.error('Error fetching events:', err);
