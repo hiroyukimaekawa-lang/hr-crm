@@ -1160,31 +1160,9 @@ watch(selectedEventId, () => {
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
         <div class="lg:col-span-1 space-y-8">
           <!-- KPI & サマリーカード (常に表示) -->
-          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <TrendingUp class="w-5 h-5 text-blue-600" />
-              実績・ステータス
-            </h2>
-            <div class="grid grid-cols-2 gap-4 mb-6">
-              <div class="p-3 bg-blue-50 rounded-xl border border-blue-100">
-                <p class="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">総参加案件</p>
-                <div class="flex items-center gap-2">
-                  <Activity class="w-4 h-4 text-blue-500" />
-                  <span class="text-xl font-bold text-blue-900">{{ totalEventCount }}</span>
-                  <span class="text-xs text-blue-600">件</span>
-                </div>
-              </div>
-              <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-100">
-                <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">LTV (売上)</p>
-                <div class="flex items-center gap-1">
-                  <Coins class="w-4 h-4 text-emerald-500" />
-                  <span class="text-xl font-bold text-emerald-900">¥{{ ltvFormatted }}</span>
-                </div>
-              </div>
-            </div>
-
+          <div v-if="student.source_company === 'Matcher' || matcherFunnel" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <!-- Matcher面談ファネル進捗 (常に表示) -->
-            <div v-if="student.source_company === 'Matcher' || matcherFunnel" class="space-y-4">
+            <div class="space-y-4">
               <div class="flex items-center justify-between mb-2">
                 <p class="text-xs font-bold text-gray-500">Matcher面談フェーズ</p>
                 <button @click="showMatcherFunnel = true" class="text-[10px] text-blue-600 font-bold hover:underline">詳細編集</button>
