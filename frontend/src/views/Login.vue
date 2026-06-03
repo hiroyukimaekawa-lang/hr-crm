@@ -19,6 +19,8 @@ const login = async () => {
     if (res.data.token) {
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
+      
+      // 代理店含め、全員 /students へ遷移
       router.push('/students');
     }
   } catch (err: any) {

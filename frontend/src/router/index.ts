@@ -46,6 +46,26 @@ router.beforeEach((to, _from, next) => {
     next('/login');
     return;
   }
+
+  // ===== 代理店ロールのアクセス制限 =====
+  try {
+    const userRaw = localStorage.getItem('user');
+    const user = userRaw ? JSON.parse(userRaw) : null;
+    if (user && user.role === 'agent') {
+      // 許可されたパス: /students とその子パスのみ
+      const allowed =
+        to.path === '/students' ||
+        to.path.startsWith('/students/');
+      if (!allowed) {
+        next('/students');
+        return;
+      }
+    }
+  } catch (e) {
+    // userのJSONパースに失敗した場合は通常フローを継続
+    console.error('Failed to parse user from localStorage:', e);
+  }
+
   next();
 });
 

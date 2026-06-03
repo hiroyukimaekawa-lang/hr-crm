@@ -80,12 +80,15 @@ export const createInvite = async (req: Request, res: Response) => {
             return;
         }
 
+        // ===== リクエストから role を受け取る（未指定なら 'agent' をデフォルトに） =====
+        const role = (req.body && req.body.role) ? String(req.body.role) : 'agent';
+
         const token = crypto.randomBytes(24).toString('hex');
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
         const result = await pool.query(
-            'INSERT INTO invites (token, role, expires_at) VALUES ($1, $2, $3) RETURNING token, expires_at',
-            [token, 'admin', expiresAt]
+            'INSERT INTO invites (token, role, expires_at) VALUES ($1, $2, $3) RETURNING token, role, expires_at',
+            [token, role, expiresAt]
         );
 
         // Prefer explicit APP_URL, otherwise derive from browser Origin header.
@@ -95,6 +98,7 @@ export const createInvite = async (req: Request, res: Response) => {
 
         res.json({
             token: result.rows[0].token,
+            role: result.rows[0].role,
             expires_at: result.rows[0].expires_at,
             invite_url: inviteUrl
         });
@@ -102,6 +106,7 @@ export const createInvite = async (req: Request, res: Response) => {
         res.status(500).json({ error: err.message });
     }
 };
+
 
 export const registerByInvite = async (req: Request, res: Response): Promise<void> => {
     const { token, username, password, name } = req.body;

@@ -44,7 +44,18 @@ const pinnedPanelOpen = ref(false);
 const initializedNotification = ref(false);
 let popupTimer: ReturnType<typeof setTimeout> | null = null;
 
-const user = ref<any>(JSON.parse(localStorage.getItem('user') || '{"id": 1, "name": "Admin (Trial)", "role": "admin"}'));
+const getInitialUser = () => {
+  try {
+    const raw = localStorage.getItem('user');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.error('Failed to parse user from localStorage', e);
+  }
+  // デフォルト（トライアル/ゲスト用）
+  return { id: 0, name: 'Guest', role: 'guest' };
+};
+
+const user = ref<any>(getInitialUser());
 
 const syncUser = async () => {
   try {
@@ -56,21 +67,39 @@ const syncUser = async () => {
     if (res.data.user) {
       user.value = res.data.user;
       localStorage.setItem('user', JSON.stringify(res.data.user));
+      
+      // もし同期した結果がagentで、現在地が許可されていないパスならリダイレクト
+      if (user.value.role === 'agent') {
+        const isAllowedPath =
+          route.path === '/students' ||
+          route.path.startsWith('/students/');
+        if (!isAllowedPath) {
+          router.push('/students');
+        }
+      }
     }
   } catch (err) {
     console.error('Failed to sync user profile:', err);
   }
 };
 
+const menuItems = computed(() => {
+  const all = [
+    { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard, path: '/dashboard' },
+    { id: 'kpi', label: 'KPI', icon: TrendingUp, path: '/kpi' },
+    { id: 'students', label: '学生管理', icon: Users, path: '/students' },
+    { id: 'events', label: 'イベント管理', icon: Calendar, path: '/events' },
+    { id: 'lead-time', label: 'ファネル', icon: ChartColumn, path: '/lead-time' },
+    { id: 'settings', label: '設定', icon: Settings, path: '/settings' }
+  ];
 
-const menuItems = computed(() => [
-  { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard, path: '/dashboard' },
-  { id: 'kpi', label: 'KPI', icon: TrendingUp, path: '/kpi' },
-  { id: 'students', label: '学生管理', icon: Users, path: '/students' },
-  { id: 'events', label: 'イベント管理', icon: Calendar, path: '/events' },
-  { id: 'lead-time', label: 'ファネル', icon: ChartColumn, path: '/lead-time' },
-  { id: 'settings', label: '設定', icon: Settings, path: '/settings' }
-]);
+  // ===== 代理店は「学生管理」のみ表示 =====
+  if (user.value?.role === 'agent') {
+    return all.filter(item => item.id === 'students');
+  }
+
+  return all;
+});
 
 const logout = () => {
   localStorage.removeItem('token');
@@ -195,11 +224,13 @@ watch(
       <div class="p-4 border-t border-slate-800 mt-auto" :class="{ 'p-2': sidebarCollapsed }">
         <div class="flex items-center gap-3 px-4 py-3" :class="{ 'flex-col px-0': sidebarCollapsed }">
           <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center flex-shrink-0">
-            <span class="text-slate-200 font-semibold">{{ user.name.charAt(0) }}</span>
+            <span class="text-slate-200 font-semibold">{{ (user?.name || '?').charAt(0) }}</span>
           </div>
           <div v-if="!sidebarCollapsed" class="flex-1 min-w-0">
-            <p class="font-medium text-slate-100 truncate text-sm">{{ user.name }}</p>
-            <p class="text-[10px] text-slate-400 uppercase tracking-wider">{{ user.role === 'admin' ? '管理者' : '担当者' }}</p>
+            <p class="font-medium text-slate-100 truncate text-sm">{{ user?.name || 'Unknown' }}</p>
+            <p class="text-[10px] text-slate-400 uppercase tracking-wider">
+              {{ user?.role === 'admin' ? '管理者' : (user?.role === 'agent' ? '代理店' : '担当者') }}
+            </p>
           </div>
           <button @click="logout" class="text-slate-400 hover:text-slate-200 h-11 w-11 flex items-center justify-center" title="ログアウト">
             <LogOut class="w-5 h-5" />
@@ -208,7 +239,6 @@ watch(
       </div>
     </aside>
 
-    <!-- タブレット用サイドバー (md: アイコンのみ) -->
     <aside
       class="hidden md:flex lg:hidden bg-slate-900 text-slate-100 flex-col transition-all duration-200 w-16"
     >
@@ -225,7 +255,6 @@ watch(
           :class="isActive(item.path) ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800/60'"
         >
           <component :is="item.icon" class="w-6 h-6" />
-          <!-- ツールチップ風ラベル -->
           <div class="absolute left-16 bg-slate-800 text-white text-xs px-2 py-1.4 rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[100] font-bold">
             {{ item.label }}
           </div>
@@ -234,7 +263,7 @@ watch(
 
       <div class="p-2 border-t border-slate-800 flex flex-col items-center gap-4 py-4">
         <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center flex-shrink-0">
-          <span class="text-slate-200 font-semibold">{{ user.name.charAt(0) }}</span>
+          <span class="text-slate-200 font-semibold">{{ (user?.name || '?').charAt(0) }}</span>
         </div>
         <button @click="logout" class="text-slate-400 hover:text-slate-200 h-11 w-11 flex items-center justify-center" title="ログアウト">
           <LogOut class="w-5 h-5" />
@@ -280,11 +309,13 @@ watch(
       <div class="p-4 border-t border-slate-800">
         <div class="flex items-center gap-3 px-4 py-3">
           <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center">
-            <span class="text-slate-200 font-semibold">{{ user.name.charAt(0) }}</span>
+            <span class="text-slate-200 font-semibold">{{ (user?.name || '?').charAt(0) }}</span>
           </div>
           <div class="flex-1 min-w-0">
-            <p class="font-medium text-slate-100 truncate">{{ user.name }}</p>
-            <p class="text-xs text-slate-400">{{ user.role === 'admin' ? '管理者' : '担当者' }}</p>
+            <p class="font-medium text-slate-100 truncate">{{ user?.name || 'Unknown' }}</p>
+            <p class="text-xs text-slate-400">
+              {{ user?.role === 'admin' ? '管理者' : (user?.role === 'agent' ? '代理店' : '担当者') }}
+            </p>
           </div>
           <button @click="logout" class="text-slate-400 hover:text-slate-200">
             <LogOut class="w-5 h-5" />
@@ -347,7 +378,6 @@ watch(
         <slot />
       </main>
 
-      <!-- スマホ用ボトムナビゲーション (sm) -->
       <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-2 py-1.5 flex items-center justify-around z-50 safe-area-bottom shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
         <router-link
           v-for="item in menuItems.slice(0, 5)"
