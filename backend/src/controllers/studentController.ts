@@ -594,7 +594,11 @@ export const getStudents = async (req: Request, res: Response) => {
         `;
         const params: any[] = [];
 
-        if (staffId) {
+        if (authUser?.role === 'agent') {
+            // 代理店は自分が担当する学生のみ取得可能
+            query += ' WHERE staff_id = $1';
+            params.push(authUser.sub);
+        } else if (staffId) {
             query += ' WHERE staff_id = $1';
             params.push(staffId);
         }
@@ -606,6 +610,7 @@ export const getStudents = async (req: Request, res: Response) => {
 };
 
 export const createStudent = async (req: Request, res: Response) => {
+    const authUser = (req as any).user as { sub?: string; role?: string } | undefined;
     const {
         name,
         university,
@@ -671,7 +676,8 @@ export const createStudent = async (req: Request, res: Response) => {
         pushCol('phone', phone || null);
         pushCol('status', status || 'active');
         pushCol('tags', tags || null);
-        pushCol('staff_id', staff_id || null);
+        // 代理店の場合は強制的に自分のIDを紐づける
+        pushCol('staff_id', authUser?.role === 'agent' ? authUser.sub : (staff_id || null));
         pushCol('source_company', source_company || null);
         pushCol('interview_reason', interview_reason || null);
         const normalizedMeetingDecidedDate = normalizeToHour(meeting_decided_date);
@@ -736,6 +742,7 @@ export const createStudent = async (req: Request, res: Response) => {
 };
 
 export const getStudentDetail = async (req: Request, res: Response) => {
+    const authUser = (req as any).user as { sub?: string; role?: string } | undefined;
     const { id } = req.params;
     try {
         await ensureStudentExtendedColumns();
@@ -744,6 +751,11 @@ export const getStudentDetail = async (req: Request, res: Response) => {
         await ensureMatcherFunnelTable();
         await ensureStudentEventsColumns();
         const studentRes = await pool.query('SELECT * FROM students WHERE id = $1', [id]);
+        // 代理店は他担当者の学生詳細にアクセス不可
+        if (studentRes.rows[0] && authUser?.role === 'agent' && String(studentRes.rows[0].staff_id) !== String(authUser.sub)) {
+            res.status(403).json({ error: 'アクセス権限がありません（他担当者の学生です）' });
+            return;
+        }
         const eventsRes = await pool.query(`
             SELECT
                 e.id,

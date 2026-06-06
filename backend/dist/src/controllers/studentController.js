@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateStudentReferralStatus = exports.updateStudentFavorite = exports.deleteGraduationYearCategory = exports.createGraduationYearCategory = exports.getGraduationYearCategories = exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.getStudentEventProposals = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.updateInterviewLog = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = exports.normalizeToHour = void 0;
+exports.updateStudentReferralCounts = exports.updateStudentReferralStatus = exports.updateStudentFavorite = exports.deleteGraduationYearCategory = exports.createGraduationYearCategory = exports.getGraduationYearCategories = exports.deleteSourceCategory = exports.createSourceCategory = exports.getSourceCategories = exports.importStudents = exports.getFunnelKpi = exports.getStudentEventProposals = exports.createEventProposal = exports.createInterviewRecord = exports.updateApplicationReservation = exports.createApplication = exports.getFunnelMasterData = exports.getMatcherFunnelKpi = exports.registerMatcherInterview = exports.registerMatcherReservation = exports.registerMatcherMessage = exports.registerMatcherApply = exports.getMatcherFunnelByStudent = exports.deleteStudent = exports.deleteStudentTask = exports.completeStudentTask = exports.addStudentTask = exports.updateStudentMeta = exports.updateStudentStaff = exports.updateStudentBasic = exports.updateStudentStatus = exports.updateInterviewLog = exports.deleteInterviewLog = exports.addInterviewLog = exports.linkEvent = exports.getInterviewMetrics = exports.deleteInterviewSchedule = exports.updateInterviewSchedule = exports.createInterviewSchedule = exports.getStudentDetail = exports.createStudent = exports.getStudents = exports.normalizeToHour = void 0;
 const db_1 = __importDefault(require("../config/db"));
 let interviewScheduleTableReady = false;
 let interviewScheduleTablePromise = null;
@@ -89,6 +89,14 @@ const ensureStudentExtendedColumns = () => __awaiter(void 0, void 0, void 0, fun
             yield db_1.default.query(`
                 ALTER TABLE students
                 ADD COLUMN IF NOT EXISTS referred_by_id INTEGER REFERENCES students(id) ON DELETE SET NULL
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS referral_expected_reach_count INTEGER DEFAULT 0
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE students
+                ADD COLUMN IF NOT EXISTS referral_expected_count INTEGER DEFAULT 0
             `);
             cachedStudentColumns = null;
             studentExtendedColumnsReady = true;
@@ -258,6 +266,12 @@ const ensureSalesFunnelTables = () => __awaiter(void 0, void 0, void 0, function
             yield db_1.default.query(`
                 ALTER TABLE event_proposals
                 ADD COLUMN IF NOT EXISTS reason TEXT
+            `);
+            yield db_1.default.query(`
+                ALTER TABLE event_proposals
+                ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'event',
+                ALTER COLUMN event_id DROP NOT NULL
             `);
             yield db_1.default.query(`
                 INSERT INTO lost_reasons (reason_name)
@@ -699,7 +713,7 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 e.title,
                 e.description,
                 e.location,
-                e.event_slots,
+                e.capacity as event_slots,
                 e.unit_price,
                 to_char(e.event_date, 'YYYY-MM-DD"T"HH24:MI:SS') as event_date,
                 se.id as student_event_id,
@@ -718,7 +732,7 @@ const getStudentDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 p.title,
                 p.description,
                 NULL as location,
-                p.event_slots,
+                p.target_seats as event_slots,
                 p.unit_price,
                 NULL as event_date,
                 pp.id as student_event_id,
@@ -1147,17 +1161,22 @@ const linkEvent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         if (source === 'project') {
             yield db_1.default.query(`INSERT INTO student_project_relations (student_id, project_id, status, selected_event_date)
                  VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (student_id, project_id, selected_event_date)
+                 ON CONFLICT (student_id, project_id, (COALESCE(schedule_id, 0)), (COALESCE(time_slot_id, 0)))
                  DO UPDATE SET
-                    status = EXCLUDED.status`, [id, event_id, safeStatus, normDate]);
+                    status = EXCLUDED.status,
+                    selected_event_date = EXCLUDED.selected_event_date`, [id, event_id, safeStatus, normDate]);
         }
         else {
             yield ensureStudentEventsColumns();
-            yield db_1.default.query(`INSERT INTO student_events (student_id, event_id, status, selected_event_date)
-                 VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (student_id, event_id, selected_event_date)
-                 DO UPDATE SET
-                    status = EXCLUDED.status`, [id, event_id, safeStatus, normDate]);
+            // student_events has an index on (student_id, event_id, selected_event_date)
+            // But if selected_event_date is null Postgres doesn't consider them conflicting, so let's do a conditional update to be very robust.
+            const checkRes = yield db_1.default.query('SELECT id FROM student_events WHERE student_id = $1 AND event_id = $2 AND (selected_event_date = $3 OR (selected_event_date IS NULL AND $3 IS NULL))', [id, event_id, normDate]);
+            if (checkRes.rows.length > 0) {
+                yield db_1.default.query('UPDATE student_events SET status = $1 WHERE id = $2', [safeStatus, checkRes.rows[0].id]);
+            }
+            else {
+                yield db_1.default.query('INSERT INTO student_events (student_id, event_id, status, selected_event_date) VALUES ($1, $2, $3, $4)', [id, event_id, safeStatus, normDate]);
+            }
         }
         res.json({ success: true });
     }
@@ -1756,18 +1775,21 @@ const createInterviewRecord = (req, res) => __awaiter(void 0, void 0, void 0, fu
 exports.createInterviewRecord = createInterviewRecord;
 const createEventProposal = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    const { event_id, proposed_at, status, lost_reason_id, selected_event_date, memo, reason } = req.body || {};
+    const { event_id, proposed_at, status, lost_reason_id, selected_event_date, memo, reason, source } = req.body || {};
     if (!event_id) {
         res.status(400).json({ error: 'event_id is required' });
         return;
     }
     try {
         yield ensureSalesFunnelTables();
-        const result = yield db_1.default.query(`INSERT INTO event_proposals (student_id, event_id, proposed_at, status, lost_reason_id, selected_event_date, memo, reason)
-             VALUES ($1, $2, COALESCE($3, CURRENT_TIMESTAMP), $4, $5, $6, $7, $8)
+        const isProject = source === 'project';
+        const result = yield db_1.default.query(`INSERT INTO event_proposals (student_id, event_id, project_id, source, proposed_at, status, lost_reason_id, selected_event_date, memo, reason)
+             VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_TIMESTAMP), $6, $7, $8, $9, $10)
              RETURNING *`, [
             id,
-            Number(event_id),
+            isProject ? null : Number(event_id),
+            isProject ? Number(event_id) : null,
+            isProject ? 'project' : 'event',
             normalizeNullableText(proposed_at),
             normalizeNullableText(status) || 'proposed',
             lost_reason_id ? Number(lost_reason_id) : null,
@@ -1789,7 +1811,9 @@ const getStudentEventProposals = (req, res) => __awaiter(void 0, void 0, void 0,
         const result = yield db_1.default.query(`SELECT
                 ep.id,
                 ep.student_id,
-                ep.event_id,
+                COALESCE(ep.project_id, ep.event_id) as event_id,
+                ep.project_id,
+                ep.source,
                 ep.proposed_at,
                 ep.status,
                 ep.lost_reason_id,
@@ -1797,11 +1821,12 @@ const getStudentEventProposals = (req, res) => __awaiter(void 0, void 0, void 0,
                 ep.memo,
                 ep.reason,
                 ep.created_at,
-                e.title AS event_name,
+                COALESCE(p.title, e.title) AS event_name,
                 e.event_date,
                 lr.reason_name AS lost_reason_name
              FROM event_proposals ep
              LEFT JOIN events e ON e.id = ep.event_id
+             LEFT JOIN projects p ON p.id = ep.project_id
              LEFT JOIN lost_reasons lr ON lr.id = ep.lost_reason_id
              WHERE ep.student_id = $1
              ORDER BY ep.proposed_at DESC, ep.id DESC`, [id]);
@@ -2510,3 +2535,23 @@ const updateStudentReferralStatus = (req, res) => __awaiter(void 0, void 0, void
     }
 });
 exports.updateStudentReferralStatus = updateStudentReferralStatus;
+const updateStudentReferralCounts = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { referral_expected_reach_count, referral_expected_count } = req.body;
+    try {
+        yield ensureStudentExtendedColumns();
+        const result = yield db_1.default.query(`UPDATE students 
+       SET referral_expected_reach_count = COALESCE($1, referral_expected_reach_count),
+           referral_expected_count = COALESCE($2, referral_expected_count)
+       WHERE id = $3 RETURNING *`, [referral_expected_reach_count, referral_expected_count, id]);
+        if (result.rows.length === 0) {
+            res.status(404).json({ error: 'Student not found' });
+            return;
+        }
+        res.json(result.rows[0]);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.updateStudentReferralCounts = updateStudentReferralCounts;

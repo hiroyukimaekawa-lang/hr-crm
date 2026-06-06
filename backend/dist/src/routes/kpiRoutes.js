@@ -16,4 +16,7 @@ router.get('/events', auth_1.authenticate, kpiController_1.kpiEvents);
 router.get('/goals', auth_1.authenticate, kpiController_1.kpiGoals);
 router.put('/goals/bulk', auth_1.authenticate, kpiController_1.kpiGoalsBulk);
 router.get('/funnel', auth_1.authenticate, kpiController_1.kpiFunnel);
+// Revenue-driven KPI endpoints
+router.post('/decompose', auth_1.authenticate, kpiController_1.kpiDecompose);
+router.put('/allocation', auth_1.authenticate, kpiController_1.kpiAllocation);
 exports.default = router;

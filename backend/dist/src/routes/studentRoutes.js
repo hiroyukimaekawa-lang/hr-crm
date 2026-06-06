@@ -62,6 +62,7 @@ router.put('/:id/staff', auth_1.authenticate, studentController_1.updateStudentS
 router.put('/:id/meta', auth_1.authenticate, studentController_1.updateStudentMeta);
 router.patch('/:id/favorite', auth_1.authenticate, studentController_1.updateStudentFavorite);
 router.patch('/:id/referral-status', auth_1.authenticate, studentController_1.updateStudentReferralStatus);
+router.patch('/:id/referral-counts', auth_1.authenticate, studentController_1.updateStudentReferralCounts);
 router.post('/:id/tasks', auth_1.authenticate, studentController_1.addStudentTask);
 router.put('/tasks/:taskId/complete', auth_1.authenticate, studentController_1.completeStudentTask);
 router.delete('/tasks/:taskId', auth_1.authenticate, studentController_1.deleteStudentTask);

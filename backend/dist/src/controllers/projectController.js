@@ -213,7 +213,13 @@ const updateProject = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             // but for full edit, let's just insert new ones and delete removed ones manually based on dates.
             const currentSchRes = yield db_1.default.query('SELECT id, schedule_date FROM project_schedules WHERE project_id = $1', [id]);
             const existingDatesMap = {};
-            currentSchRes.rows.forEach(r => existingDatesMap[r.schedule_date.toISOString().split('T')[0]] = r.id);
+            currentSchRes.rows.forEach(r => {
+                const dateVal = r.schedule_date;
+                const dateStr = (dateVal instanceof Date)
+                    ? dateVal.toISOString().split('T')[0]
+                    : String(dateVal).split('T')[0];
+                existingDatesMap[dateStr] = r.id;
+            });
             const keptScheduleIds = new Set();
             for (const sch of schedulesToSync) {
                 if (!sch.date)
@@ -348,7 +354,7 @@ const getProjectDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 s.phone,
                 s.graduation_year,
                 u.name as staff_name,
-                t.content as next_task_content,
+                COALESCE(t.content, '') as next_task_content,
                 t.due_date as next_task_date
             FROM student_project_relations spr
             JOIN students s ON s.id = spr.student_id
@@ -367,11 +373,14 @@ const getProjectDetail = (req, res) => __awaiter(void 0, void 0, void 0, functio
             ORDER BY spr.created_at DESC
         `, [id]);
         const p = projectRes.rows[0];
+        if (!p) {
+            return res.status(404).json({ error: '指定されたプロジェクトが見つかりません。' });
+        }
         res.json({
-            event: Object.assign(Object.assign({}, p), { source: 'project', project_schedules: scheduleRes.rows, 
+            event: Object.assign(Object.assign({}, p), { source: 'project', project_schedules: scheduleRes.rows || [], 
                 // fallback for compat
-                event_dates: scheduleRes.rows.map((r) => r.schedule_date) }),
-            participants: participantsRes.rows
+                event_dates: scheduleRes.rows ? scheduleRes.rows.map((r) => r.schedule_date) : [] }),
+            participants: participantsRes.rows || []
         });
     }
     catch (err) {

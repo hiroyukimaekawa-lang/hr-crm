@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.kpiFunnel = exports.kpiGoalsBulk = exports.kpiGoals = exports.kpiEvents = exports.kpiOverview = void 0;
+exports.kpiAllocation = exports.kpiDecompose = exports.kpiFunnel = exports.kpiGoalsBulk = exports.kpiGoals = exports.kpiEvents = exports.kpiOverview = void 0;
 const kpiService_1 = require("../services/kpiService");
 // ─────────────────────── GET /api/kpi/overview ───────────────────────
 const kpiOverview = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -119,3 +119,56 @@ const kpiFunnel = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.kpiFunnel = kpiFunnel;
+// ─────────────────────── POST /api/kpi/decompose ───────────────────────
+const kpiDecompose = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { revenue_target, unit_price, deal_cvr, interview_cvr, month, overrides } = req.body;
+        if (!revenue_target || revenue_target <= 0) {
+            res.status(400).json({ error: 'revenue_target is required and must be > 0' });
+            return;
+        }
+        const decomposition = (0, kpiService_1.decomposeFromRevenue)({
+            revenue_target: Number(revenue_target),
+            unit_price: Number(unit_price) || 1,
+            deal_cvr: Number(deal_cvr) || 50,
+            interview_cvr: Number(interview_cvr) || 60,
+        });
+        // If month is provided, also suggest channel allocation
+        let allocation;
+        if (month) {
+            allocation = yield (0, kpiService_1.suggestChannelAllocation)(decomposition, month, overrides || {});
+        }
+        res.json({
+            decomposition,
+            allocation: allocation || null,
+        });
+    }
+    catch (err) {
+        console.error('KPI decompose error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.kpiDecompose = kpiDecompose;
+// ─────────────────────── PUT /api/kpi/allocation ───────────────────────
+const kpiAllocation = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { revenue_target, unit_price, deal_cvr, interview_cvr, month, overrides } = req.body;
+        if (!revenue_target || !month) {
+            res.status(400).json({ error: 'revenue_target and month are required' });
+            return;
+        }
+        const decomposition = (0, kpiService_1.decomposeFromRevenue)({
+            revenue_target: Number(revenue_target),
+            unit_price: Number(unit_price) || 1,
+            deal_cvr: Number(deal_cvr) || 50,
+            interview_cvr: Number(interview_cvr) || 60,
+        });
+        const allocation = yield (0, kpiService_1.suggestChannelAllocation)(decomposition, month, overrides || {});
+        res.json(allocation);
+    }
+    catch (err) {
+        console.error('KPI allocation error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+exports.kpiAllocation = kpiAllocation;

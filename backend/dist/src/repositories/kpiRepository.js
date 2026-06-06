@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSalesActuals = exports.getEventKpiData = exports.upsertGoals = exports.getGoals = exports.getDailyApplicationTrend = exports.getCanonicalFunnelCounts = exports.ensureKpiTable = void 0;
+exports.getChannelActuals = exports.getSalesActuals = exports.getEventKpiData = exports.upsertGoals = exports.getGoals = exports.getDailyApplicationTrend = exports.getCanonicalFunnelCounts = exports.ensureKpiTable = void 0;
 /**
  * KPI Repository — canonical SQL queries for KPI data.
  *
@@ -134,9 +134,6 @@ const getCanonicalFunnelCounts = (filters) => __awaiter(void 0, void 0, void 0, 
     const appDateFilter = buildDateFilter(`cf.application_at`, filters, params, currentIdx);
     const appCond = appDateFilter.condition ? `AND ${appDateFilter.condition}` : '';
     currentIdx = appDateFilter.paramIndex;
-    const intDateFilter = buildDateFilter(`cf.interview_scheduled_at`, filters, params, currentIdx);
-    const intCond = intDateFilter.condition ? `AND ${intDateFilter.condition}` : '';
-    currentIdx = intDateFilter.paramIndex;
     const groupByCol = filters.groupBy === 'staff' ? 's.staff_id' : filters.groupBy === 'source' ? 's.source_company' : null;
     const selectExtra = groupByCol ? `, ${groupByCol} AS group_key` : '';
     const groupByClause = groupByCol ? `GROUP BY ${groupByCol}` : '';
@@ -164,8 +161,8 @@ const getCanonicalFunnelCounts = (filters) => __awaiter(void 0, void 0, void 0, 
         SELECT
             COUNT(DISTINCT CASE WHEN cf.student_id IS NOT NULL ${appCond} THEN cf.student_id END)::int AS applications,
             COUNT(DISTINCT CASE WHEN cf.reservation_at IS NOT NULL ${appCond} THEN cf.student_id END)::int AS reservations,
-            COUNT(DISTINCT CASE WHEN cf.interview_scheduled_at IS NOT NULL ${intCond} THEN cf.student_id END)::int AS interview_scheduled,
-            COUNT(DISTINCT CASE WHEN cf.interview_completed_at IS NOT NULL ${intCond} THEN cf.student_id END)::int AS interview_completed
+            COUNT(DISTINCT CASE WHEN cf.interview_scheduled_at IS NOT NULL ${appCond} THEN cf.student_id END)::int AS interview_scheduled,
+            COUNT(DISTINCT CASE WHEN cf.interview_completed_at IS NOT NULL ${appCond} THEN cf.student_id END)::int AS interview_completed
             ${selectExtra}
         FROM canonical_funnel cf
         JOIN students s ON s.id = cf.student_id
@@ -267,7 +264,7 @@ const upsertGoals = (goals) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.upsertGoals = upsertGoals;
 // ─────────────────────── Event KPI (Unified to Projects) ───────────────────────
-const getEventKpiData = () => __awaiter(void 0, void 0, void 0, function* () {
+const getEventKpiData = (...args_1) => __awaiter(void 0, [...args_1], void 0, function* (filters = {}) {
     yield ensureDepTables();
     const now = new Date();
     const todayStr = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -275,7 +272,7 @@ const getEventKpiData = () => __awaiter(void 0, void 0, void 0, function* () {
     // 1. Modern Projects
     const projectsRes = yield db_1.default.query(`
         SELECT
-            p.id, p.title, p.target_seats, p.unit_price,
+            p.id, p.title, p.type, p.target_seats, p.unit_price,
             COALESCE(p.kpi_seat_to_entry_rate, 70) AS kpi_seat_to_entry_rate,
             COALESCE(p.kpi_entry_to_interview_rate, 60) AS kpi_entry_to_interview_rate,
             COALESCE(p.kpi_interview_to_reservation_rate, 50) AS kpi_interview_to_reservation_rate,
@@ -315,28 +312,36 @@ const getEventKpiData = () => __awaiter(void 0, void 0, void 0, function* () {
         FROM events e
     `);
     const allEvents = [...projectsRes.rows, ...legacyRes.rows];
+    // Date filters for status breakdowns
+    const projectDateParams = [];
+    const projectDateRes = buildDateFilter('created_at', filters, projectDateParams, 1);
+    const projectDateCond = projectDateRes.condition ? `WHERE ${projectDateRes.condition}` : '';
     // Status breakdowns
     const projectStatusRes = yield db_1.default.query(`
         SELECT project_id as event_id, status, COUNT(*)::int AS cnt
-        FROM student_project_relations GROUP BY project_id, status
-    `);
+        FROM student_project_relations
+        ${projectDateCond}
+        GROUP BY project_id, status
+    `, projectDateParams);
     const legacyStatusRes = yield db_1.default.query(`
         SELECT event_id, status, COUNT(*)::int AS cnt
-        FROM student_events GROUP BY event_id, status
-    `);
+        FROM student_events
+        ${projectDateCond}
+        GROUP BY event_id, status
+    `, projectDateParams);
     const projectSlotStatusRes = yield db_1.default.query(`
         SELECT spr.project_id as event_id, to_char(ps.schedule_date, 'YYYY-MM-DD"T"HH24:MI') as slot_date, spr.status, COUNT(*)::int AS cnt
         FROM student_project_relations spr
         JOIN project_schedules ps ON ps.id = spr.schedule_id
+        ${projectDateCond.replace('created_at', 'spr.created_at')}
         GROUP BY spr.project_id, slot_date, spr.status
-    `);
+    `, projectDateParams);
     const legacySlotStatusRes = yield db_1.default.query(`
-        -- Legacy slots are usually in event_dates but student_events doesn't link to a specific date ID in all versions.
-        -- We'll just group by the event_id for now if it's legacy.
         SELECT event_id, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI') as slot_date, status, COUNT(*)::int AS cnt
         FROM student_events
+        ${projectDateCond}
         GROUP BY event_id, slot_date, status
-    `);
+    `, projectDateParams);
     const breakdownMap = {};
     const populateBD = (rows, source) => {
         for (const r of rows) {
@@ -371,7 +376,10 @@ const getEventKpiData = () => __awaiter(void 0, void 0, void 0, function* () {
         const norm = (dt) => dt ? dt.slice(0, 16) : dt;
         const normSbd = {};
         Object.entries(sbd).forEach(([k, v]) => { normSbd[norm(k)] = v; });
-        const keys = new Set([...rawSlots.map((s) => norm(s.datetime)), ...Object.keys(normSbd)]);
+        // Define exact master event dates. We only use explicit slots from projects/events.
+        // We do NOT union with Object.keys(normSbd) because for legacy events that contains 
+        // random created_at timestamps which would otherwise bloat the UI with fake slots.
+        const keys = new Set([...rawSlots.map((s) => norm(s.datetime))]);
         const slots = Array.from(keys).filter(Boolean).map(k => {
             const b = normSbd[k] || {};
             return {
@@ -388,7 +396,8 @@ const getEventKpiData = () => __awaiter(void 0, void 0, void 0, function* () {
             daysRem = Math.floor((new Date(dlStr + 'T00:00:00').getTime() - todayDate.getTime()) / 86400000);
         }
         return {
-            event_id: e.id, event_title: e.title, deadline: dlStr, days_remaining: daysRem,
+            event_id: e.id, event_title: e.title, type: e.type || 'event',
+            deadline: dlStr, days_remaining: daysRem,
             target_seats: Number(e.target_seats || 0), current_seats: st, current_entries: ent,
             event_slots: rawSlots, unit_price: Number(e.unit_price || 0),
             kpi_seat_to_entry_rate: Number(e.kpi_seat_to_entry_rate),
@@ -409,20 +418,20 @@ const getSalesActuals = (filters) => __awaiter(void 0, void 0, void 0, function*
     let projectPeriodWhere = '';
     let legacyPeriodWhere = '';
     if (filters.month) {
-        projectPeriodWhere = `(TO_CHAR(ps.schedule_date, 'YYYY-MM') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM') = $${idx})`;
-        legacyPeriodWhere = `(TO_CHAR(ed.event_date, 'YYYY-MM') = $${idx} OR TO_CHAR(e.event_date, 'YYYY-MM') = $${idx})`;
+        projectPeriodWhere = `TO_CHAR(ps.schedule_date, 'YYYY-MM') = $${idx}`;
+        legacyPeriodWhere = `TO_CHAR(ed.event_date, 'YYYY-MM') = $${idx}`;
         params.push(filters.month);
         idx++;
     }
     else if (filters.date) {
-        projectPeriodWhere = `(TO_CHAR(ps.schedule_date, 'YYYY-MM-DD') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM-DD') = $${idx})`;
-        legacyPeriodWhere = `(TO_CHAR(ed.event_date, 'YYYY-MM-DD') = $${idx} OR TO_CHAR(e.event_date, 'YYYY-MM-DD') = $${idx})`;
+        projectPeriodWhere = `TO_CHAR(ps.schedule_date, 'YYYY-MM-DD') = $${idx}`;
+        legacyPeriodWhere = `TO_CHAR(ed.event_date, 'YYYY-MM-DD') = $${idx}`;
         params.push(filters.date);
         idx++;
     }
     else if (filters.week) {
-        projectPeriodWhere = `(TO_CHAR(ps.schedule_date, 'IYYY-\"W\"IW') = $${idx} OR TO_CHAR(p.entry_deadline, 'IYYY-\"W\"IW') = $${idx})`;
-        legacyPeriodWhere = `(TO_CHAR(ed.event_date, 'IYYY-\"W\"IW') = $${idx} OR TO_CHAR(e.event_date, 'IYYY-\"W\"IW') = $${idx})`;
+        projectPeriodWhere = `TO_CHAR(ps.schedule_date, 'IYYY-\"W\"IW') = $${idx}`;
+        legacyPeriodWhere = `TO_CHAR(ed.event_date, 'IYYY-\"W\"IW') = $${idx}`;
         params.push(filters.week);
         idx++;
     }
@@ -463,7 +472,6 @@ const getSalesActuals = (filters) => __awaiter(void 0, void 0, void 0, function*
             (unit_price * COUNT(DISTINCT participant_id))::bigint AS sales
         FROM all_sales
         GROUP BY event_id, event_title, unit_price, source
-        HAVING (unit_price * COUNT(DISTINCT participant_id)) > 0 OR COUNT(DISTINCT participant_id) > 0
         ORDER BY sales DESC
     `;
     const res = yield db_1.default.query(sql, params);
@@ -474,3 +482,40 @@ const getSalesActuals = (filters) => __awaiter(void 0, void 0, void 0, function*
     };
 });
 exports.getSalesActuals = getSalesActuals;
+// ─────────────────────── Channel Actuals (Event vs Agent) ───────────────────────
+const getChannelActuals = (filters) => __awaiter(void 0, void 0, void 0, function* () {
+    yield ensureDepTables();
+    const params = [];
+    let idx = 1;
+    let periodWhere = '';
+    if (filters.month) {
+        periodWhere = `AND (TO_CHAR(ps.schedule_date, 'YYYY-MM') = $${idx} OR TO_CHAR(p.entry_deadline, 'YYYY-MM') = $${idx})`;
+        params.push(filters.month);
+        idx++;
+    }
+    const sql = `
+        SELECT
+            p.type AS channel_type,
+            COUNT(DISTINCT p.id)::int AS project_count,
+            COUNT(DISTINCT spr.id) FILTER (WHERE spr.status = 'attended')::int AS attended_count,
+            COUNT(DISTINCT spr.id) FILTER (WHERE spr.status = 'A_ENTRY')::int AS entry_count,
+            SUM(CASE WHEN spr.status = 'attended' THEN COALESCE(p.unit_price, 0) ELSE 0 END)::bigint AS total_sales
+        FROM projects p
+        LEFT JOIN project_schedules ps ON ps.project_id = p.id
+        LEFT JOIN student_project_relations spr ON spr.project_id = p.id
+        WHERE 1=1 ${periodWhere}
+        GROUP BY p.type
+    `;
+    const res = yield db_1.default.query(sql, params);
+    const result = {};
+    for (const row of res.rows) {
+        result[row.channel_type || 'event'] = {
+            project_count: Number(row.project_count || 0),
+            attended_count: Number(row.attended_count || 0),
+            entry_count: Number(row.entry_count || 0),
+            total_sales: Number(row.total_sales || 0),
+        };
+    }
+    return result;
+});
+exports.getChannelActuals = getChannelActuals;

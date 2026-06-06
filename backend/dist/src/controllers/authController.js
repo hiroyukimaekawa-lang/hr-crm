@@ -82,15 +82,18 @@ const createInvite = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             res.status(403).json({ error: 'Forbidden' });
             return;
         }
+        // ===== リクエストから role を受け取る（未指定なら 'agent' をデフォルトに） =====
+        const role = (req.body && req.body.role) ? String(req.body.role) : 'agent';
         const token = crypto_1.default.randomBytes(24).toString('hex');
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-        const result = yield db_1.default.query('INSERT INTO invites (token, role, expires_at) VALUES ($1, $2, $3) RETURNING token, expires_at', [token, 'admin', expiresAt]);
+        const result = yield db_1.default.query('INSERT INTO invites (token, role, expires_at) VALUES ($1, $2, $3) RETURNING token, role, expires_at', [token, role, expiresAt]);
         // Prefer explicit APP_URL, otherwise derive from browser Origin header.
         const origin = req.get('origin');
         const appUrl = (process.env.APP_URL || origin || 'http://localhost:5173').replace(/\/$/, '');
         const inviteUrl = `${appUrl}/register?token=${result.rows[0].token}`;
         res.json({
             token: result.rows[0].token,
+            role: result.rows[0].role,
             expires_at: result.rows[0].expires_at,
             invite_url: inviteUrl
         });
